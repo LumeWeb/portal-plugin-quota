@@ -23,7 +23,12 @@ type UserUsageDetail struct {
 }
 
 // BeforeCreate validates the UserUsageDetail model before creation
-func (u *UserUsageDetail) BeforeCreate(_ *gorm.DB) error {
+func (u *UserUsageDetail) BeforeCreate(tx *gorm.DB) error {
+	// Auto-set timestamp if not provided
+	if u.Timestamp.IsZero() {
+		u.Timestamp = time.Now()
+	}
+	
 	return u.validate()
 }
 

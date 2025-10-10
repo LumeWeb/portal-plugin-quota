@@ -27,7 +27,7 @@ func (a *AllowanceGrant) BeforeSave(_ *gorm.DB) error {
 	// Compute BytesRemaining as Bytes - BytesUsed
 	a.BytesRemaining = a.Bytes - a.BytesUsed
 	
-	// Guard against negative values - clamp to 0
+	// Guard against underflow (when BytesUsed > Bytes) - clamp to 0
 	if a.BytesRemaining > a.Bytes {
 		a.BytesRemaining = 0
 	}

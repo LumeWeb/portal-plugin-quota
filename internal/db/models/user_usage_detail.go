@@ -7,6 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const MaxSharedWith = 1000
+
 // UserUsageDetail - Detailed usage records for billing
 type UserUsageDetail struct {
 	gorm.Model
@@ -63,7 +65,7 @@ func (u *UserUsageDetail) validate() error {
 		return ErrInvalidTimestamp
 	}
 
-	if u.SharedWith > 1000 {
+	if u.SharedWith > MaxSharedWith {
 		return ErrInvalidSharedWith
 	}
 
@@ -72,6 +74,11 @@ func (u *UserUsageDetail) validate() error {
 
 // validatePartial performs validation only on changed fields
 func (u *UserUsageDetail) validatePartial(tx *gorm.DB) error {
+	if tx == nil || tx.Statement == nil {
+		// Fallback to full validation if tx is unavailable
+		return u.validate()
+	}
+
 	if tx.Statement.Changed("user_id") && u.UserID <= 0 {
 		return ErrInvalidUserID
 	}
@@ -98,7 +105,7 @@ func (u *UserUsageDetail) validatePartial(tx *gorm.DB) error {
 		return ErrInvalidTimestamp
 	}
 
-	if tx.Statement.Changed("shared_with") && u.SharedWith > 1000 {
+	if tx.Statement.Changed("shared_with") && u.SharedWith > MaxSharedWith {
 		return ErrInvalidSharedWith
 	}
 

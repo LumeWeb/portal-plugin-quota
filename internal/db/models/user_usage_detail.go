@@ -28,8 +28,8 @@ func (u *UserUsageDetail) BeforeCreate(_ *gorm.DB) error {
 }
 
 // BeforeUpdate validates the UserUsageDetail model before update
-func (u *UserUsageDetail) BeforeUpdate(_ *gorm.DB) error {
-	return u.validate()
+func (u *UserUsageDetail) BeforeUpdate(tx *gorm.DB) error {
+	return u.validatePartial(tx)
 }
 
 // validate performs validation checks on the UserUsageDetail fields
@@ -55,6 +55,37 @@ func (u *UserUsageDetail) validate() error {
 	}
 
 	if u.Timestamp.IsZero() {
+		return ErrInvalidTimestamp
+	}
+
+	return nil
+}
+
+// validatePartial performs validation only on changed fields
+func (u *UserUsageDetail) validatePartial(tx *gorm.DB) error {
+	if tx.Statement.Changed("user_id") && u.UserID <= 0 {
+		return ErrInvalidUserID
+	}
+
+	if tx.Statement.Changed("upload_id") && u.UploadID <= 0 {
+		return ErrInvalidUploadID
+	}
+
+	if tx.Statement.Changed("type") && !u.Type.IsValid() {
+		return ErrInvalidUsageType
+	}
+
+	if tx.Statement.Changed("bytes") && u.Bytes <= 0 {
+		return ErrInvalidBytes
+	}
+
+	if tx.Statement.Changed("ip") {
+		if net.ParseIP(u.IP) == nil {
+			return ErrInvalidIP
+		}
+	}
+
+	if tx.Statement.Changed("timestamp") && u.Timestamp.IsZero() {
 		return ErrInvalidTimestamp
 	}
 

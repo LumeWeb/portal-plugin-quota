@@ -44,27 +44,6 @@ func (u *UserQuotaConfig) validate() error {
 	}
 
 
-	// Validate custom limits if set
-	if u.StorageLimit != nil && *u.StorageLimit < 0 {
-		return ErrInvalidStorageLimit
-	}
-
-	if u.UploadDailyLimit != nil && *u.UploadDailyLimit < 0 {
-		return ErrInvalidUploadDailyLimit
-	}
-
-	if u.DownloadDailyLimit != nil && *u.DownloadDailyLimit < 0 {
-		return ErrInvalidDownloadDailyLimit
-	}
-
-	if u.UploadTotalLimit != nil && *u.UploadTotalLimit < 0 {
-		return ErrInvalidUploadTotalLimit
-	}
-
-	if u.DownloadTotalLimit != nil && *u.DownloadTotalLimit < 0 {
-		return ErrInvalidDownloadTotalLimit
-	}
-
 	// Validate thresholds are <= corresponding limits if both are set
 	if u.StorageLimit != nil && u.StorageThreshold != nil && *u.StorageThreshold > *u.StorageLimit {
 		return ErrInvalidStorageThreshold

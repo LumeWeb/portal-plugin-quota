@@ -10,6 +10,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // BasePolicyEnforcer provides common functionality for all policy enforcers
@@ -38,17 +39,18 @@ func (b *BasePolicyEnforcer) validateUserID(userID uint) error {
 	return nil
 }
 
-// validateBytes validates that bytes value is valid
-func (b *BasePolicyEnforcer) validateBytes(bytes uint64) error {
-	if bytes == 0 {
+// validateRequestedBytes validates that requested bytes is valid
+// Note: 0 bytes is considered valid for quota checks (e.g., checking if any upload is allowed)
+func (b *BasePolicyEnforcer) validateRequestedBytes(requestedBytes uint64) error {
+	if requestedBytes == 0 {
 		return models.ErrInvalidBytes
 	}
 	return nil
 }
 
-// validateRequestedBytes validates that requested bytes is valid
-func (b *BasePolicyEnforcer) validateRequestedBytes(requestedBytes uint64) error {
-	if requestedBytes == 0 {
+// validateBytes validates that bytes value is valid (not zero)
+func (b *BasePolicyEnforcer) validateBytes(bytes uint64) error {
+	if bytes == 0 {
 		return models.ErrInvalidBytes
 	}
 	return nil
@@ -200,45 +202,51 @@ func (b *BasePolicyEnforcer) recordUserUsageDetail(detail *models.UserUsageDetai
 
 // updateDailyUsage updates the daily aggregated usage for a user
 func (b *BasePolicyEnforcer) updateDailyUsage(userID uint, usageType models.UsageType, bytes uint64) error {
-	today := time.Now().Truncate(24 * time.Hour)
-
-	// Try to find existing daily quota record
-	var dailyQuota models.UserQuota
-	err := b.db.Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
-
-	if err == gorm.ErrRecordNotFound {
-		// Create new daily quota record
-		dailyQuota = models.UserQuota{
-			UserID: userID,
-			Date:   today,
-		}
-
-		// Set the appropriate field based on usage type
-		switch usageType {
-		case models.UsageTypeUpload:
-			dailyQuota.BytesUploaded = bytes
-		case models.UsageTypeDownload:
-			dailyQuota.BytesDownloaded = bytes
-		case models.UsageTypeStorageAdd:
-			dailyQuota.BytesStored = bytes
-		}
-
-		return b.db.Create(&dailyQuota).Error
-	} else if err != nil {
+	if err := b.validateUserID(userID); err != nil {
 		return err
 	}
 
-	// Update existing daily quota record
-	switch usageType {
-	case models.UsageTypeUpload:
-		dailyQuota.BytesUploaded += bytes
-	case models.UsageTypeDownload:
-		dailyQuota.BytesDownloaded += bytes
-	case models.UsageTypeStorageAdd:
-		dailyQuota.BytesStored += bytes
-	}
+	today := time.Now().Truncate(24 * time.Hour)
 
-	return b.db.Save(&dailyQuota).Error
+	return b.db.Transaction(func(tx *gorm.DB) error {
+		// Try to find existing daily quota record with row locking
+		var dailyQuota models.UserQuota
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
+
+		if err == gorm.ErrRecordNotFound {
+			// Create new daily quota record
+			dailyQuota = models.UserQuota{
+				UserID: userID,
+				Date:   today,
+			}
+
+			// Set the appropriate field based on usage type
+			switch usageType {
+			case models.UsageTypeUpload:
+				dailyQuota.BytesUploaded = bytes
+			case models.UsageTypeDownload:
+				dailyQuota.BytesDownloaded = bytes
+			case models.UsageTypeStorageAdd:
+				dailyQuota.BytesStored = bytes
+			}
+
+			return tx.Create(&dailyQuota).Error
+		} else if err != nil {
+			return err
+		}
+
+		// Update existing daily quota record
+		switch usageType {
+		case models.UsageTypeUpload:
+			dailyQuota.BytesUploaded += bytes
+		case models.UsageTypeDownload:
+			dailyQuota.BytesDownloaded += bytes
+		case models.UsageTypeStorageAdd:
+			dailyQuota.BytesStored += bytes
+		}
+
+		return tx.Save(&dailyQuota).Error
+	})
 }
 
 // Helper functions

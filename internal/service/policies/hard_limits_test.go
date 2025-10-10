@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -693,6 +694,53 @@ func TestHardLimitsPolicyEnforcer_GetUsageHistory(t *testing.T) {
 			_, err := enforcer.GetUsageHistory(0, period, usageType)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
+		}, testOptions())
+	})
+}
+
+func TestHardLimitsPolicyEnforcer_ConcurrentAccess(t *testing.T) {
+	t.Run("Concurrent quota checks", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			enforcer := NewHardLimitsPolicyEnforcer(ctx)
+			baseUserID := uint(40000)
+
+			// Create a test user
+			userID := baseUserID + 1
+			uploadDailyLimit := uint64(1000)
+			config := createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
+				UploadDailyLimit: &uploadDailyLimit,
+			})
+
+			// Run concurrent quota checks
+			var results []pluginCore.QuotaCheckResult
+			var errors []error
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+
+			numGoroutines := 5
+			for i := 0; i < numGoroutines; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					result, err := enforcer.CheckUploadQuota(config, 100)
+					mu.Lock()
+					results = append(results, result)
+					errors = append(errors, err)
+					mu.Unlock()
+				}()
+			}
+
+			wg.Wait()
+
+			// All should succeed
+			for _, err := range errors {
+				assert.NoError(t, err)
+			}
+
+			// All should be allowed
+			for _, result := range results {
+				assert.True(t, result.Allowed)
+			}
 		}, testOptions())
 	})
 }

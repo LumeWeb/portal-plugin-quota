@@ -21,7 +21,10 @@ func NewUnlimitedPolicyEnforcer(ctx core.Context) *UnlimitedPolicyEnforcer {
 }
 
 // CheckUploadQuota always allows uploads since there are no limits
-func (u *UnlimitedPolicyEnforcer) CheckUploadQuota(_ *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+func (u *UnlimitedPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if err := u.validateUserID(config.UserID); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
 	if err := u.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}

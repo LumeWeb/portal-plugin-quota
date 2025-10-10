@@ -10,6 +10,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	coreTesting "go.lumeweb.com/portal/core/testing"
+	"sync"
 )
 
 func TestUnlimitedPolicyEnforcer_CheckUploadQuota(t *testing.T) {
@@ -295,6 +296,42 @@ func TestUnlimitedPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			assert.ErrorIs(t, err, models.ErrInvalidUserID)
 		})
 	}, testOptions())
+}
+
+func TestUnlimitedPolicyEnforcer_ConcurrentAccess(t *testing.T) {
+	t.Run("Concurrent upload recordings", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			enforcer := NewUnlimitedPolicyEnforcer(ctx)
+			baseUserID := uint(8000)
+
+			userID := baseUserID + 1
+			createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{})
+
+			// Run concurrent upload recordings
+			var errors []error
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+
+			numGoroutines := 5
+			for i := 0; i < numGoroutines; i++ {
+				wg.Add(1)
+				go func(goroutineID int) {
+					defer wg.Done()
+					err := enforcer.RecordUpload(userID, uint(goroutineID+1), 100, "192.168.1.1")
+					mu.Lock()
+					errors = append(errors, err)
+					mu.Unlock()
+				}(i)
+			}
+
+			wg.Wait()
+
+			// All should succeed
+			for _, err := range errors {
+				assert.NoError(t, err)
+			}
+		}, testOptions())
+	})
 }
 
 func TestUnlimitedPolicyEnforcer_DelegationMethods(t *testing.T) {

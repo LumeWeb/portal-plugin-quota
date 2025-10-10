@@ -24,6 +24,9 @@ func NewHardLimitsPolicyEnforcer(ctx core.Context) *HardLimitsPolicyEnforcer {
 
 // CheckUploadQuota checks if an upload operation is allowed under hard limits policy
 func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if err := h.validateUserID(config.UserID); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
 	if err := h.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}

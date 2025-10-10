@@ -1,24 +1,14 @@
 package main
 
 import (
-	"embed"
 	"go.lumeweb.com/portal-plugin-quota/build"
 	"go.lumeweb.com/portal-plugin-quota/internal"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
-	"go.lumeweb.com/portal/service"
 )
 
-//go:embed templates/*
-var mailerTemplates embed.FS
-
 func init() {
-	templates, err := service.MailerTemplatesFromEmbed(&mailerTemplates, "")
-	if err != nil {
-		panic(err)
-	}
-
 	core.RegisterPlugin(core.PluginInfo{
 		ID:      internal.PLUGIN_NAME,
 		Version: build.GetInfo(),
@@ -45,6 +35,5 @@ func init() {
 			core.DB_TYPE_MYSQL:  migrations.GetMySQL(),
 			core.DB_TYPE_SQLITE: migrations.GetSQLite(),
 		},
-		MailerTemplates: templates,
 	})
 }

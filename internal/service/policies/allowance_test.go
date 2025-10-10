@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -459,6 +460,45 @@ func TestAllowancePolicyEnforcer_GetDetailedUsage(t *testing.T) {
 }
 
 // TestAllowancePolicyEnforcer_GetCurrentUsage tests the GetCurrentUsage method
+func TestAllowancePolicyEnforcer_ConcurrentAccess(t *testing.T) {
+	t.Run("Concurrent upload recordings", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			userID := uint(10000)
+			createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+
+			mockGrantManager := createMockGrantManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+
+			// Set up mock expectations for multiple calls
+			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, uint64(100)).Return([]*models.AllowanceConsumption{}, nil).Times(5)
+
+			// Run concurrent upload recordings
+			var errors []error
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+
+			numGoroutines := 5
+			for i := 0; i < numGoroutines; i++ {
+				wg.Add(1)
+				go func(goroutineID int) {
+					defer wg.Done()
+					err := enforcer.RecordUpload(userID, uint(goroutineID+1), 100, "192.168.1.1")
+					mu.Lock()
+					errors = append(errors, err)
+					mu.Unlock()
+				}(i)
+			}
+
+			wg.Wait()
+
+			// All should succeed
+			for _, err := range errors {
+				assert.NoError(t, err)
+			}
+		}, testOptions())
+	})
+}
+
 func TestAllowancePolicyEnforcer_GetCurrentUsage(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userID := uint(1)

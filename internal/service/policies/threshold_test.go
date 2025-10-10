@@ -10,6 +10,8 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	coreTesting "go.lumeweb.com/portal/core/testing"
+	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
+	"sync"
 )
 
 // TestThresholdPolicyEnforcer_CheckUploadQuota tests the CheckUploadQuota method
@@ -659,6 +661,55 @@ func TestThresholdPolicyEnforcer_GetUsageHistory(t *testing.T) {
 		assert.Contains(t, bytes, uint64(200))
 		assert.Contains(t, bytes, uint64(400))
 	}, testOptions())
+}
+
+func TestThresholdPolicyEnforcer_ConcurrentAccess(t *testing.T) {
+	t.Run("Concurrent quota checks", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			baseUserID := uint(50000)
+			userID := baseUserID + 1
+
+			uploadDailyLimit := uint64(1000)
+			uploadThreshold := uint64(800)
+			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
+				UploadDailyLimit: &uploadDailyLimit,
+				UploadThreshold:  &uploadThreshold,
+			})
+
+			enforcer := NewThresholdPolicyEnforcer(ctx)
+
+			// Run concurrent quota checks
+			var results []pluginCore.QuotaCheckResult
+			var errors []error
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+
+			numGoroutines := 5
+			for i := 0; i < numGoroutines; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					result, err := enforcer.CheckUploadQuota(userID, 100)
+					mu.Lock()
+					results = append(results, result)
+					errors = append(errors, err)
+					mu.Unlock()
+				}()
+			}
+
+			wg.Wait()
+
+			// All should succeed
+			for _, err := range errors {
+				assert.NoError(t, err)
+			}
+
+			// All should be allowed
+			for _, result := range results {
+				assert.True(t, result.Allowed)
+			}
+		}, testOptions())
+	})
 }
 
 func TestThresholdPolicyEnforcer_resolveEffectiveLimits(t *testing.T) {

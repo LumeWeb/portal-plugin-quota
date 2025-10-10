@@ -25,7 +25,7 @@ var (
 	ErrCannotDeleteReferencedPlan = errors.New("cannot delete quota plan that is referenced by user configurations")
 	ErrInvalidBytesUsed           = errors.New("bytes_used cannot be greater than bytes")
 	ErrInvalidBytesRemaining      = errors.New("bytes_remaining must equal bytes - bytes_used")
-	ErrInvalidExpiryDate          = errors.New("expiry_date must be in the future")
+	ErrInvalidExpiryDateOnCreate  = errors.New("expiry_date must be in the future on create")
 	ErrInvalidStorageLimit        = errors.New("storage_limit must be greater than or equal to 0")
 	ErrInvalidUploadDailyLimit    = errors.New("upload_daily_limit must be greater than or equal to 0")
 	ErrInvalidDownloadDailyLimit  = errors.New("download_daily_limit must be greater than or equal to 0")

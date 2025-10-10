@@ -24,7 +24,7 @@ type AllowanceGrant struct {
 
 // BeforeCreate validates the AllowanceGrant model before creation
 func (a *AllowanceGrant) BeforeCreate(_ *gorm.DB) error {
-	return a.validate()
+	return a.validateOnCreate()
 }
 
 // BeforeUpdate validates the AllowanceGrant model before update
@@ -59,9 +59,18 @@ func (a *AllowanceGrant) validate() error {
 		return ErrInvalidBytesRemaining
 	}
 
-	// Validate that ExpiryDate is in the future if set
+	return nil
+}
+
+// validateOnCreate performs validation checks on the AllowanceGrant fields including expiry date validation
+func (a *AllowanceGrant) validateOnCreate() error {
+	if err := a.validate(); err != nil {
+		return err
+	}
+
+	// Validate that ExpiryDate is in the future if set (only on create)
 	if a.ExpiryDate != nil && a.ExpiryDate.Before(time.Now()) {
-		return ErrInvalidExpiryDate
+		return ErrInvalidExpiryDateOnCreate
 	}
 
 	return nil

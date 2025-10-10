@@ -23,6 +23,11 @@ type UserQuotaConfig struct {
 	AllowanceGrants []*AllowanceGrant `gorm:"foreignKey:UserID;references:UserID"`
 }
 
+// TableName sets the table name for UserQuotaConfig
+func (UserQuotaConfig) TableName() string {
+	return "user_quota_configs"
+}
+
 // BeforeCreate validates the UserQuotaConfig model before creation
 func (u *UserQuotaConfig) BeforeCreate(_ *gorm.DB) error {
 	return u.validate()

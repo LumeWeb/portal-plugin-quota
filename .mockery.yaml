@@ -1,0 +1,10 @@
+template: testify
+template-data:
+  unroll-variadic: true
+filename: "mock_{{.InterfaceName}}.go"
+packages:
+  go.lumeweb.com/portal-plugin-quota/core:
+    interfaces:
+      GrantManager: {}
+      PolicyEnforcer: {}
+      QuotaService: {}

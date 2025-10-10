@@ -33,3 +33,8 @@ func (u UsageType) IsValid() bool {
 func (u UsageType) String() string {
 	return string(u)
 }
+
+// TableName sets the table name for UsageType
+func (UsageType) TableName() string {
+	return "usage_types"
+}

@@ -49,3 +49,8 @@ func (g GrantSource) GetGrantPriority() int {
 		return 0
 	}
 }
+
+// TableName sets the table name for GrantSource
+func (GrantSource) TableName() string {
+	return "grant_sources"
+}

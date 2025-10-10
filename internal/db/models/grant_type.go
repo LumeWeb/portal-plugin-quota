@@ -32,3 +32,8 @@ func (g GrantType) IsValid() bool {
 func (g GrantType) String() string {
 	return string(g)
 }
+
+// TableName sets the table name for GrantType
+func (GrantType) TableName() string {
+	return "grant_types"
+}

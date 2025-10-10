@@ -24,6 +24,11 @@ type UserUsageDetail struct {
 	AllowanceConsumptions []*AllowanceConsumption `gorm:"foreignKey:UsageDetailID"`
 }
 
+// TableName sets the table name for UserUsageDetail
+func (UserUsageDetail) TableName() string {
+	return "user_usage_details"
+}
+
 // BeforeCreate validates the UserUsageDetail model before creation
 func (u *UserUsageDetail) BeforeCreate(tx *gorm.DB) error {
 	// Auto-set timestamp if not provided
@@ -53,7 +58,7 @@ func (u *UserUsageDetail) validate() error {
 		return ErrInvalidUsageType
 	}
 
-	if u.Bytes <= 0 {
+	if u.Type != UsageTypeStorageRemove && u.Bytes <= 0 {
 		return ErrInvalidBytes
 	}
 
@@ -91,7 +96,7 @@ func (u *UserUsageDetail) validatePartial(tx *gorm.DB) error {
 		return ErrInvalidUsageType
 	}
 
-	if tx.Statement.Changed("bytes") && u.Bytes <= 0 {
+	if tx.Statement.Changed("bytes") && u.Type != UsageTypeStorageRemove && u.Bytes <= 0 {
 		return ErrInvalidBytes
 	}
 

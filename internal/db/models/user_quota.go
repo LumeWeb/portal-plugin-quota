@@ -16,6 +16,11 @@ type UserQuota struct {
 	BytesStored     uint64
 }
 
+// TableName sets the table name for UserQuota
+func (UserQuota) TableName() string {
+	return "user_quotas"
+}
+
 // BeforeCreate validates the UserQuota model before creation
 func (u *UserQuota) BeforeCreate(_ *gorm.DB) error {
 	return u.validate()

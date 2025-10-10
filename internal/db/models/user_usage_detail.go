@@ -1,6 +1,7 @@
 package models
 
 import (
+	"net"
 	"time"
 
 	"gorm.io/gorm"
@@ -49,16 +50,12 @@ func (u *UserUsageDetail) validate() error {
 		return ErrInvalidBytes
 	}
 
-	if u.IP == "" {
+	if net.ParseIP(u.IP) == nil {
 		return ErrInvalidIP
 	}
 
 	if u.Timestamp.IsZero() {
 		return ErrInvalidTimestamp
-	}
-
-	if u.SharedWith < 0 {
-		return ErrInvalidSharedWith
 	}
 
 	return nil

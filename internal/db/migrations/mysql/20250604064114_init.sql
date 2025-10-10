@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS user_quota_configs (
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     UNIQUE KEY idx_user_id (user_id),
+    INDEX idx_quota_plan_id (quota_plan_id),
     INDEX idx_enforcement_policy (enforcement_policy)
 );
 

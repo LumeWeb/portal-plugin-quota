@@ -96,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_user_usage_details_upload_id ON user_usage_detail
 CREATE INDEX IF NOT EXISTS idx_user_usage_details_type ON user_usage_details(type);
 CREATE INDEX IF NOT EXISTS idx_user_usage_details_ip ON user_usage_details(ip);
 CREATE INDEX IF NOT EXISTS idx_user_usage_details_timestamp ON user_usage_details(timestamp);
+CREATE INDEX IF NOT EXISTS idx_user_quota_configs_quota_plan_id ON user_quota_configs(quota_plan_id);
 CREATE INDEX IF NOT EXISTS idx_allowance_grants_user_id ON allowance_grants(user_id);
 CREATE INDEX IF NOT EXISTS idx_allowance_grants_type ON allowance_grants(type);
 CREATE INDEX IF NOT EXISTS idx_allowance_grants_source ON allowance_grants(source);

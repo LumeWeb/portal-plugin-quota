@@ -10,7 +10,7 @@ var (
 	ErrInvalidDate                = errors.New("date must not be zero")
 	ErrInvalidUploadID            = errors.New("upload_id must be greater than 0")
 	ErrInvalidBytes               = errors.New("bytes must be greater than 0")
-	ErrInvalidIP                  = errors.New("ip must not be empty")
+	ErrInvalidIP                  = errors.New("ip must be a valid IP address")
 	ErrInvalidTimestamp           = errors.New("timestamp must not be zero")
 	ErrInvalidSharedWith          = errors.New("shared_with must be between 0 and 1000")
 	ErrInvalidGrantID             = errors.New("grant_id must be greater than 0")

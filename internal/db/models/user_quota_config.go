@@ -20,7 +20,7 @@ type UserQuotaConfig struct {
 	DownloadThreshold  *uint64
 	
 	// Relationships
-	AllowanceGrants []*AllowanceGrant `gorm:"foreignKey:UserID"`
+	AllowanceGrants []*AllowanceGrant `gorm:"foreignKey:UserID;references:UserID"`
 }
 
 // BeforeCreate validates the UserQuotaConfig model before creation

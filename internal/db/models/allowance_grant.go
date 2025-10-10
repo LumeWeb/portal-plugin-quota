@@ -22,6 +22,19 @@ type AllowanceGrant struct {
 	UserQuotaConfig *UserQuotaConfig `gorm:"foreignKey:UserID;references:UserID"`
 }
 
+// BeforeSave computes BytesRemaining before persistence
+func (a *AllowanceGrant) BeforeSave(_ *gorm.DB) error {
+	// Compute BytesRemaining as Bytes - BytesUsed
+	a.BytesRemaining = a.Bytes - a.BytesUsed
+	
+	// Guard against negative values - clamp to 0
+	if a.BytesRemaining > a.Bytes {
+		a.BytesRemaining = 0
+	}
+	
+	return nil
+}
+
 // BeforeCreate validates the AllowanceGrant model before creation
 func (a *AllowanceGrant) BeforeCreate(_ *gorm.DB) error {
 	return a.validateOnCreate()
@@ -54,10 +67,6 @@ func (a *AllowanceGrant) validate() error {
 		return ErrInvalidBytesUsed
 	}
 
-	// Validate that BytesRemaining is calculated correctly
-	if a.BytesRemaining != a.Bytes-a.BytesUsed {
-		return ErrInvalidBytesRemaining
-	}
 
 	return nil
 }

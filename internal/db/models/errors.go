@@ -12,7 +12,7 @@ var (
 	ErrInvalidBytes               = errors.New("bytes must be greater than 0")
 	ErrInvalidIP                  = errors.New("ip must not be empty")
 	ErrInvalidTimestamp           = errors.New("timestamp must not be zero")
-	ErrInvalidSharedWith          = errors.New("shared_with must be greater than or equal to 0")
+	ErrInvalidSharedWith          = errors.New("shared_with must be between 0 and 1000")
 	ErrInvalidGrantID             = errors.New("grant_id must be greater than 0")
 	ErrInvalidUsageDetailID       = errors.New("usage_detail_id must be greater than 0")
 	ErrInvalidBytesConsumed       = errors.New("bytes_consumed must be greater than 0")

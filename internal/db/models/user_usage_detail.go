@@ -58,6 +58,10 @@ func (u *UserUsageDetail) validate() error {
 		return ErrInvalidTimestamp
 	}
 
+	if u.SharedWith > 1000 {
+		return ErrInvalidSharedWith
+	}
+
 	return nil
 }
 
@@ -87,6 +91,10 @@ func (u *UserUsageDetail) validatePartial(tx *gorm.DB) error {
 
 	if tx.Statement.Changed("timestamp") && u.Timestamp.IsZero() {
 		return ErrInvalidTimestamp
+	}
+
+	if tx.Statement.Changed("shared_with") && u.SharedWith > 1000 {
+		return ErrInvalidSharedWith
 	}
 
 	return nil

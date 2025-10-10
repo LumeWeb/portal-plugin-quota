@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS quota_plans (
 
 CREATE TABLE IF NOT EXISTS user_quota_configs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT UNSIGNED NOT NULL UNIQUE,
+    user_id BIGINT UNSIGNED NOT NULL,
     enforcement_policy VARCHAR(255) NOT NULL,
     quota_plan_id BIGINT UNSIGNED,
     storage_limit BIGINT UNSIGNED,

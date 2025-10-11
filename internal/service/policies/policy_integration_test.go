@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -71,7 +72,7 @@ func TestPolicyIntegration_PolicySwitching(t *testing.T) {
 			require.NoError(t, err)
 			assert.False(t, result.Allowed) // Should be blocked now
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestPolicyIntegration_MixedPolicies(t *testing.T) {
@@ -122,7 +123,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 			require.NoError(t, err3)
 			assert.False(t, result3.Allowed) // Should be blocked
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
@@ -187,5 +188,5 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 			assert.Contains(t, err3.Error(), expectedError)
 			assert.Contains(t, err4.Error(), expectedError)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

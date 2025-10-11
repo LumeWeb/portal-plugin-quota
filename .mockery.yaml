@@ -8,3 +8,4 @@ packages:
       GrantManager: {}
       PolicyEnforcer: {}
       QuotaService: {}
+      UsageManager: {}

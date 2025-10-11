@@ -15,12 +15,14 @@ import (
 // HardLimitsPolicyEnforcer implements PolicyEnforcer for hard limits policy
 type HardLimitsPolicyEnforcer struct {
 	*BasePolicyEnforcer
+	usageManager pluginCore.UsageManager
 }
 
 // NewHardLimitsPolicyEnforcer creates a new hard limits policy enforcer
-func NewHardLimitsPolicyEnforcer(ctx core.Context) *HardLimitsPolicyEnforcer {
+func NewHardLimitsPolicyEnforcer(ctx core.Context, usageManager pluginCore.UsageManager) *HardLimitsPolicyEnforcer {
 	return &HardLimitsPolicyEnforcer{
 		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx),
+		usageManager:      usageManager,
 	}
 }
 
@@ -195,23 +197,8 @@ func (h *HardLimitsPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uin
 		return fmt.Errorf("upload blocked: %s", result.Reason)
 	}
 
-	// Record the usage detail
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       models.UsageTypeUpload,
-		Bytes:      bytes,
-		IP:         ip,
-		Timestamp:  time.Now(),
-		SharedWith: 1, // Uploads are not shared initially
-	}
-
-	if err := h.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily usage
-	return h.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes))
+	// Delegate to UsageManager for actual recording
+	return h.usageManager.RecordUpload(userID, uploadID, bytes, ip)
 }
 
 // RecordDownload records a download operation and enforces hard limits
@@ -239,23 +226,8 @@ func (h *HardLimitsPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes u
 		return fmt.Errorf("download blocked: %s", result.Reason)
 	}
 
-	// Record the usage detail
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       models.UsageTypeDownload,
-		Bytes:      bytes,
-		IP:         ip,
-		Timestamp:  time.Now(),
-		SharedWith: 1, // Default to 1, will be updated by shared usage calculation
-	}
-
-	if err := h.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily usage
-	return h.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes))
+	// Delegate to UsageManager for actual recording
+	return h.usageManager.RecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange records a storage change operation and enforces hard limits
@@ -286,38 +258,8 @@ func (h *HardLimitsPolicyEnforcer) RecordStorageChange(userID, uploadID uint, by
 		}
 	}
 
-	// Determine usage type and byte value for recording
-	var usageType models.UsageType
-	var recordBytes uint64
-	if bytes < 0 {
-		usageType = models.UsageTypeStorageRemove
-		recordBytes = uint64(-bytes)
-	} else {
-		usageType = models.UsageTypeStorageAdd
-		recordBytes = uint64(bytes)
-	}
-
-	// Record the usage detail
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       usageType,
-		Bytes:      recordBytes,
-		IP:         ip,
-		Timestamp:  time.Now(),
-		SharedWith: 1, // Default to 1, will be updated by shared usage calculation
-	}
-
-	if err := h.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily usage with the correct usage type and byte value
-	// For storage operations, we need to pass the signed bytes value to properly handle removals
-	if usageType == models.UsageTypeStorageRemove {
-		return h.updateDailyUsage(userID, usageType, -int64(recordBytes))
-	}
-	return h.updateDailyUsage(userID, usageType, bytes)
+	// Delegate to UsageManager for actual recording
+	return h.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage delegates to base enforcer

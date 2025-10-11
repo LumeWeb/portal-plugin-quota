@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -31,7 +32,7 @@ func TestConfiguration_DefaultCreation(t *testing.T) {
 			assert.Nil(t, config.DownloadThreshold)
 			assert.Nil(t, config.QuotaPlanID)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestConfiguration_Updates(t *testing.T) {
@@ -77,7 +78,7 @@ func TestConfiguration_Updates(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, models.EnforcementPolicyUnlimited, updatedConfig.EnforcementPolicy)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestConfiguration_QuotaPlanIntegration(t *testing.T) {
@@ -144,7 +145,7 @@ func TestConfiguration_QuotaPlanIntegration(t *testing.T) {
 			assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)     // Plan value
 			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit) // Plan value
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestConfiguration_MissingValues(t *testing.T) {
@@ -175,5 +176,5 @@ func TestConfiguration_MissingValues(t *testing.T) {
 			assert.Nil(t, limits)
 			assert.Contains(t, err.Error(), "no limits configured")
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

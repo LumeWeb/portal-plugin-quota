@@ -10,13 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
 // TestHardLimitsPolicyEnforcer_ValidateLimitValue tests the validateLimitValue function
 func TestHardLimitsPolicyEnforcer_ValidateLimitValue(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		enforcer := NewHardLimitsPolicyEnforcer(ctx)
+		usageManager := pluginCore.NewMockUsageManager(t)
+		enforcer := NewHardLimitsPolicyEnforcer(ctx, usageManager)
 
 		t.Run("Valid positive limit values", func(t *testing.T) {
 			validValues := []int64{
@@ -60,7 +62,7 @@ func TestHardLimitsPolicyEnforcer_ValidateLimitValue(t *testing.T) {
 				assert.Error(t, err, "Value %d should be unreasonably large and invalid", value)
 			}
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
@@ -86,7 +88,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			result, err := enforcer.CheckUploadQuota(config, 500)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Exceeding daily limit", func(t *testing.T) {
@@ -114,7 +116,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			result, err := enforcer.CheckUploadQuota(config, 500)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Exceeding total limit", func(t *testing.T) {
@@ -143,7 +145,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			result, err := enforcer.CheckUploadQuota(config, 500)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid bytes", func(t *testing.T) {
@@ -169,7 +171,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -196,7 +198,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			result, err := enforcer.CheckDownloadQuota(config, 1000)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Exceeding daily limit", func(t *testing.T) {
@@ -224,7 +226,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			result, err := enforcer.CheckDownloadQuota(config, 1000)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Exceeding total limit", func(t *testing.T) {
@@ -253,7 +255,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			result, err := enforcer.CheckDownloadQuota(config, 1000)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid bytes", func(t *testing.T) {
@@ -279,7 +281,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -304,7 +306,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			result, err := enforcer.CheckStorageQuota(config, 1500)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Exceeding storage limit", func(t *testing.T) {
@@ -330,7 +332,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			result, err := enforcer.CheckStorageQuota(config, 1000)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Exceeding total limit", func(t *testing.T) {
@@ -357,7 +359,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			result, err := enforcer.CheckStorageQuota(config, 200)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid bytes", func(t *testing.T) {
@@ -381,7 +383,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -412,7 +414,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload(t *testing.T) {
 			usage, err := enforcer.GetCurrentUsage(userID)
 			require.NoError(t, err)
 			assert.Equal(t, uint64(500), usage.BytesUploaded)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Upload that exceeds quota", func(t *testing.T) {
@@ -437,7 +439,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload(t *testing.T) {
 			err = enforcer.RecordUpload(userID, 101, 1500, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "upload blocked")
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid user ID", func(t *testing.T) {
@@ -448,7 +450,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload(t *testing.T) {
 			err := enforcer.RecordUpload(0, 102, 100, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid bytes", func(t *testing.T) {
@@ -469,7 +471,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload(t *testing.T) {
 			err = enforcer.RecordUpload(userID, 103, 0, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -500,7 +502,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload(t *testing.T) {
 			usage, err := enforcer.GetCurrentUsage(userID)
 			require.NoError(t, err)
 			assert.Equal(t, uint64(1000), usage.BytesDownloaded)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Download that exceeds quota", func(t *testing.T) {
@@ -525,7 +527,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload(t *testing.T) {
 			err = enforcer.RecordDownload(userID, 201, 1500, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "download blocked")
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid user ID", func(t *testing.T) {
@@ -536,7 +538,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload(t *testing.T) {
 			err := enforcer.RecordDownload(0, 202, 100, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid bytes", func(t *testing.T) {
@@ -552,7 +554,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload(t *testing.T) {
 			err := enforcer.RecordDownload(userID, 203, 0, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -578,7 +580,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			usage, err := enforcer.GetCurrentUsage(userID)
 			require.NoError(t, err)
 			assert.Equal(t, uint64(1500), usage.BytesStored)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Storage addition that exceeds quota", func(t *testing.T) {
@@ -598,7 +600,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			err := enforcer.RecordStorageChange(userID, 301, 1500, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "storage change blocked")
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Storage removal (no quota enforcement)", func(t *testing.T) {
@@ -617,7 +619,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			// Test storage removal
 			err := enforcer.RecordStorageChange(userID, 302, -500, "127.0.0.1")
 			assert.NoError(t, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid user ID", func(t *testing.T) {
@@ -628,7 +630,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			err := enforcer.RecordStorageChange(0, 303, 100, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid bytes", func(t *testing.T) {
@@ -644,7 +646,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			err := enforcer.RecordStorageChange(userID, 304, 0, "127.0.0.1")
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -698,7 +700,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage(t *testing.T) {
 			assert.True(t, types[models.UsageTypeUpload])
 			assert.True(t, types[models.UsageTypeDownload])
 			assert.True(t, types[models.UsageTypeStorageAdd])
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid user ID", func(t *testing.T) {
@@ -712,7 +714,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage(t *testing.T) {
 			_, err := enforcer.GetDetailedUsage(0, start, end)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -756,7 +758,7 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage(t *testing.T) {
 			assert.Equal(t, uint64(300), usage.BytesUploaded)
 			assert.Equal(t, uint64(600), usage.BytesDownloaded)
 			assert.Equal(t, uint64(900), usage.BytesStored)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid user ID", func(t *testing.T) {
@@ -767,7 +769,7 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage(t *testing.T) {
 			_, err := enforcer.GetCurrentUsage(0)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -816,7 +818,7 @@ func TestHardLimitsPolicyEnforcer_GetUsageHistory(t *testing.T) {
 
 			assert.Contains(t, bytes, uint64(200))
 			assert.Contains(t, bytes, uint64(400))
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Invalid user ID", func(t *testing.T) {
@@ -830,7 +832,7 @@ func TestHardLimitsPolicyEnforcer_GetUsageHistory(t *testing.T) {
 			_, err := enforcer.GetUsageHistory(0, period, usageType)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidUserID, err)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -877,7 +879,7 @@ func TestHardLimitsPolicyEnforcer_ConcurrentAccess(t *testing.T) {
 			for _, result := range results {
 				assert.True(t, result.Allowed)
 			}
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -913,7 +915,7 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 			assert.Equal(t, uint64(downloadDailyLimit), *limits.DownloadDailyLimit)
 			assert.Equal(t, uint64(uploadTotalLimit), *limits.UploadTotalLimit)
 			assert.Equal(t, uint64(downloadTotalLimit), *limits.DownloadTotalLimit)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Quota plan limits", func(t *testing.T) {
@@ -944,7 +946,7 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limitsWithPlan.DownloadDailyLimit)
 			assert.Equal(t, uint64(plan.UploadTotalLimit), *limitsWithPlan.UploadTotalLimit)
 			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limitsWithPlan.DownloadTotalLimit)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Mixed configuration", func(t *testing.T) {
@@ -980,6 +982,6 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limitsWithMixed.DownloadDailyLimit) // Plan value
 			assert.Equal(t, uint64(plan.UploadTotalLimit), *limitsWithMixed.UploadTotalLimit)     // Plan value
 			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limitsWithMixed.DownloadTotalLimit) // Plan value
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }

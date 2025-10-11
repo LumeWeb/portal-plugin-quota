@@ -8,6 +8,7 @@ require (
 	github.com/samber/lo v1.51.0
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/portal v0.4.2-0.20251008065049-d7c36fc0769c
+	go.uber.org/zap v1.27.0
 	gorm.io/gorm v1.30.1
 )
 
@@ -171,7 +172,6 @@ require (
 	go.sia.tech/mux v1.4.0 // indirect
 	go.sia.tech/renterd/v2 v2.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.42.0 // indirect

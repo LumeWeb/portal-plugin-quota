@@ -4,13 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"sync"
+
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"sync"
 )
 
 // TestThresholdPolicyEnforcer_CheckUploadQuota tests the CheckUploadQuota method
@@ -114,7 +116,7 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			assert.Equal(t, models.ErrInvalidBytes, err)
 			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
@@ -217,7 +219,7 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			assert.Equal(t, models.ErrInvalidBytes, err)
 			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_CheckStorageQuota(t *testing.T) {
@@ -399,7 +401,7 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			assert.True(t, result.Allowed)
 			assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_RecordUpload(t *testing.T) {
@@ -474,7 +476,7 @@ func TestThresholdPolicyEnforcer_RecordUpload(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_RecordDownload(t *testing.T) {
@@ -549,7 +551,7 @@ func TestThresholdPolicyEnforcer_RecordDownload(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_RecordStorageChange(t *testing.T) {
@@ -666,7 +668,7 @@ func TestThresholdPolicyEnforcer_RecordStorageChange(t *testing.T) {
 			err := enforcer.RecordStorageChange(userID, 306, 1000000, "127.0.0.1")
 			assert.NoError(t, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_GetDetailedUsage(t *testing.T) {
@@ -703,7 +705,7 @@ func TestThresholdPolicyEnforcer_GetDetailedUsage(t *testing.T) {
 		assert.True(t, types[models.UsageTypeUpload])
 		assert.True(t, types[models.UsageTypeDownload])
 		assert.True(t, types[models.UsageTypeStorageAdd])
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_GetCurrentUsage(t *testing.T) {
@@ -730,7 +732,7 @@ func TestThresholdPolicyEnforcer_GetCurrentUsage(t *testing.T) {
 		assert.Equal(t, uint64(300), usage.BytesUploaded)
 		assert.Equal(t, uint64(600), usage.BytesDownloaded)
 		assert.Equal(t, uint64(900), usage.BytesStored)
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_GetUsageHistory(t *testing.T) {
@@ -763,7 +765,7 @@ func TestThresholdPolicyEnforcer_GetUsageHistory(t *testing.T) {
 
 		assert.Contains(t, bytes, uint64(200))
 		assert.Contains(t, bytes, uint64(400))
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_ThresholdWarningBehavior(t *testing.T) {
@@ -873,7 +875,7 @@ func TestThresholdPolicyEnforcer_ThresholdWarningBehavior(t *testing.T) {
 			assert.True(t, result.Allowed)
 			assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestThresholdPolicyEnforcer_ConcurrentAccess(t *testing.T) {
@@ -921,7 +923,7 @@ func TestThresholdPolicyEnforcer_ConcurrentAccess(t *testing.T) {
 			for _, result := range results {
 				assert.True(t, result.Allowed)
 			}
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Concurrent quota checks with 0 limit (should all deny)", func(t *testing.T) {
@@ -966,7 +968,7 @@ func TestThresholdPolicyEnforcer_ConcurrentAccess(t *testing.T) {
 				assert.False(t, result.Allowed)
 				assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
 			}
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Concurrent quota checks with -1 limit (should all allow)", func(t *testing.T) {
@@ -1011,7 +1013,7 @@ func TestThresholdPolicyEnforcer_ConcurrentAccess(t *testing.T) {
 				assert.True(t, result.Allowed)
 				assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 			}
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -1262,5 +1264,5 @@ func TestThresholdPolicyEnforcer_resolveEffectiveLimits(t *testing.T) {
 			assert.Equal(t, int64(1000), *config.StorageLimit)
 			assert.Equal(t, int64(1500), *config.StorageThreshold)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -43,7 +44,7 @@ func TestBasePolicyEnforcer_ValidateUserID(t *testing.T) {
 				}
 			})
 		}
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_ValidateBytes(t *testing.T) {
@@ -77,7 +78,7 @@ func TestBasePolicyEnforcer_ValidateBytes(t *testing.T) {
 				}
 			})
 		}
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_ValidateRequestedBytes(t *testing.T) {
@@ -111,7 +112,7 @@ func TestBasePolicyEnforcer_ValidateRequestedBytes(t *testing.T) {
 				}
 			})
 		}
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_GetUserQuotaConfig(t *testing.T) {
@@ -138,7 +139,7 @@ func TestBasePolicyEnforcer_GetUserQuotaConfig(t *testing.T) {
 			assert.Equal(t, userID, config.UserID)
 			assert.Equal(t, models.EnforcementPolicyHardLimits, config.EnforcementPolicy) // Default policy
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_GetCurrentUsage(t *testing.T) {
@@ -173,7 +174,7 @@ func TestBasePolicyEnforcer_GetCurrentUsage(t *testing.T) {
 			assert.Equal(t, uint64(200), usage.BytesDownloaded)
 			assert.Equal(t, uint64(300), usage.BytesStored)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_GetUsageHistory(t *testing.T) {
@@ -213,7 +214,7 @@ func TestBasePolicyEnforcer_GetUsageHistory(t *testing.T) {
 			assert.Equal(t, uint64(200), history[0].Bytes) // Older record first
 			assert.Equal(t, uint64(100), history[1].Bytes) // Newer record second
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_GetDetailedUsage(t *testing.T) {
@@ -251,7 +252,7 @@ func TestBasePolicyEnforcer_GetDetailedUsage(t *testing.T) {
 			// Verify records are in descending order by timestamp
 			assert.True(t, details[0].Timestamp.After(details[1].Timestamp))
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_RecordUserUsageDetail(t *testing.T) {
@@ -280,7 +281,7 @@ func TestBasePolicyEnforcer_RecordUserUsageDetail(t *testing.T) {
 		assert.Equal(t, userID, savedDetail.UserID)
 		assert.Equal(t, uint64(100), savedDetail.Bytes)
 		assert.Equal(t, models.UsageTypeUpload, savedDetail.Type)
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_UpdateDailyUsage(t *testing.T) {
@@ -303,7 +304,7 @@ func TestBasePolicyEnforcer_UpdateDailyUsage(t *testing.T) {
 			assert.Equal(t, uint64(100), dailyQuota.BytesUploaded)
 			assert.Equal(t, uint64(0), dailyQuota.BytesDownloaded)
 			assert.Equal(t, uint64(0), dailyQuota.BytesStored)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Update existing daily quota record", func(t *testing.T) {
@@ -327,7 +328,7 @@ func TestBasePolicyEnforcer_UpdateDailyUsage(t *testing.T) {
 			err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 			require.NoError(t, err)
 			assert.Equal(t, uint64(150), dailyQuota.BytesUploaded) // 100 + 50
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 
 	t.Run("Different usage types", func(t *testing.T) {
@@ -353,7 +354,7 @@ func TestBasePolicyEnforcer_UpdateDailyUsage(t *testing.T) {
 			assert.Equal(t, uint64(100), dailyQuota.BytesUploaded)
 			assert.Equal(t, uint64(200), dailyQuota.BytesDownloaded)
 			assert.Equal(t, uint64(300), dailyQuota.BytesStored)
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -385,7 +386,7 @@ func TestBasePolicyEnforcer_CreateQuotaCheckResult(t *testing.T) {
 			assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
 			assert.Equal(t, details, result.Details)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_CreateSuccessResult(t *testing.T) {
@@ -410,7 +411,7 @@ func TestBasePolicyEnforcer_CreateLimitExceededResult(t *testing.T) {
 		assert.NotNil(t, result.Details.Limit)
 		assert.Equal(t, uint64(200), *result.Details.Limit)
 		assert.Equal(t, models.EnforcementPolicyHardLimits, result.Details.Policy)
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestBasePolicyEnforcer_CreateWarningResult(t *testing.T) {
@@ -426,5 +427,5 @@ func TestBasePolicyEnforcer_CreateWarningResult(t *testing.T) {
 		assert.NotNil(t, result.Details.Limit)
 		assert.Equal(t, uint64(200), *result.Details.Limit)
 		assert.Equal(t, models.EnforcementPolicyThreshold, result.Details.Policy)
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

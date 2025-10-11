@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -26,7 +27,7 @@ func TestErrorHandling_InvalidConfiguration(t *testing.T) {
 			// is implemented by specific policy enforcers, not the base one.
 			// We'll skip this test for the base enforcer.
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestErrorHandling_ZeroValues(t *testing.T) {
@@ -57,7 +58,7 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestErrorHandling_DatabaseFailures(t *testing.T) {
@@ -76,5 +77,5 @@ func TestErrorHandling_DatabaseFailures(t *testing.T) {
 			_, err = enforcer.GetCurrentUsage(userID)
 			assert.Error(t, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

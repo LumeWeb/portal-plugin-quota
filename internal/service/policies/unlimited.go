@@ -11,12 +11,14 @@ import (
 // UnlimitedPolicyEnforcer implements PolicyEnforcer for the UNLIMITED policy
 type UnlimitedPolicyEnforcer struct {
 	*BasePolicyEnforcer
+	usageManager pluginCore.UsageManager
 }
 
 // NewUnlimitedPolicyEnforcer creates a new unlimited policy enforcer
-func NewUnlimitedPolicyEnforcer(ctx core.Context) *UnlimitedPolicyEnforcer {
+func NewUnlimitedPolicyEnforcer(ctx core.Context, usageManager pluginCore.UsageManager) *UnlimitedPolicyEnforcer {
 	return &UnlimitedPolicyEnforcer{
 		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx),
+		usageManager:      usageManager,
 	}
 }
 
@@ -66,23 +68,8 @@ func (u *UnlimitedPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		return err
 	}
 
-	// Record detailed usage
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       models.UsageTypeUpload,
-		Bytes:      bytes,
-		IP:         ip,
-		Timestamp:  time.Now(),
-		SharedWith: 1, // Uploads are not shared
-	}
-
-	if err := u.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes))
+	// Delegate to UsageManager for actual recording
+	return u.usageManager.RecordUpload(userID, uploadID, bytes, ip)
 }
 
 // RecordDownload simply records usage without any limit checking
@@ -95,22 +82,8 @@ func (u *UnlimitedPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		return err
 	}
 
-	// Record detailed usage
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      models.UsageTypeDownload,
-		Bytes:     bytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := u.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes))
+	// Delegate to UsageManager for actual recording
+	return u.usageManager.RecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange simply records usage without any limit checking
@@ -123,32 +96,8 @@ func (u *UnlimitedPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		return models.ErrInvalidBytes
 	}
 
-	// Record detailed usage
-	var usageType models.UsageType
-	var recordBytes uint64
-	if bytes > 0 {
-		usageType = models.UsageTypeStorageAdd
-		recordBytes = uint64(bytes)
-	} else {
-		usageType = models.UsageTypeStorageRemove
-		recordBytes = uint64(-bytes)
-	}
-
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      usageType,
-		Bytes:     recordBytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := u.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, usageType, bytes)
+	// Delegate to UsageManager for actual recording
+	return u.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage delegates to the base enforcer

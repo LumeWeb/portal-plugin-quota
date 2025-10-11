@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -20,7 +21,8 @@ func TestAllowancePolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 		t.Run("Sufficient allowance", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			grants := []*models.AllowanceGrant{
@@ -41,7 +43,8 @@ func TestAllowancePolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 		t.Run("Insufficient allowance", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			grants := []*models.AllowanceGrant{
@@ -68,7 +71,8 @@ func TestAllowancePolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 		t.Run("Invalid bytes requested", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Get user config
 			config, err := enforcer.getUserQuotaConfig(userID)
@@ -79,7 +83,7 @@ func TestAllowancePolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_CheckDownloadQuota tests the CheckDownloadQuota method
@@ -90,7 +94,8 @@ func TestAllowancePolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 		t.Run("Sufficient allowance", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			grants := []*models.AllowanceGrant{
@@ -111,7 +116,8 @@ func TestAllowancePolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 		t.Run("Insufficient allowance", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			grants := []*models.AllowanceGrant{
@@ -138,7 +144,8 @@ func TestAllowancePolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 		t.Run("Invalid bytes requested", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Get user config
 			config, err := enforcer.getUserQuotaConfig(userID)
@@ -149,7 +156,7 @@ func TestAllowancePolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_CheckStorageQuota tests the CheckStorageQuota method
@@ -160,7 +167,8 @@ func TestAllowancePolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 		t.Run("Sufficient allowance", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			grants := []*models.AllowanceGrant{
@@ -181,7 +189,8 @@ func TestAllowancePolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 		t.Run("Insufficient allowance", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			grants := []*models.AllowanceGrant{
@@ -208,7 +217,8 @@ func TestAllowancePolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 		t.Run("Invalid bytes requested", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Get user config
 			config, err := enforcer.getUserQuotaConfig(userID)
@@ -219,7 +229,7 @@ func TestAllowancePolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_RecordUpload tests the RecordUpload method
@@ -234,14 +244,27 @@ func TestAllowancePolicyEnforcer_RecordUpload(t *testing.T) {
 
 		t.Run("Successful upload recording", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes).Return([]*models.AllowanceConsumption{}, nil)
 
+			// Verify that UsageManager.RecordUpload is called
+			called := false
+			mockUsageManager.RecordUploadFunc = func(uID, upID uint, bts uint64, ipAddress string) error {
+				called = true
+				assert.Equal(t, userID, uID)
+				assert.Equal(t, uploadID, upID)
+				assert.Equal(t, bytes, bts)
+				assert.Equal(t, ip, ipAddress)
+				return nil
+			}
+
 			// Record upload
 			err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
 			assert.NoError(t, err)
+			assert.True(t, called, "UsageManager.RecordUpload should be called")
 
 			// Verify usage was recorded in database
 			var usageDetails []models.UserUsageDetail
@@ -255,7 +278,8 @@ func TestAllowancePolicyEnforcer_RecordUpload(t *testing.T) {
 
 		t.Run("Grant consumption failure", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations for failure
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes).Return(nil, assert.AnError)
@@ -268,7 +292,8 @@ func TestAllowancePolicyEnforcer_RecordUpload(t *testing.T) {
 
 		t.Run("Invalid user ID", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			err := enforcer.RecordUpload(0, uploadID, bytes, ip)
 			assert.Error(t, err)
@@ -277,13 +302,14 @@ func TestAllowancePolicyEnforcer_RecordUpload(t *testing.T) {
 
 		t.Run("Invalid bytes", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			err := enforcer.RecordUpload(userID, uploadID, 0, ip)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_RecordDownload tests the RecordDownload method
@@ -298,14 +324,27 @@ func TestAllowancePolicyEnforcer_RecordDownload(t *testing.T) {
 
 		t.Run("Successful download recording", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes).Return([]*models.AllowanceConsumption{}, nil)
 
+			// Verify that UsageManager.RecordDownload is called
+			called := false
+			mockUsageManager.RecordDownloadFunc = func(uID, upID uint, bts uint64, ipAddress string) error {
+				called = true
+				assert.Equal(t, userID, uID)
+				assert.Equal(t, uploadID, upID)
+				assert.Equal(t, bytes, bts)
+				assert.Equal(t, ip, ipAddress)
+				return nil
+			}
+
 			// Record download
 			err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
 			assert.NoError(t, err)
+			assert.True(t, called, "UsageManager.RecordDownload should be called")
 
 			// Verify usage was recorded in database
 			var usageDetails []models.UserUsageDetail
@@ -319,7 +358,8 @@ func TestAllowancePolicyEnforcer_RecordDownload(t *testing.T) {
 
 		t.Run("Grant consumption failure", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations for failure
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes).Return(nil, assert.AnError)
@@ -332,7 +372,8 @@ func TestAllowancePolicyEnforcer_RecordDownload(t *testing.T) {
 
 		t.Run("Invalid user ID", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			err := enforcer.RecordDownload(0, uploadID, bytes, ip)
 			assert.Error(t, err)
@@ -341,13 +382,14 @@ func TestAllowancePolicyEnforcer_RecordDownload(t *testing.T) {
 
 		t.Run("Invalid bytes", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			err := enforcer.RecordDownload(userID, uploadID, 0, ip)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_RecordStorageChange tests the RecordStorageChange method
@@ -362,14 +404,27 @@ func TestAllowancePolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 		t.Run("Successful storage addition recording", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes)).Return([]*models.AllowanceConsumption{}, nil)
 
+			// Verify that UsageManager.RecordStorageChange is called
+			called := false
+			mockUsageManager.RecordStorageChangeFunc = func(uID, upID uint, bts int64, ipAddress string) error {
+				called = true
+				assert.Equal(t, userID, uID)
+				assert.Equal(t, uploadID, upID)
+				assert.Equal(t, bytes, bts)
+				assert.Equal(t, ip, ipAddress)
+				return nil
+			}
+
 			// Record storage change
 			err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
 			assert.NoError(t, err)
+			assert.True(t, called, "UsageManager.RecordStorageChange should be called")
 
 			// Verify usage was recorded in database
 			var usageDetails []models.UserUsageDetail
@@ -383,13 +438,26 @@ func TestAllowancePolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 		t.Run("Storage removal (no grant consumption)", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 			removalBytes := int64(-50)
 			removalUploadID := uint(2) // Use different upload ID to avoid conflict
+
+			// Verify that UsageManager.RecordStorageChange is called for removal
+			called := false
+			mockUsageManager.RecordStorageChangeFunc = func(uID, upID uint, bts int64, ipAddress string) error {
+				called = true
+				assert.Equal(t, userID, uID)
+				assert.Equal(t, removalUploadID, upID)
+				assert.Equal(t, removalBytes, bts)
+				assert.Equal(t, ip, ipAddress)
+				return nil
+			}
 
 			// Record storage change - should not consume grants for removal
 			err := enforcer.RecordStorageChange(userID, removalUploadID, removalBytes, ip)
 			assert.NoError(t, err)
+			assert.True(t, called, "UsageManager.RecordStorageChange should be called")
 
 			// Verify usage was recorded in database
 			var usageDetails []models.UserUsageDetail
@@ -403,7 +471,8 @@ func TestAllowancePolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 		t.Run("Grant consumption failure", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations for failure
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes)).Return(nil, assert.AnError)
@@ -416,7 +485,8 @@ func TestAllowancePolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 		t.Run("Invalid user ID", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			err := enforcer.RecordStorageChange(0, uploadID, bytes, ip)
 			assert.Error(t, err)
@@ -425,13 +495,14 @@ func TestAllowancePolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 		t.Run("Zero bytes", func(t *testing.T) {
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			err := enforcer.RecordStorageChange(userID, uploadID, 0, ip)
 			assert.Error(t, err)
 			assert.Equal(t, models.ErrInvalidBytes, err)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_GetDetailedUsage tests the GetDetailedUsage method
@@ -445,7 +516,8 @@ func TestAllowancePolicyEnforcer_GetDetailedUsage(t *testing.T) {
 		createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 200)
 
 		mockGrantManager := createMockGrantManager(t)
-		enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 		start := time.Now().Add(-time.Hour)
 		end := time.Now().Add(time.Hour)
@@ -456,7 +528,7 @@ func TestAllowancePolicyEnforcer_GetDetailedUsage(t *testing.T) {
 
 		// Verify the records are returned in descending order by timestamp
 		assert.True(t, usageDetails[0].Timestamp.After(usageDetails[1].Timestamp) || usageDetails[0].Timestamp.Equal(usageDetails[1].Timestamp))
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 // TestAllowancePolicyEnforcer_GetCurrentUsage tests the GetCurrentUsage method
@@ -467,7 +539,8 @@ func TestAllowancePolicyEnforcer_ConcurrentAccess(t *testing.T) {
 			createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
 
 			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 			// Set up mock expectations for multiple calls
 			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, uint64(100)).Return([]*models.AllowanceConsumption{}, nil).Times(5)
@@ -495,7 +568,7 @@ func TestAllowancePolicyEnforcer_ConcurrentAccess(t *testing.T) {
 			for _, err := range errors {
 				assert.NoError(t, err)
 			}
-		}, testOptions())
+		}, pluginTesting.TestOptions())
 	})
 }
 
@@ -510,7 +583,8 @@ func TestAllowancePolicyEnforcer_GetCurrentUsage(t *testing.T) {
 		createTestUsageRecord(t, ctx, userID, models.UsageTypeStorageAdd, 300)
 
 		mockGrantManager := createMockGrantManager(t)
-		enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager, mockUsageManager)
 
 		usage, err := enforcer.GetCurrentUsage(userID)
 		assert.NoError(t, err)
@@ -518,5 +592,5 @@ func TestAllowancePolicyEnforcer_GetCurrentUsage(t *testing.T) {
 		assert.Equal(t, uint64(100), usage.BytesUploaded)
 		assert.Equal(t, uint64(200), usage.BytesDownloaded)
 		assert.Equal(t, uint64(300), usage.BytesStored)
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -49,7 +50,7 @@ func TestModelValidation_EnforcementPolicy(t *testing.T) {
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "enforcement policy is invalid")
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestModelValidation_UsageType(t *testing.T) {
@@ -83,7 +84,7 @@ func TestModelValidation_UsageType(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestModelValidation_GrantType(t *testing.T) {
@@ -117,7 +118,7 @@ func TestModelValidation_GrantType(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestModelValidation_GrantSource(t *testing.T) {
@@ -152,7 +153,7 @@ func TestModelValidation_GrantSource(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestModelValidation_QuotaCheckReason(t *testing.T) {

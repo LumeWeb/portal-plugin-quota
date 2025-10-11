@@ -15,12 +15,14 @@ import (
 // ThresholdPolicyEnforcer implements the PolicyEnforcer interface for THRESHOLD policy
 type ThresholdPolicyEnforcer struct {
 	*BasePolicyEnforcer
+	usageManager pluginCore.UsageManager
 }
 
 // NewThresholdPolicyEnforcer creates a new threshold policy enforcer
-func NewThresholdPolicyEnforcer(ctx core.Context) *ThresholdPolicyEnforcer {
+func NewThresholdPolicyEnforcer(ctx core.Context, usageManager pluginCore.UsageManager) *ThresholdPolicyEnforcer {
 	return &ThresholdPolicyEnforcer{
 		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx),
+		usageManager:      usageManager,
 	}
 }
 
@@ -344,26 +346,8 @@ func (t *ThresholdPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		return fmt.Errorf("upload blocked: %s", result.Reason)
 	}
 
-	// Record the detailed usage
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      models.UsageTypeUpload,
-		Bytes:     bytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := t.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily usage
-	if err := t.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes)); err != nil {
-		return err
-	}
-
-	return nil
+	// Delegate to UsageManager for actual recording
+	return t.usageManager.RecordUpload(userID, uploadID, bytes, ip)
 }
 
 // RecordDownload records a download operation under threshold policy
@@ -397,26 +381,8 @@ func (t *ThresholdPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		return fmt.Errorf("download blocked: %s", result.Reason)
 	}
 
-	// Record the detailed usage
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      models.UsageTypeDownload,
-		Bytes:     bytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := t.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily usage
-	if err := t.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes)); err != nil {
-		return err
-	}
-
-	return nil
+	// Delegate to UsageManager for actual recording
+	return t.usageManager.RecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange records a storage change operation under threshold policy
@@ -440,37 +406,8 @@ func (t *ThresholdPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		}
 	}
 
-	// Record the detailed usage
-	usageType := models.UsageTypeStorageAdd
-	if bytes < 0 {
-		usageType = models.UsageTypeStorageRemove
-	}
-
-	// Use absolute value for bytes when recording usage
-	recordBytes := uint64(bytes)
-	if bytes < 0 {
-		recordBytes = uint64(-bytes)
-	}
-
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      usageType,
-		Bytes:     recordBytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := t.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily usage with signed delta
-	if err := t.updateDailyUsage(userID, usageType, bytes); err != nil {
-		return err
-	}
-
-	return nil
+	// Delegate to UsageManager for actual recording
+	return t.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage returns detailed usage records for a user

@@ -7,37 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
-	"go.lumeweb.com/portal-plugin-quota/internal"
-	"go.lumeweb.com/portal-plugin-quota/internal/config"
-	"go.lumeweb.com/portal-plugin-quota/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"gorm.io/gorm"
 )
-
-func testOptions() coreTesting.TestContextBuilderOption {
-	return coreTesting.CombineOptions(coreTesting.NewMockPluginBuilder(internal.PLUGIN_NAME).
-		WithMigrations(core.DBMigration{core.DB_TYPE_SQLITE: migrations.GetSQLite()}).
-		WithService(pluginCore.QUOTA_SERVICE, func() (core.Service, []core.ContextBuilderOption, error) {
-			return &MockQuotaService{}, nil, nil
-		}).Build().BuilderOption(),
-		coreTesting.WithServiceConfig(internal.PLUGIN_NAME, pluginCore.QUOTA_SERVICE, &config.QuotaConfig{}),
-	)
-}
-
-// MockQuotaService is a minimal mock service for testing
-type MockQuotaService struct {
-	ctx core.Context
-}
-
-func (m *MockQuotaService) ID() string {
-	return "quota"
-}
-
-func (m *MockQuotaService) Name() string {
-	return "Quota Service"
-}
 
 // testUserLimits represents quota limits for a test user
 type testUserLimits struct {

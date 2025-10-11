@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -50,5 +51,5 @@ func TestAllowancePolicyEnforcer_GetUsageHistory(t *testing.T) {
 			assert.Equal(t, uint64(200), history[0].Bytes) // Older record first
 			assert.Equal(t, uint64(100), history[1].Bytes) // Newer record second
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

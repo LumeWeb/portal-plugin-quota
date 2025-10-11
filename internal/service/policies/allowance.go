@@ -13,14 +13,16 @@ import (
 type AllowancePolicyEnforcer struct {
 	*BasePolicyEnforcer
 	grantManager pluginCore.GrantManager
+	usageManager pluginCore.UsageManager
 }
 
 // NewAllowancePolicyEnforcer creates a new allowance policy enforcer
-func NewAllowancePolicyEnforcer(ctx core.Context, grantManager pluginCore.GrantManager) *AllowancePolicyEnforcer {
+func NewAllowancePolicyEnforcer(ctx core.Context, grantManager pluginCore.GrantManager, usageManager pluginCore.UsageManager) *AllowancePolicyEnforcer {
 	base := NewBasePolicyEnforcer(ctx)
 	return &AllowancePolicyEnforcer{
 		BasePolicyEnforcer: base,
 		grantManager:       grantManager,
+		usageManager:       usageManager,
 	}
 }
 
@@ -156,27 +158,8 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		return fmt.Errorf("failed to consume upload allowance: %w", err)
 	}
 
-	// Record usage detail
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       models.UsageTypeUpload,
-		Bytes:      bytes,
-		IP:         ip,
-		SharedWith: 1, // Count the owner for cardinality semantics
-		Timestamp:  time.Now(),
-	}
-
-	if err := a.recordUserUsageDetail(detail); err != nil {
-		return fmt.Errorf("failed to record upload usage detail: %w", err)
-	}
-
-	// Update daily usage
-	if err := a.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes)); err != nil {
-		return fmt.Errorf("failed to update daily upload usage: %w", err)
-	}
-
-	return nil
+	// Delegate to UsageManager for actual recording
+	return a.usageManager.RecordUpload(userID, uploadID, bytes, ip)
 }
 
 // RecordDownload records a download operation and consumes from grants based on prioritization rules
@@ -194,27 +177,8 @@ func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		return fmt.Errorf("failed to consume download allowance: %w", err)
 	}
 
-	// Record usage detail
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       models.UsageTypeDownload,
-		Bytes:      bytes,
-		IP:         ip,
-		SharedWith: 1, // Count the owner for cardinality semantics
-		Timestamp:  time.Now(),
-	}
-
-	if err := a.recordUserUsageDetail(detail); err != nil {
-		return fmt.Errorf("failed to record download usage detail: %w", err)
-	}
-
-	// Update daily usage
-	if err := a.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes)); err != nil {
-		return fmt.Errorf("failed to update daily download usage: %w", err)
-	}
-
-	return nil
+	// Delegate to UsageManager for actual recording
+	return a.usageManager.RecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange records a storage change operation and consumes from grants based on prioritization rules
@@ -235,38 +199,8 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		}
 	}
 
-	// Determine usage type and byte value for recording
-	var usageType models.UsageType
-	var recordBytes uint64
-	if bytes < 0 {
-		usageType = models.UsageTypeStorageRemove
-		recordBytes = uint64(-bytes)
-	} else {
-		usageType = models.UsageTypeStorageAdd
-		recordBytes = uint64(bytes)
-	}
-
-	// Record usage detail
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       usageType,
-		Bytes:      recordBytes,
-		IP:         ip,
-		SharedWith: 1, // Count the owner for cardinality semantics
-		Timestamp:  time.Now(),
-	}
-
-	if err := a.recordUserUsageDetail(detail); err != nil {
-		return fmt.Errorf("failed to record storage usage detail: %w", err)
-	}
-
-	// Update daily usage with the correct usage type and byte value
-	if err := a.updateDailyUsage(userID, usageType, bytes); err != nil {
-		return fmt.Errorf("failed to update daily storage usage: %w", err)
-	}
-
-	return nil
+	// Delegate to UsageManager for actual recording
+	return a.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage delegates to the base enforcer

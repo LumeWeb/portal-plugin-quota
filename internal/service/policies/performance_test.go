@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
@@ -14,7 +15,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userID := uint(1)
 		thresholdUserID := uint(2)
-		thresholdUserID2 := uint(3)         // New user ID for threshold test - use 3 to avoid conflict
+		thresholdUserID2 := uint(3)        // New user ID for threshold test - use 3 to avoid conflict
 		largeValue := int64(1000000000000) // 1TB - large but reasonable
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 			UploadDailyLimit: &largeValue,
@@ -24,7 +25,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 
 		t.Run("Hard limits with large values", func(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx)
-			
+
 			// Get existing config for the user
 			config, err := enforcer.getUserQuotaConfig(userID)
 			require.NoError(t, err)
@@ -52,7 +53,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
@@ -77,7 +78,7 @@ func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, uint64(1000), usage.BytesUploaded) // 100 uploads * 10 bytes each
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestPerformance_HistoricalData(t *testing.T) {
@@ -108,7 +109,7 @@ func TestPerformance_HistoricalData(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, history, 365)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }
 
 func TestPerformance_TimezoneBoundaries(t *testing.T) {
@@ -153,5 +154,5 @@ func TestPerformance_TimezoneBoundaries(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, details, 2)
 		})
-	}, testOptions())
+	}, pluginTesting.TestOptions())
 }

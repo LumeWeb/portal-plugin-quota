@@ -8,7 +8,6 @@ import (
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
-	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
 // NewMockGrantManager creates a new instance of MockGrantManager. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -39,7 +38,7 @@ func (_m *MockGrantManager) EXPECT() *MockGrantManager_Expecter {
 }
 
 // CalculateAvailableBytes provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) CalculateAvailableBytes(grants []*models.AllowanceGrant) uint64 {
+func (_mock *MockGrantManager) CalculateAvailableBytes(grants []*AllowanceGrant) uint64 {
 	ret := _mock.Called(grants)
 
 	if len(ret) == 0 {
@@ -47,7 +46,7 @@ func (_mock *MockGrantManager) CalculateAvailableBytes(grants []*models.Allowanc
 	}
 
 	var r0 uint64
-	if returnFunc, ok := ret.Get(0).(func([]*models.AllowanceGrant) uint64); ok {
+	if returnFunc, ok := ret.Get(0).(func([]*AllowanceGrant) uint64); ok {
 		r0 = returnFunc(grants)
 	} else {
 		r0 = ret.Get(0).(uint64)
@@ -61,16 +60,16 @@ type MockGrantManager_CalculateAvailableBytes_Call struct {
 }
 
 // CalculateAvailableBytes is a helper method to define mock.On call
-//   - grants []*models.AllowanceGrant
+//   - grants []*AllowanceGrant
 func (_e *MockGrantManager_Expecter) CalculateAvailableBytes(grants interface{}) *MockGrantManager_CalculateAvailableBytes_Call {
 	return &MockGrantManager_CalculateAvailableBytes_Call{Call: _e.mock.On("CalculateAvailableBytes", grants)}
 }
 
-func (_c *MockGrantManager_CalculateAvailableBytes_Call) Run(run func(grants []*models.AllowanceGrant)) *MockGrantManager_CalculateAvailableBytes_Call {
+func (_c *MockGrantManager_CalculateAvailableBytes_Call) Run(run func(grants []*AllowanceGrant)) *MockGrantManager_CalculateAvailableBytes_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 []*models.AllowanceGrant
+		var arg0 []*AllowanceGrant
 		if args[0] != nil {
-			arg0 = args[0].([]*models.AllowanceGrant)
+			arg0 = args[0].([]*AllowanceGrant)
 		}
 		run(
 			arg0,
@@ -84,32 +83,32 @@ func (_c *MockGrantManager_CalculateAvailableBytes_Call) Return(v uint64) *MockG
 	return _c
 }
 
-func (_c *MockGrantManager_CalculateAvailableBytes_Call) RunAndReturn(run func(grants []*models.AllowanceGrant) uint64) *MockGrantManager_CalculateAvailableBytes_Call {
+func (_c *MockGrantManager_CalculateAvailableBytes_Call) RunAndReturn(run func(grants []*AllowanceGrant) uint64) *MockGrantManager_CalculateAvailableBytes_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ConsumeFromGrants provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType models.GrantType, bytes uint64) ([]*models.AllowanceConsumption, error) {
+func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64) ([]*AllowanceConsumption, error) {
 	ret := _mock.Called(userID, grantType, bytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ConsumeFromGrants")
 	}
 
-	var r0 []*models.AllowanceConsumption
+	var r0 []*AllowanceConsumption
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, models.GrantType, uint64) ([]*models.AllowanceConsumption, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64) ([]*AllowanceConsumption, error)); ok {
 		return returnFunc(userID, grantType, bytes)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, models.GrantType, uint64) []*models.AllowanceConsumption); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64) []*AllowanceConsumption); ok {
 		r0 = returnFunc(userID, grantType, bytes)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*models.AllowanceConsumption)
+			r0 = ret.Get(0).([]*AllowanceConsumption)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, models.GrantType, uint64) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(uint, GrantType, uint64) error); ok {
 		r1 = returnFunc(userID, grantType, bytes)
 	} else {
 		r1 = ret.Error(1)
@@ -124,21 +123,21 @@ type MockGrantManager_ConsumeFromGrants_Call struct {
 
 // ConsumeFromGrants is a helper method to define mock.On call
 //   - userID uint
-//   - grantType models.GrantType
+//   - grantType GrantType
 //   - bytes uint64
 func (_e *MockGrantManager_Expecter) ConsumeFromGrants(userID interface{}, grantType interface{}, bytes interface{}) *MockGrantManager_ConsumeFromGrants_Call {
 	return &MockGrantManager_ConsumeFromGrants_Call{Call: _e.mock.On("ConsumeFromGrants", userID, grantType, bytes)}
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, grantType models.GrantType, bytes uint64)) *MockGrantManager_ConsumeFromGrants_Call {
+func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, grantType GrantType, bytes uint64)) *MockGrantManager_ConsumeFromGrants_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 uint
 		if args[0] != nil {
 			arg0 = args[0].(uint)
 		}
-		var arg1 models.GrantType
+		var arg1 GrantType
 		if args[1] != nil {
-			arg1 = args[1].(models.GrantType)
+			arg1 = args[1].(GrantType)
 		}
 		var arg2 uint64
 		if args[2] != nil {
@@ -153,18 +152,18 @@ func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, gra
 	return _c
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) Return(allowanceConsumptions []*models.AllowanceConsumption, err error) *MockGrantManager_ConsumeFromGrants_Call {
-	_c.Call.Return(allowanceConsumptions, err)
+func (_c *MockGrantManager_ConsumeFromGrants_Call) Return(vs []*AllowanceConsumption, err error) *MockGrantManager_ConsumeFromGrants_Call {
+	_c.Call.Return(vs, err)
 	return _c
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) RunAndReturn(run func(userID uint, grantType models.GrantType, bytes uint64) ([]*models.AllowanceConsumption, error)) *MockGrantManager_ConsumeFromGrants_Call {
+func (_c *MockGrantManager_ConsumeFromGrants_Call) RunAndReturn(run func(userID uint, grantType GrantType, bytes uint64) ([]*AllowanceConsumption, error)) *MockGrantManager_ConsumeFromGrants_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CreateAllowanceGrant provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) CreateAllowanceGrant(userID uint, grant *models.AllowanceGrant) error {
+func (_mock *MockGrantManager) CreateAllowanceGrant(userID uint, grant *AllowanceGrant) error {
 	ret := _mock.Called(userID, grant)
 
 	if len(ret) == 0 {
@@ -172,7 +171,7 @@ func (_mock *MockGrantManager) CreateAllowanceGrant(userID uint, grant *models.A
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, *models.AllowanceGrant) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, *AllowanceGrant) error); ok {
 		r0 = returnFunc(userID, grant)
 	} else {
 		r0 = ret.Error(0)
@@ -187,20 +186,20 @@ type MockGrantManager_CreateAllowanceGrant_Call struct {
 
 // CreateAllowanceGrant is a helper method to define mock.On call
 //   - userID uint
-//   - grant *models.AllowanceGrant
+//   - grant *AllowanceGrant
 func (_e *MockGrantManager_Expecter) CreateAllowanceGrant(userID interface{}, grant interface{}) *MockGrantManager_CreateAllowanceGrant_Call {
 	return &MockGrantManager_CreateAllowanceGrant_Call{Call: _e.mock.On("CreateAllowanceGrant", userID, grant)}
 }
 
-func (_c *MockGrantManager_CreateAllowanceGrant_Call) Run(run func(userID uint, grant *models.AllowanceGrant)) *MockGrantManager_CreateAllowanceGrant_Call {
+func (_c *MockGrantManager_CreateAllowanceGrant_Call) Run(run func(userID uint, grant *AllowanceGrant)) *MockGrantManager_CreateAllowanceGrant_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 uint
 		if args[0] != nil {
 			arg0 = args[0].(uint)
 		}
-		var arg1 *models.AllowanceGrant
+		var arg1 *AllowanceGrant
 		if args[1] != nil {
-			arg1 = args[1].(*models.AllowanceGrant)
+			arg1 = args[1].(*AllowanceGrant)
 		}
 		run(
 			arg0,
@@ -215,7 +214,7 @@ func (_c *MockGrantManager_CreateAllowanceGrant_Call) Return(err error) *MockGra
 	return _c
 }
 
-func (_c *MockGrantManager_CreateAllowanceGrant_Call) RunAndReturn(run func(userID uint, grant *models.AllowanceGrant) error) *MockGrantManager_CreateAllowanceGrant_Call {
+func (_c *MockGrantManager_CreateAllowanceGrant_Call) RunAndReturn(run func(userID uint, grant *AllowanceGrant) error) *MockGrantManager_CreateAllowanceGrant_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -272,23 +271,23 @@ func (_c *MockGrantManager_DeactivateGrant_Call) RunAndReturn(run func(grantID u
 }
 
 // GetActiveGrants provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) GetActiveGrants(userID uint) ([]*models.AllowanceGrant, error) {
+func (_mock *MockGrantManager) GetActiveGrants(userID uint) ([]*AllowanceGrant, error) {
 	ret := _mock.Called(userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveGrants")
 	}
 
-	var r0 []*models.AllowanceGrant
+	var r0 []*AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) ([]*models.AllowanceGrant, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint) ([]*AllowanceGrant, error)); ok {
 		return returnFunc(userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) []*models.AllowanceGrant); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint) []*AllowanceGrant); ok {
 		r0 = returnFunc(userID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*models.AllowanceGrant)
+			r0 = ret.Get(0).([]*AllowanceGrant)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
@@ -323,37 +322,37 @@ func (_c *MockGrantManager_GetActiveGrants_Call) Run(run func(userID uint)) *Moc
 	return _c
 }
 
-func (_c *MockGrantManager_GetActiveGrants_Call) Return(allowanceGrants []*models.AllowanceGrant, err error) *MockGrantManager_GetActiveGrants_Call {
-	_c.Call.Return(allowanceGrants, err)
+func (_c *MockGrantManager_GetActiveGrants_Call) Return(vs []*AllowanceGrant, err error) *MockGrantManager_GetActiveGrants_Call {
+	_c.Call.Return(vs, err)
 	return _c
 }
 
-func (_c *MockGrantManager_GetActiveGrants_Call) RunAndReturn(run func(userID uint) ([]*models.AllowanceGrant, error)) *MockGrantManager_GetActiveGrants_Call {
+func (_c *MockGrantManager_GetActiveGrants_Call) RunAndReturn(run func(userID uint) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrants_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetActiveGrantsByType provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) GetActiveGrantsByType(userID uint, grantType models.GrantType) ([]*models.AllowanceGrant, error) {
+func (_mock *MockGrantManager) GetActiveGrantsByType(userID uint, grantType GrantType) ([]*AllowanceGrant, error) {
 	ret := _mock.Called(userID, grantType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveGrantsByType")
 	}
 
-	var r0 []*models.AllowanceGrant
+	var r0 []*AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, models.GrantType) ([]*models.AllowanceGrant, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType) ([]*AllowanceGrant, error)); ok {
 		return returnFunc(userID, grantType)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, models.GrantType) []*models.AllowanceGrant); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType) []*AllowanceGrant); ok {
 		r0 = returnFunc(userID, grantType)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*models.AllowanceGrant)
+			r0 = ret.Get(0).([]*AllowanceGrant)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, models.GrantType) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(uint, GrantType) error); ok {
 		r1 = returnFunc(userID, grantType)
 	} else {
 		r1 = ret.Error(1)
@@ -368,20 +367,20 @@ type MockGrantManager_GetActiveGrantsByType_Call struct {
 
 // GetActiveGrantsByType is a helper method to define mock.On call
 //   - userID uint
-//   - grantType models.GrantType
+//   - grantType GrantType
 func (_e *MockGrantManager_Expecter) GetActiveGrantsByType(userID interface{}, grantType interface{}) *MockGrantManager_GetActiveGrantsByType_Call {
 	return &MockGrantManager_GetActiveGrantsByType_Call{Call: _e.mock.On("GetActiveGrantsByType", userID, grantType)}
 }
 
-func (_c *MockGrantManager_GetActiveGrantsByType_Call) Run(run func(userID uint, grantType models.GrantType)) *MockGrantManager_GetActiveGrantsByType_Call {
+func (_c *MockGrantManager_GetActiveGrantsByType_Call) Run(run func(userID uint, grantType GrantType)) *MockGrantManager_GetActiveGrantsByType_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 uint
 		if args[0] != nil {
 			arg0 = args[0].(uint)
 		}
-		var arg1 models.GrantType
+		var arg1 GrantType
 		if args[1] != nil {
-			arg1 = args[1].(models.GrantType)
+			arg1 = args[1].(GrantType)
 		}
 		run(
 			arg0,
@@ -391,34 +390,34 @@ func (_c *MockGrantManager_GetActiveGrantsByType_Call) Run(run func(userID uint,
 	return _c
 }
 
-func (_c *MockGrantManager_GetActiveGrantsByType_Call) Return(allowanceGrants []*models.AllowanceGrant, err error) *MockGrantManager_GetActiveGrantsByType_Call {
-	_c.Call.Return(allowanceGrants, err)
+func (_c *MockGrantManager_GetActiveGrantsByType_Call) Return(vs []*AllowanceGrant, err error) *MockGrantManager_GetActiveGrantsByType_Call {
+	_c.Call.Return(vs, err)
 	return _c
 }
 
-func (_c *MockGrantManager_GetActiveGrantsByType_Call) RunAndReturn(run func(userID uint, grantType models.GrantType) ([]*models.AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsByType_Call {
+func (_c *MockGrantManager_GetActiveGrantsByType_Call) RunAndReturn(run func(userID uint, grantType GrantType) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsByType_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetExpiringGrants provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) GetExpiringGrants(expiryWindow time.Duration) ([]*models.AllowanceGrant, error) {
+func (_mock *MockGrantManager) GetExpiringGrants(expiryWindow time.Duration) ([]*AllowanceGrant, error) {
 	ret := _mock.Called(expiryWindow)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetExpiringGrants")
 	}
 
-	var r0 []*models.AllowanceGrant
+	var r0 []*AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(time.Duration) ([]*models.AllowanceGrant, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(time.Duration) ([]*AllowanceGrant, error)); ok {
 		return returnFunc(expiryWindow)
 	}
-	if returnFunc, ok := ret.Get(0).(func(time.Duration) []*models.AllowanceGrant); ok {
+	if returnFunc, ok := ret.Get(0).(func(time.Duration) []*AllowanceGrant); ok {
 		r0 = returnFunc(expiryWindow)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*models.AllowanceGrant)
+			r0 = ret.Get(0).([]*AllowanceGrant)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(time.Duration) error); ok {
@@ -453,34 +452,34 @@ func (_c *MockGrantManager_GetExpiringGrants_Call) Run(run func(expiryWindow tim
 	return _c
 }
 
-func (_c *MockGrantManager_GetExpiringGrants_Call) Return(allowanceGrants []*models.AllowanceGrant, err error) *MockGrantManager_GetExpiringGrants_Call {
-	_c.Call.Return(allowanceGrants, err)
+func (_c *MockGrantManager_GetExpiringGrants_Call) Return(vs []*AllowanceGrant, err error) *MockGrantManager_GetExpiringGrants_Call {
+	_c.Call.Return(vs, err)
 	return _c
 }
 
-func (_c *MockGrantManager_GetExpiringGrants_Call) RunAndReturn(run func(expiryWindow time.Duration) ([]*models.AllowanceGrant, error)) *MockGrantManager_GetExpiringGrants_Call {
+func (_c *MockGrantManager_GetExpiringGrants_Call) RunAndReturn(run func(expiryWindow time.Duration) ([]*AllowanceGrant, error)) *MockGrantManager_GetExpiringGrants_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetExpiringGrantsForUser provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) GetExpiringGrantsForUser(userID uint, window time.Duration) ([]*models.AllowanceGrant, error) {
+func (_mock *MockGrantManager) GetExpiringGrantsForUser(userID uint, window time.Duration) ([]*AllowanceGrant, error) {
 	ret := _mock.Called(userID, window)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetExpiringGrantsForUser")
 	}
 
-	var r0 []*models.AllowanceGrant
+	var r0 []*AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, time.Duration) ([]*models.AllowanceGrant, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, time.Duration) ([]*AllowanceGrant, error)); ok {
 		return returnFunc(userID, window)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, time.Duration) []*models.AllowanceGrant); ok {
+	if returnFunc, ok := ret.Get(0).(func(uint, time.Duration) []*AllowanceGrant); ok {
 		r0 = returnFunc(userID, window)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*models.AllowanceGrant)
+			r0 = ret.Get(0).([]*AllowanceGrant)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(uint, time.Duration) error); ok {
@@ -521,12 +520,12 @@ func (_c *MockGrantManager_GetExpiringGrantsForUser_Call) Run(run func(userID ui
 	return _c
 }
 
-func (_c *MockGrantManager_GetExpiringGrantsForUser_Call) Return(allowanceGrants []*models.AllowanceGrant, err error) *MockGrantManager_GetExpiringGrantsForUser_Call {
-	_c.Call.Return(allowanceGrants, err)
+func (_c *MockGrantManager_GetExpiringGrantsForUser_Call) Return(vs []*AllowanceGrant, err error) *MockGrantManager_GetExpiringGrantsForUser_Call {
+	_c.Call.Return(vs, err)
 	return _c
 }
 
-func (_c *MockGrantManager_GetExpiringGrantsForUser_Call) RunAndReturn(run func(userID uint, window time.Duration) ([]*models.AllowanceGrant, error)) *MockGrantManager_GetExpiringGrantsForUser_Call {
+func (_c *MockGrantManager_GetExpiringGrantsForUser_Call) RunAndReturn(run func(userID uint, window time.Duration) ([]*AllowanceGrant, error)) *MockGrantManager_GetExpiringGrantsForUser_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -19,6 +19,11 @@ type AllowanceConsumption struct {
 	UsageDetail *UserUsageDetail `gorm:"foreignKey:UsageDetailID"`
 }
 
+// TableName sets the table name for AllowanceConsumption
+func (AllowanceConsumption) TableName() string {
+	return "allowance_consumptions"
+}
+
 // BeforeCreate validates the AllowanceConsumption model before creation
 func (a *AllowanceConsumption) BeforeCreate(_ *gorm.DB) error {
 	return a.validate()

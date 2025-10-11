@@ -33,3 +33,8 @@ func (e EnforcementPolicy) IsValid() bool {
 func (e EnforcementPolicy) String() string {
 	return string(e)
 }
+
+// TableName sets the table name for EnforcementPolicy
+func (EnforcementPolicy) TableName() string {
+	return "enforcement_policies"
+}

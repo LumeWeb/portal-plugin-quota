@@ -22,6 +22,11 @@ type AllowanceGrant struct {
 	UserQuotaConfig *UserQuotaConfig `gorm:"foreignKey:UserID;references:UserID"`
 }
 
+// TableName sets the table name for AllowanceGrant
+func (AllowanceGrant) TableName() string {
+	return "allowance_grants"
+}
+
 // BeforeSave computes BytesRemaining before persistence
 func (a *AllowanceGrant) BeforeSave(_ *gorm.DB) error {
 	// Compute BytesRemaining as Bytes - BytesUsed

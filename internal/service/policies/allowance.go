@@ -26,10 +26,10 @@ func NewAllowancePolicyEnforcer(ctx core.Context, grantManager pluginCore.GrantM
 
 // CheckUploadQuota checks if an upload operation is allowed under the allowance policy
 func (a *AllowancePolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := a.validateUserID(config.UserID); err != nil {
+	if err := a.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
-	if err := a.validateRequestedBytes(requestedBytes); err != nil {
+	if err := a.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
@@ -68,6 +68,9 @@ func (a *AllowancePolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCon
 	if err := a.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
+	if err := a.validateUserID(config.UserID); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
 
 	userID := config.UserID
 
@@ -102,6 +105,9 @@ func (a *AllowancePolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCon
 // CheckStorageQuota checks if a storage operation is allowed under the allowance policy
 func (a *AllowancePolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
 	if err := a.validateRequestedBytes(requestedBytes); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+	if err := a.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 

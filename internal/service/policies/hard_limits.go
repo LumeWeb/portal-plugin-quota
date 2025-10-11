@@ -26,10 +26,10 @@ func NewHardLimitsPolicyEnforcer(ctx core.Context) *HardLimitsPolicyEnforcer {
 
 // CheckUploadQuota checks if an upload operation is allowed under hard limits policy
 func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := h.validateUserID(config.UserID); err != nil {
+	if err := h.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
-	if err := h.validateRequestedBytes(requestedBytes); err != nil {
+	if err := h.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
@@ -81,10 +81,10 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 
 // CheckDownloadQuota checks if a download operation is allowed under hard limits policy
 func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := h.validateUserID(config.UserID); err != nil {
+	if err := h.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
-	if err := h.validateRequestedBytes(requestedBytes); err != nil {
+	if err := h.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
@@ -136,10 +136,10 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 
 // CheckStorageQuota checks if a storage operation is allowed under hard limits policy
 func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := h.validateUserID(config.UserID); err != nil {
+	if err := h.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
-	if err := h.validateRequestedBytes(requestedBytes); err != nil {
+	if err := h.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
@@ -313,6 +313,10 @@ func (h *HardLimitsPolicyEnforcer) RecordStorageChange(userID, uploadID uint, by
 	}
 
 	// Update daily usage with the correct usage type and byte value
+	// For storage operations, we need to pass the signed bytes value to properly handle removals
+	if usageType == models.UsageTypeStorageRemove {
+		return h.updateDailyUsage(userID, usageType, -int64(recordBytes))
+	}
 	return h.updateDailyUsage(userID, usageType, bytes)
 }
 
@@ -331,6 +335,18 @@ func (h *HardLimitsPolicyEnforcer) GetUsageHistory(userID uint, period int, usag
 	return h.getUsageHistory(userID, period, models.UsageType(usageType))
 }
 
+// applyLimit sets a limit field if the source value is non-zero and passes validation
+func (h *HardLimitsPolicyEnforcer) applyLimit(dest **uint64, source int64, limitName string) error {
+	if *dest == nil && source != 0 {
+		if err := h.validateLimitValue(source); err != nil {
+			return fmt.Errorf("invalid %s: %w", limitName, err)
+		}
+		convertedValue := h.BasePolicyEnforcer.convertLimitValue(source)
+		*dest = convertedValue
+	}
+	return nil
+}
+
 // getEffectiveLimits resolves the effective limits for a user based on their configuration
 func (h *HardLimitsPolicyEnforcer) getEffectiveLimits(config *models.UserQuotaConfig) (*pluginCore.EffectiveLimits, error) {
 	if err := h.validateUserID(config.UserID); err != nil {
@@ -344,53 +360,28 @@ func (h *HardLimitsPolicyEnforcer) getEffectiveLimits(config *models.UserQuotaCo
 
 	// If user has custom limits, use those (with validation)
 	if config.StorageLimit != nil {
-		if err := h.validateLimitValue(*config.StorageLimit); err != nil {
-			return nil, fmt.Errorf("invalid storage limit in user config: %w", err)
-		}
-		convertedValue := h.convertLimitValue(*config.StorageLimit)
-		if convertedValue != nil || *config.StorageLimit == -1 {
-			// Set the converted value (nil for unlimited, actual value otherwise)
-			limits.StorageLimit = convertedValue
+		if err := h.applyLimit(&limits.StorageLimit, *config.StorageLimit, "storage limit in user config"); err != nil {
+			return nil, err
 		}
 	}
 	if config.UploadDailyLimit != nil {
-		if err := h.validateLimitValue(*config.UploadDailyLimit); err != nil {
-			return nil, fmt.Errorf("invalid upload daily limit in user config: %w", err)
-		}
-		convertedValue := h.convertLimitValue(*config.UploadDailyLimit)
-		if convertedValue != nil || *config.UploadDailyLimit == -1 {
-			// Set the converted value (nil for unlimited, actual value otherwise)
-			limits.UploadDailyLimit = convertedValue
+		if err := h.applyLimit(&limits.UploadDailyLimit, *config.UploadDailyLimit, "upload daily limit in user config"); err != nil {
+			return nil, err
 		}
 	}
 	if config.DownloadDailyLimit != nil {
-		if err := h.validateLimitValue(*config.DownloadDailyLimit); err != nil {
-			return nil, fmt.Errorf("invalid download daily limit in user config: %w", err)
-		}
-		convertedValue := h.convertLimitValue(*config.DownloadDailyLimit)
-		if convertedValue != nil || *config.DownloadDailyLimit == -1 {
-			// Set the converted value (nil for unlimited, actual value otherwise)
-			limits.DownloadDailyLimit = convertedValue
+		if err := h.applyLimit(&limits.DownloadDailyLimit, *config.DownloadDailyLimit, "download daily limit in user config"); err != nil {
+			return nil, err
 		}
 	}
 	if config.UploadTotalLimit != nil {
-		if err := h.validateLimitValue(*config.UploadTotalLimit); err != nil {
-			return nil, fmt.Errorf("invalid upload total limit in user config: %w", err)
-		}
-		convertedValue := h.convertLimitValue(*config.UploadTotalLimit)
-		if convertedValue != nil || *config.UploadTotalLimit == -1 {
-			// Set the converted value (nil for unlimited, actual value otherwise)
-			limits.UploadTotalLimit = convertedValue
+		if err := h.applyLimit(&limits.UploadTotalLimit, *config.UploadTotalLimit, "upload total limit in user config"); err != nil {
+			return nil, err
 		}
 	}
 	if config.DownloadTotalLimit != nil {
-		if err := h.validateLimitValue(*config.DownloadTotalLimit); err != nil {
-			return nil, fmt.Errorf("invalid download total limit in user config: %w", err)
-		}
-		convertedValue := h.convertLimitValue(*config.DownloadTotalLimit)
-		if convertedValue != nil || *config.DownloadTotalLimit == -1 {
-			// Set the converted value (nil for unlimited, actual value otherwise)
-			limits.DownloadTotalLimit = convertedValue
+		if err := h.applyLimit(&limits.DownloadTotalLimit, *config.DownloadTotalLimit, "download total limit in user config"); err != nil {
+			return nil, err
 		}
 	}
 
@@ -403,50 +394,20 @@ func (h *HardLimitsPolicyEnforcer) getEffectiveLimits(config *models.UserQuotaCo
 		}
 
 		// Only set limits that aren't already set by custom config (with validation)
-		if limits.StorageLimit == nil && plan.StorageLimit != 0 {
-			if err := h.validateLimitValue(plan.StorageLimit); err != nil {
-				return nil, fmt.Errorf("invalid storage limit in quota plan: %w", err)
-			}
-			convertedValue := h.convertLimitValue(plan.StorageLimit)
-			if convertedValue != nil || plan.StorageLimit == -1 {
-				limits.StorageLimit = convertedValue
-			}
+		if err := h.applyLimit(&limits.StorageLimit, plan.StorageLimit, "storage limit in quota plan"); err != nil {
+			return nil, err
 		}
-		if limits.UploadDailyLimit == nil && plan.UploadDailyLimit != 0 {
-			if err := h.validateLimitValue(plan.UploadDailyLimit); err != nil {
-				return nil, fmt.Errorf("invalid upload daily limit in quota plan: %w", err)
-			}
-			convertedValue := h.convertLimitValue(plan.UploadDailyLimit)
-			if convertedValue != nil || plan.UploadDailyLimit == -1 {
-				limits.UploadDailyLimit = convertedValue
-			}
+		if err := h.applyLimit(&limits.UploadDailyLimit, plan.UploadDailyLimit, "upload daily limit in quota plan"); err != nil {
+			return nil, err
 		}
-		if limits.DownloadDailyLimit == nil && plan.DownloadDailyLimit != 0 {
-			if err := h.validateLimitValue(plan.DownloadDailyLimit); err != nil {
-				return nil, fmt.Errorf("invalid download daily limit in quota plan: %w", err)
-			}
-			convertedValue := h.convertLimitValue(plan.DownloadDailyLimit)
-			if convertedValue != nil || plan.DownloadDailyLimit == -1 {
-				limits.DownloadDailyLimit = convertedValue
-			}
+		if err := h.applyLimit(&limits.DownloadDailyLimit, plan.DownloadDailyLimit, "download daily limit in quota plan"); err != nil {
+			return nil, err
 		}
-		if limits.UploadTotalLimit == nil && plan.UploadTotalLimit != 0 {
-			if err := h.validateLimitValue(plan.UploadTotalLimit); err != nil {
-				return nil, fmt.Errorf("invalid upload total limit in quota plan: %w", err)
-			}
-			convertedValue := h.convertLimitValue(plan.UploadTotalLimit)
-			if convertedValue != nil || plan.UploadTotalLimit == -1 {
-				limits.UploadTotalLimit = convertedValue
-			}
+		if err := h.applyLimit(&limits.UploadTotalLimit, plan.UploadTotalLimit, "upload total limit in quota plan"); err != nil {
+			return nil, err
 		}
-		if limits.DownloadTotalLimit == nil && plan.DownloadTotalLimit != 0 {
-			if err := h.validateLimitValue(plan.DownloadTotalLimit); err != nil {
-				return nil, fmt.Errorf("invalid download total limit in quota plan: %w", err)
-			}
-			convertedValue := h.convertLimitValue(plan.DownloadTotalLimit)
-			if convertedValue != nil || plan.DownloadTotalLimit == -1 {
-				limits.DownloadTotalLimit = convertedValue
-			}
+		if err := h.applyLimit(&limits.DownloadTotalLimit, plan.DownloadTotalLimit, "download total limit in quota plan"); err != nil {
+			return nil, err
 		}
 	} else {
 		// If no plan assigned, check for default plan that is active
@@ -459,50 +420,20 @@ func (h *HardLimitsPolicyEnforcer) getEffectiveLimits(config *models.UserQuotaCo
 			// No default plan found, continue with nil plan
 		} else {
 			// Only set limits that aren't already set by custom config (with validation)
-			if limits.StorageLimit == nil && defaultPlan.StorageLimit != 0 {
-				if err := h.validateLimitValue(defaultPlan.StorageLimit); err != nil {
-					return nil, fmt.Errorf("invalid storage limit in default plan: %w", err)
-				}
-				convertedValue := h.convertLimitValue(defaultPlan.StorageLimit)
-				if convertedValue != nil || defaultPlan.StorageLimit == -1 {
-					limits.StorageLimit = convertedValue
-				}
+			if err := h.applyLimit(&limits.StorageLimit, defaultPlan.StorageLimit, "storage limit in default plan"); err != nil {
+				return nil, err
 			}
-			if limits.UploadDailyLimit == nil && defaultPlan.UploadDailyLimit != 0 {
-				if err := h.validateLimitValue(defaultPlan.UploadDailyLimit); err != nil {
-					return nil, fmt.Errorf("invalid upload daily limit in default plan: %w", err)
-				}
-				convertedValue := h.convertLimitValue(defaultPlan.UploadDailyLimit)
-				if convertedValue != nil || defaultPlan.UploadDailyLimit == -1 {
-					limits.UploadDailyLimit = convertedValue
-				}
+			if err := h.applyLimit(&limits.UploadDailyLimit, defaultPlan.UploadDailyLimit, "upload daily limit in default plan"); err != nil {
+				return nil, err
 			}
-			if limits.DownloadDailyLimit == nil && defaultPlan.DownloadDailyLimit != 0 {
-				if err := h.validateLimitValue(defaultPlan.DownloadDailyLimit); err != nil {
-					return nil, fmt.Errorf("invalid download daily limit in default plan: %w", err)
-				}
-				convertedValue := h.convertLimitValue(defaultPlan.DownloadDailyLimit)
-				if convertedValue != nil || defaultPlan.DownloadDailyLimit == -1 {
-					limits.DownloadDailyLimit = convertedValue
-				}
+			if err := h.applyLimit(&limits.DownloadDailyLimit, defaultPlan.DownloadDailyLimit, "download daily limit in default plan"); err != nil {
+				return nil, err
 			}
-			if limits.UploadTotalLimit == nil && defaultPlan.UploadTotalLimit != 0 {
-				if err := h.validateLimitValue(defaultPlan.UploadTotalLimit); err != nil {
-					return nil, fmt.Errorf("invalid upload total limit in default plan: %w", err)
-				}
-				convertedValue := h.convertLimitValue(defaultPlan.UploadTotalLimit)
-				if convertedValue != nil || defaultPlan.UploadTotalLimit == -1 {
-					limits.UploadTotalLimit = convertedValue
-				}
+			if err := h.applyLimit(&limits.UploadTotalLimit, defaultPlan.UploadTotalLimit, "upload total limit in default plan"); err != nil {
+				return nil, err
 			}
-			if limits.DownloadTotalLimit == nil && defaultPlan.DownloadTotalLimit != 0 {
-				if err := h.validateLimitValue(defaultPlan.DownloadTotalLimit); err != nil {
-					return nil, fmt.Errorf("invalid download total limit in default plan: %w", err)
-				}
-				convertedValue := h.convertLimitValue(defaultPlan.DownloadTotalLimit)
-				if convertedValue != nil || defaultPlan.DownloadTotalLimit == -1 {
-					limits.DownloadTotalLimit = convertedValue
-				}
+			if err := h.applyLimit(&limits.DownloadTotalLimit, defaultPlan.DownloadTotalLimit, "download total limit in default plan"); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -545,15 +476,3 @@ func (h *HardLimitsPolicyEnforcer) validateLimitValue(value int64) error {
 	return nil
 }
 
-// convertLimitValue converts database int64 limit values to core *uint64 values
-// -1 (database unlimited) → nil (core unlimited)
-// 0 (database disabled) → 0 (core disabled)
-// positive values → same positive values
-func (h *HardLimitsPolicyEnforcer) convertLimitValue(value int64) *uint64 {
-	if value == -1 {
-		return nil // unlimited
-	}
-	
-	converted := uint64(value)
-	return &converted
-}

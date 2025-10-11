@@ -36,7 +36,7 @@ func (s QuotaConfig) Schema() z.ZogSchema {
 		"HistoryRetentionDays":     z.Int().GT(0),
 		"DetailedRetentionDays":    z.Int().GT(0),
 		"EnableSharedUsage":        z.Bool(),
-		"SharedUsagePrecision":     z.Int().GT(0).LTE(10),
+		"SharedUsagePrecision":     z.Int().GTE(0).LTE(10),
 		"DefaultQuotaPlanName":     z.String(),
 	})
 }

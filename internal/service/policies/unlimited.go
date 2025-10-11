@@ -22,10 +22,10 @@ func NewUnlimitedPolicyEnforcer(ctx core.Context) *UnlimitedPolicyEnforcer {
 
 // CheckUploadQuota always allows uploads since there are no limits
 func (u *UnlimitedPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := u.validateUserID(config.UserID); err != nil {
+	if err := u.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
-	if err := u.validateRequestedBytes(requestedBytes); err != nil {
+	if err := u.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
@@ -33,8 +33,11 @@ func (u *UnlimitedPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfi
 }
 
 // CheckDownloadQuota always allows downloads since there are no limits
-func (u *UnlimitedPolicyEnforcer) CheckDownloadQuota(_ *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+func (u *UnlimitedPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
 	if err := u.validateRequestedBytes(requestedBytes); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+	if err := u.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
@@ -42,8 +45,11 @@ func (u *UnlimitedPolicyEnforcer) CheckDownloadQuota(_ *models.UserQuotaConfig, 
 }
 
 // CheckStorageQuota always allows storage since there are no limits
-func (u *UnlimitedPolicyEnforcer) CheckStorageQuota(_ *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+func (u *UnlimitedPolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
 	if err := u.validateRequestedBytes(requestedBytes); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+	if err := u.validateUserID(config.UserID); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 

@@ -39,7 +39,6 @@ func (b *BasePolicyEnforcer) validateUserID(userID uint) error {
 }
 
 // validateRequestedBytes validates that requested bytes is valid
-// Note: 0 bytes is considered valid for quota checks (e.g., checking if any upload is allowed)
 func (b *BasePolicyEnforcer) validateRequestedBytes(requestedBytes uint64) error {
 	if requestedBytes == 0 {
 		return models.ErrInvalidBytes
@@ -130,14 +129,36 @@ func (b *BasePolicyEnforcer) getCurrentUsage(userID uint) (*pluginCore.Usage, er
 		return nil, fmt.Errorf("failed to get total downloaded bytes: %w", err)
 	}
 
-	// Get total bytes stored
-	err = b.db.Model(&models.UserQuota{}).
-		Where("user_id = ?", userID).
-		Select("COALESCE(SUM(bytes_stored), 0)").
-		Scan(&totalStored).Error
+	// Get current storage bytes from usage details (adds minus removes)
+	var storageAdds, storageRemoves uint64
+	
+	// Get total bytes added
+	err = b.db.Model(&models.UserUsageDetail{}).
+		Where("user_id = ? AND type = ?", userID, models.UsageTypeStorageAdd).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&storageAdds).Error
 	if err != nil {
-		return nil, fmt.Errorf("failed to get total stored bytes: %w", err)
+		return nil, fmt.Errorf("failed to get storage adds: %w", err)
 	}
+	
+	// Get total bytes removed
+	err = b.db.Model(&models.UserUsageDetail{}).
+		Where("user_id = ? AND type = ?", userID, models.UsageTypeStorageRemove).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&storageRemoves).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage removes: %w", err)
+	}
+	
+	// Calculate net storage (ensure it doesn't go negative)
+	var currentStored int64
+	if storageAdds > storageRemoves {
+		currentStored = int64(storageAdds - storageRemoves)
+	} else {
+		currentStored = 0
+	}
+	
+	totalStored = uint64(currentStored)
 
 	// Get usage by type across all time
 	usageByType, err := b.getUsageByType(userID)
@@ -298,6 +319,19 @@ func convertUsageTypeMap(input map[models.UsageType]uint64) map[pluginCore.Usage
 		output[pluginCore.UsageType(k)] = v
 	}
 	return output
+}
+
+// convertLimitValue converts database int64 limit values to core *uint64 values
+// -1 (database unlimited) → nil (core unlimited)
+// 0 (database disabled) → 0 (core disabled)
+// positive values → same positive values
+func (b *BasePolicyEnforcer) convertLimitValue(value int64) *uint64 {
+	if value == -1 {
+		return nil // unlimited
+	}
+	
+	converted := uint64(value)
+	return &converted
 }
 
 // createQuotaCheckResult creates a standard quota check result

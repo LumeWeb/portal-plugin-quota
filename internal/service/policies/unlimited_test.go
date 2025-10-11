@@ -342,39 +342,16 @@ func TestUnlimitedPolicyEnforcer_DelegationMethods(t *testing.T) {
 		userID := baseUserID + 1
 		createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{})
 
-		// Create some test usage records
+		// Record usage through the enforcer methods to ensure both detail and daily records are created
 		now := time.Now()
-		usageRecords := []*models.UserUsageDetail{
-			{
-				UserID:    userID,
-				UploadID:  1,
-				Type:      models.UsageTypeUpload,
-				Bytes:     100,
-				IP:        "192.168.1.1",
-				Timestamp: now.Add(-2 * time.Hour),
-			},
-			{
-				UserID:    userID,
-				UploadID:  2,
-				Type:      models.UsageTypeDownload,
-				Bytes:     200,
-				IP:        "192.168.1.2",
-				Timestamp: now.Add(-1 * time.Hour),
-			},
-			{
-				UserID:    userID,
-				UploadID:  3,
-				Type:      models.UsageTypeStorageAdd,
-				Bytes:     300,
-				IP:        "192.168.1.3",
-				Timestamp: now,
-			},
-		}
+		err := enforcer.RecordUpload(userID, 1, 100, "192.168.1.1")
+		require.NoError(t, err)
 
-		for _, record := range usageRecords {
-			err := ctx.DB().Create(record).Error
-			require.NoError(t, err)
-		}
+		err = enforcer.RecordDownload(userID, 2, 200, "192.168.1.2")
+		require.NoError(t, err)
+
+		err = enforcer.RecordStorageChange(userID, 3, 300, "192.168.1.3")
+		require.NoError(t, err)
 
 		t.Run("GetDetailedUsage", func(t *testing.T) {
 			start := now.Add(-3 * time.Hour)
@@ -385,19 +362,22 @@ func TestUnlimitedPolicyEnforcer_DelegationMethods(t *testing.T) {
 			assert.Len(t, details, 3)
 
 			// Verify records are in descending order by timestamp
-			assert.True(t, details[0].Timestamp.After(details[1].Timestamp))
-			assert.True(t, details[1].Timestamp.After(details[2].Timestamp))
+			if len(details) >= 2 {
+				assert.True(t, details[0].Timestamp.After(details[1].Timestamp))
+			}
+			if len(details) >= 3 {
+				assert.True(t, details[1].Timestamp.After(details[2].Timestamp))
+			}
 		})
 
 		t.Run("GetCurrentUsage", func(t *testing.T) {
 			usage, err := enforcer.GetCurrentUsage(userID)
 			require.NoError(t, err)
 			assert.Equal(t, userID, usage.UserID)
-			// Note: GetCurrentUsage in base enforcer uses daily quota values
-			// which are zero for a new day in our test
-			assert.Equal(t, uint64(0), usage.BytesUploaded)
-			assert.Equal(t, uint64(0), usage.BytesDownloaded)
-			assert.Equal(t, uint64(0), usage.BytesStored)
+			// Now these should have proper values since we used the enforcer's record methods
+			assert.Equal(t, uint64(100), usage.BytesUploaded)
+			assert.Equal(t, uint64(200), usage.BytesDownloaded)
+			assert.Equal(t, uint64(300), usage.BytesStored)
 		})
 
 		t.Run("GetUsageHistory", func(t *testing.T) {

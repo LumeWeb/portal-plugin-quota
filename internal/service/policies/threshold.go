@@ -508,27 +508,21 @@ func (t *ThresholdPolicyEnforcer) resolveEffectiveLimits(config *models.UserQuot
 		var err error
 		plan, err = t.getDefaultQuotaPlan()
 		if err != nil {
+			// Only ignore ErrRecordNotFound, propagate other errors
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, err
+			}
 			// If no default plan, continue with nil plan
 		}
 	}
 
 	// Set limits from plan if available
 	if plan != nil {
-		if plan.StorageLimit != 0 {
-			limits.StorageLimit = t.BasePolicyEnforcer.convertLimitValue(plan.StorageLimit)
-		}
-		if plan.UploadDailyLimit != 0 {
-			limits.UploadDailyLimit = t.BasePolicyEnforcer.convertLimitValue(plan.UploadDailyLimit)
-		}
-		if plan.DownloadDailyLimit != 0 {
-			limits.DownloadDailyLimit = t.BasePolicyEnforcer.convertLimitValue(plan.DownloadDailyLimit)
-		}
-		if plan.UploadTotalLimit != 0 {
-			limits.UploadTotalLimit = t.BasePolicyEnforcer.convertLimitValue(plan.UploadTotalLimit)
-		}
-		if plan.DownloadTotalLimit != 0 {
-			limits.DownloadTotalLimit = t.BasePolicyEnforcer.convertLimitValue(plan.DownloadTotalLimit)
-		}
+		limits.StorageLimit = t.BasePolicyEnforcer.convertLimitValue(plan.StorageLimit)
+		limits.UploadDailyLimit = t.BasePolicyEnforcer.convertLimitValue(plan.UploadDailyLimit)
+		limits.DownloadDailyLimit = t.BasePolicyEnforcer.convertLimitValue(plan.DownloadDailyLimit)
+		limits.UploadTotalLimit = t.BasePolicyEnforcer.convertLimitValue(plan.UploadTotalLimit)
+		limits.DownloadTotalLimit = t.BasePolicyEnforcer.convertLimitValue(plan.DownloadTotalLimit)
 		if plan.StorageThreshold != nil {
 			limits.StorageThreshold = t.BasePolicyEnforcer.convertLimitValue(*plan.StorageThreshold)
 		}

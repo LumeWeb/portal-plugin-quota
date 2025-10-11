@@ -48,7 +48,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			err = ctx.DB().Save(config).Error
 			require.NoError(t, err)
 
-			result, err := enforcer.CheckDownloadQuota(config.UserID, uint64(thresholdValue/2))
+			result, err := enforcer.CheckUploadQuota(config.UserID, uint64(thresholdValue/2))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})

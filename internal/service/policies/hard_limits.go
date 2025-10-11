@@ -39,8 +39,8 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
-	// Get current usage
-	usage, err := h.getCurrentUsage(config.UserID)
+	// Get today's usage
+	dailyUsage, err := h.getTodayUsage(config.UserID)
 	if err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -50,10 +50,10 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 		limitValue := uint64(*limits.UploadDailyLimit)
 		if limitValue == 0 {
 			// Limit is 0, which means disabled - deny the operation
-			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, usage.BytesUploaded, 0), nil
-		} else if usage.BytesUploaded+requestedBytes > limitValue {
+			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, dailyUsage.BytesUploaded, 0), nil
+		} else if dailyUsage.BytesUploaded+requestedBytes > limitValue {
 			// Normal limit check for positive values
-			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, usage.BytesUploaded, limitValue), nil
+			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, dailyUsage.BytesUploaded, limitValue), nil
 		}
 	}
 
@@ -94,8 +94,8 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
-	// Get current usage
-	usage, err := h.getCurrentUsage(config.UserID)
+	// Get today's usage
+	dailyUsage, err := h.getTodayUsage(config.UserID)
 	if err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -105,10 +105,10 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 		limitValue := uint64(*limits.DownloadDailyLimit)
 		if limitValue == 0 {
 			// Limit is 0, which means disabled - deny the operation
-			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, usage.BytesDownloaded, 0), nil
-		} else if usage.BytesDownloaded+requestedBytes > limitValue {
+			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, dailyUsage.BytesDownloaded, 0), nil
+		} else if dailyUsage.BytesDownloaded+requestedBytes > limitValue {
 			// Normal limit check for positive values
-			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, usage.BytesDownloaded, limitValue), nil
+			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, dailyUsage.BytesDownloaded, limitValue), nil
 		}
 	}
 
@@ -463,6 +463,35 @@ func (h *HardLimitsPolicyEnforcer) getAggregatedUsageByType(userID uint, usageTy
 	}
 
 	return totalBytes, nil
+}
+
+// getTodayUsage retrieves today's usage for a user
+func (h *HardLimitsPolicyEnforcer) getTodayUsage(userID uint) (*pluginCore.Usage, error) {
+	today := time.Now().Truncate(24 * time.Hour)
+	
+	var quota models.UserQuota
+	err := h.db.Where("user_id = ? AND date = ?", userID, today).First(&quota).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Return zero usage for today if no record exists
+			return &pluginCore.Usage{
+				UserID:          userID,
+				BytesUploaded:   0,
+				BytesDownloaded: 0,
+				BytesStored:     0,
+				LastUpdated:     today,
+			}, nil
+		}
+		return nil, err
+	}
+	
+	return &pluginCore.Usage{
+		UserID:          userID,
+		BytesUploaded:   quota.BytesUploaded,
+		BytesDownloaded: quota.BytesDownloaded,
+		BytesStored:     quota.BytesStored,
+		LastUpdated:     quota.Date,
+	}, nil
 }
 
 // validateLimitValue validates that a limit value is reasonable

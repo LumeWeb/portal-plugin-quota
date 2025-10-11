@@ -32,7 +32,7 @@ func (s QuotaConfig) Schema() z.ZogSchema {
 	return z.Struct(z.Shape{
 		"Enabled":                  z.Bool(),
 		"DefaultEnforcementPolicy": z.String().OneOf([]string{"HARD_LIMITS", "UNLIMITED", "ALLOWANCE", "THRESHOLD"}),
-		"ReconciliationHour":       z.Int().GT(0).LTE(23),
+		"ReconciliationHour":       z.Int().GTE(0).LTE(23),
 		"HistoryRetentionDays":     z.Int().GT(0),
 		"DetailedRetentionDays":    z.Int().GT(0),
 		"EnableSharedUsage":        z.Bool(),

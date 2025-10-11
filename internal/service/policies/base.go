@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -176,7 +177,12 @@ func (b *BasePolicyEnforcer) getCurrentUsage(userID uint) (*pluginCore.Usage, er
 		Error
 	if err != nil {
 		// If no records exist, use current date
-		lastUpdated = time.Now().Truncate(24 * time.Hour)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			lastUpdated = time.Now().Truncate(24 * time.Hour)
+		} else {
+			// For other errors, wrap and return
+			return nil, fmt.Errorf("failed to get last updated timestamp: %w", err)
+		}
 	}
 
 	return &pluginCore.Usage{

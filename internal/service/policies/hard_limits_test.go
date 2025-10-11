@@ -338,25 +338,23 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx)
 			baseUserID := uint(8000)
 
-			// Create a test user with storage limit and upload total limit
+			// Create a test user with storage limit
 			userID := baseUserID + 2
-			storageLimit := int64(3000)
-			uploadTotalLimit := int64(500)
+			storageLimit := int64(300)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-				StorageLimit:     &storageLimit,
-				UploadTotalLimit: &uploadTotalLimit,
+				StorageLimit: &storageLimit,
 			})
 			config := &models.UserQuotaConfig{}
 			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
 			require.NoError(t, err)
 
-			// Record uploads to accumulate usage under daily limit but approaching total
-			err = enforcer.RecordUpload(userID, 300, 400, "127.0.0.1")
+			// Record storage changes to accumulate usage approaching limit
+			err = enforcer.RecordStorageChange(userID, 300, 250, "127.0.0.1")
 			require.NoError(t, err)
 
-			// Test exceeding total limit
-			result, err := enforcer.CheckUploadQuota(config, 200)
+			// Test exceeding storage limit
+			result, err := enforcer.CheckStorageQuota(config, 200)
 			require.NoError(t, err)
 			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())

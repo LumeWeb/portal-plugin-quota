@@ -16,17 +16,18 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 		thresholdUserID := uint(2)
 		thresholdUserID2 := uint(3)         // New user ID for threshold test - use 3 to avoid conflict
 		largeValue := int64(1000000000000) // 1TB - large but reasonable
-		createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{})
+		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
+			UploadDailyLimit: &largeValue,
+		})
 		createTestUser(t, ctx, thresholdUserID, models.EnforcementPolicyThreshold, &testUserLimits{})
 		createTestUser(t, ctx, thresholdUserID2, models.EnforcementPolicyThreshold, &testUserLimits{})
 
 		t.Run("Hard limits with large values", func(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx)
-			config := &models.UserQuotaConfig{
-				UserID:            userID,
-				EnforcementPolicy: models.EnforcementPolicyHardLimits,
-				UploadDailyLimit:  &largeValue,
-			}
+			
+			// Get existing config for the user
+			config, err := enforcer.getUserQuotaConfig(userID)
+			require.NoError(t, err)
 
 			result, err := enforcer.CheckUploadQuota(config, uint64(largeValue/2))
 			require.NoError(t, err)
@@ -47,7 +48,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			err = ctx.DB().Save(config).Error
 			require.NoError(t, err)
 
-			result, err := enforcer.CheckUploadQuota(thresholdUserID2, uint64(thresholdValue/2))
+			result, err := enforcer.CheckDownloadQuota(config.UserID, uint64(thresholdValue/2))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})

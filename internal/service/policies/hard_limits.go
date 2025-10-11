@@ -63,7 +63,7 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 		if err != nil {
 			return pluginCore.QuotaCheckResult{}, err
 		}
-		
+
 		limitValue := uint64(*limits.UploadTotalLimit)
 		if limitValue == 0 {
 			// Limit is 0, which means disabled - deny the operation
@@ -118,7 +118,7 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 		if err != nil {
 			return pluginCore.QuotaCheckResult{}, err
 		}
-		
+
 		limitValue := uint64(*limits.DownloadTotalLimit)
 		if limitValue == 0 {
 			// Limit is 0, which means disabled - deny the operation
@@ -335,9 +335,9 @@ func (h *HardLimitsPolicyEnforcer) GetUsageHistory(userID uint, period int, usag
 	return h.getUsageHistory(userID, period, models.UsageType(usageType))
 }
 
-// applyLimit sets a limit field if the source value is non-zero and passes validation
+// applyLimit sets a limit field if it passes validation
 func (h *HardLimitsPolicyEnforcer) applyLimit(dest **uint64, source int64, limitName string) error {
-	if *dest == nil && source != 0 {
+	if *dest == nil {
 		if err := h.validateLimitValue(source); err != nil {
 			return fmt.Errorf("invalid %s: %w", limitName, err)
 		}
@@ -468,6 +468,10 @@ func (h *HardLimitsPolicyEnforcer) getAggregatedUsageByType(userID uint, usageTy
 // validateLimitValue validates that a limit value is reasonable
 func (h *HardLimitsPolicyEnforcer) validateLimitValue(value int64) error {
 	// Valid values: -1 (unlimited), 0 (disabled), or positive values
+	if value < -1 {
+		return fmt.Errorf("invalid limit value %d: must be -1, 0, or positive", value)
+	}
+
 	// Check if the value is unreasonably large (1 PiB should be enough for most use cases)
 	if value > int64(units.PiB) {
 		return fmt.Errorf("limit value %d is unreasonably large", value)
@@ -475,4 +479,3 @@ func (h *HardLimitsPolicyEnforcer) validateLimitValue(value int64) error {
 
 	return nil
 }
-

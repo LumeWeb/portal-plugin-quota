@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
+	"gorm.io/gorm"
 )
 
 // ThresholdPolicyEnforcer implements the PolicyEnforcer interface for THRESHOLD policy
@@ -54,7 +56,8 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(userID uint, config
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
-	usage, err := t.getCurrentUsage(userID)
+	// Get today's usage for daily limit checks
+	todayUsage, err := t.getTodayUsage(userID)
 	if err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -65,26 +68,26 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(userID uint, config
 			// Limit is 0, which means disabled - deny the operation
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesUploaded,
+				todayUsage.BytesUploaded,
 				0,
 			), nil
-		} else if usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadDailyLimit {
+		} else if todayUsage.BytesUploaded+requestedBytes > *effectiveLimits.UploadDailyLimit {
 			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesUploaded,
+				todayUsage.BytesUploaded,
 				*effectiveLimits.UploadDailyLimit,
 			), nil
 		}
 
 		// Check threshold warning
 		if effectiveLimits.UploadThreshold != nil && *effectiveLimits.UploadThreshold > 0 {
-			if usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadThreshold {
+			if todayUsage.BytesUploaded+requestedBytes > *effectiveLimits.UploadThreshold {
 				// Only warn if we're still within the limit
-				if usage.BytesUploaded+requestedBytes <= *effectiveLimits.UploadDailyLimit {
+				if todayUsage.BytesUploaded+requestedBytes <= *effectiveLimits.UploadDailyLimit {
 					return t.createWarningResult(
 						models.EnforcementPolicyThreshold,
-						usage.BytesUploaded,
+						todayUsage.BytesUploaded,
 						*effectiveLimits.UploadThreshold,
 						*effectiveLimits.UploadDailyLimit,
 					), nil
@@ -168,7 +171,8 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(userID uint, conf
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
-	usage, err := t.getCurrentUsage(userID)
+	// Get today's usage for daily limit checks
+	todayUsage, err := t.getTodayUsage(userID)
 	if err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -179,26 +183,26 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(userID uint, conf
 			// Limit is 0, which means disabled - deny the operation
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesDownloaded,
+				todayUsage.BytesDownloaded,
 				0,
 			), nil
-		} else if usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadDailyLimit {
+		} else if todayUsage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadDailyLimit {
 			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesDownloaded,
+				todayUsage.BytesDownloaded,
 				*effectiveLimits.DownloadDailyLimit,
 			), nil
 		}
 
 		// Check threshold warning
 		if effectiveLimits.DownloadThreshold != nil && *effectiveLimits.DownloadThreshold > 0 {
-			if usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadThreshold {
+			if todayUsage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadThreshold {
 				// Only warn if we're still within the limit
-				if usage.BytesDownloaded+requestedBytes <= *effectiveLimits.DownloadDailyLimit {
+				if todayUsage.BytesDownloaded+requestedBytes <= *effectiveLimits.DownloadDailyLimit {
 					return t.createWarningResult(
 						models.EnforcementPolicyThreshold,
-						usage.BytesDownloaded,
+						todayUsage.BytesDownloaded,
 						*effectiveLimits.DownloadThreshold,
 						*effectiveLimits.DownloadDailyLimit,
 					), nil
@@ -566,6 +570,19 @@ func (t *ThresholdPolicyEnforcer) resolveEffectiveLimits(config *models.UserQuot
 	return limits, nil
 }
 
+// applyLimit sets a limit field if it passes validation
+func (t *ThresholdPolicyEnforcer) applyLimit(dest **uint64, source *int64, limitName string) error {
+	if source == nil {
+		return nil
+	}
+	
+	if *dest == nil {
+		convertedValue := t.BasePolicyEnforcer.convertLimitValue(*source)
+		*dest = convertedValue
+	}
+	return nil
+}
+
 // getQuotaPlan retrieves a quota plan by ID
 func (t *ThresholdPolicyEnforcer) getQuotaPlan(planID uint64) (*models.QuotaPlan, error) {
 	var plan models.QuotaPlan
@@ -574,6 +591,35 @@ func (t *ThresholdPolicyEnforcer) getQuotaPlan(planID uint64) (*models.QuotaPlan
 		return nil, err
 	}
 	return &plan, nil
+}
+
+// getTodayUsage retrieves today's usage for a user
+func (t *ThresholdPolicyEnforcer) getTodayUsage(userID uint) (*pluginCore.Usage, error) {
+	today := time.Now().Truncate(24 * time.Hour)
+	
+	var quota models.UserQuota
+	err := t.db.Where("user_id = ? AND date = ?", userID, today).First(&quota).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Return zero usage for today if no record exists
+			return &pluginCore.Usage{
+				UserID:          userID,
+				BytesUploaded:   0,
+				BytesDownloaded: 0,
+				BytesStored:     0,
+				LastUpdated:     today,
+			}, nil
+		}
+		return nil, err
+	}
+	
+	return &pluginCore.Usage{
+		UserID:          userID,
+		BytesUploaded:   quota.BytesUploaded,
+		BytesDownloaded: quota.BytesDownloaded,
+		BytesStored:     quota.BytesStored,
+		LastUpdated:     quota.Date,
+	}, nil
 }
 
 // getTotalBytesByType retrieves the total bytes consumed for a specific usage type across all time

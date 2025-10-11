@@ -76,7 +76,7 @@ func (u *UnlimitedPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 	}
 
 	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, models.UsageTypeUpload, bytes)
+	return u.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes))
 }
 
 // RecordDownload simply records usage without any limit checking
@@ -104,7 +104,7 @@ func (u *UnlimitedPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 	}
 
 	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, models.UsageTypeDownload, bytes)
+	return u.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes))
 }
 
 // RecordStorageChange simply records usage without any limit checking
@@ -142,7 +142,7 @@ func (u *UnlimitedPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 	}
 
 	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, usageType, recordBytes)
+	return u.updateDailyUsage(userID, usageType, int64(recordBytes))
 }
 
 // GetDetailedUsage delegates to the base enforcer

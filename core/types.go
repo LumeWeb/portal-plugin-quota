@@ -88,6 +88,9 @@ type (
 	// UserUsageDetail represents detailed usage records
 	UserUsageDetail = models.UserUsageDetail
 
+	// AllowanceConsumption represents allowance consumption records
+	AllowanceConsumption = models.AllowanceConsumption
+
 	// EnforcementPolicy represents the quota enforcement policy
 	EnforcementPolicy = models.EnforcementPolicy
 

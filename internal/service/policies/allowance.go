@@ -157,7 +157,7 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		Type:       models.UsageTypeUpload,
 		Bytes:      bytes,
 		IP:         ip,
-		SharedWith: 0, // Uploads are not shared
+		SharedWith: 1, // Count the owner for cardinality semantics
 		Timestamp:  time.Now(),
 	}
 
@@ -166,7 +166,7 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 	}
 
 	// Update daily usage
-	if err := a.updateDailyUsage(userID, models.UsageTypeUpload, bytes); err != nil {
+	if err := a.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes)); err != nil {
 		return fmt.Errorf("failed to update daily upload usage: %w", err)
 	}
 
@@ -195,7 +195,7 @@ func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		Type:       models.UsageTypeDownload,
 		Bytes:      bytes,
 		IP:         ip,
-		SharedWith: 0, // Downloads are not shared in our model
+		SharedWith: 1, // Count the owner for cardinality semantics
 		Timestamp:  time.Now(),
 	}
 
@@ -204,7 +204,7 @@ func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 	}
 
 	// Update daily usage
-	if err := a.updateDailyUsage(userID, models.UsageTypeDownload, bytes); err != nil {
+	if err := a.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes)); err != nil {
 		return fmt.Errorf("failed to update daily download usage: %w", err)
 	}
 
@@ -247,7 +247,7 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		Type:       usageType,
 		Bytes:      recordBytes,
 		IP:         ip,
-		SharedWith: 0, // Storage changes are not shared in our model
+		SharedWith: 1, // Count the owner for cardinality semantics
 		Timestamp:  time.Now(),
 	}
 
@@ -256,7 +256,7 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 	}
 
 	// Update daily usage with the correct usage type and byte value
-	if err := a.updateDailyUsage(userID, usageType, recordBytes); err != nil {
+	if err := a.updateDailyUsage(userID, usageType, int64(recordBytes)); err != nil {
 		return fmt.Errorf("failed to update daily storage usage: %w", err)
 	}
 

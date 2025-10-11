@@ -110,40 +110,61 @@ func (b *BasePolicyEnforcer) getCurrentUsage(userID uint) (*pluginCore.Usage, er
 		return nil, err
 	}
 
-	// Get today's aggregated usage
-	today := time.Now().Truncate(24 * time.Hour)
-	var dailyQuota models.UserQuota
-	err := b.db.Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return nil, err
+	// Aggregate usage across all records for this user
+	var totalUploaded, totalDownloaded, totalStored uint64
+	
+	// Get total bytes uploaded
+	err := b.db.Model(&models.UserQuota{}).
+		Where("user_id = ?", userID).
+		Select("COALESCE(SUM(bytes_uploaded), 0)").
+		Scan(&totalUploaded).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total uploaded bytes: %w", err)
 	}
 
-	// If no record found, initialize with zero values
-	if err == gorm.ErrRecordNotFound {
-		dailyQuota = models.UserQuota{
-			UserID:          userID,
-			Date:            today,
-			BytesUploaded:   0,
-			BytesDownloaded: 0,
-			BytesStored:     0,
-		}
+	// Get total bytes downloaded
+	err = b.db.Model(&models.UserQuota{}).
+		Where("user_id = ?", userID).
+		Select("COALESCE(SUM(bytes_downloaded), 0)").
+		Scan(&totalDownloaded).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total downloaded bytes: %w", err)
 	}
 
-	// Get usage by type for the current period
-	usageByType := make(map[models.UsageType]uint64)
+	// Get total bytes stored
+	err = b.db.Model(&models.UserQuota{}).
+		Where("user_id = ?", userID).
+		Select("COALESCE(SUM(bytes_stored), 0)").
+		Scan(&totalStored).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total stored bytes: %w", err)
+	}
 
-	// For simplicity, we'll use the daily quota values
-	// In a real implementation, you might want to aggregate over a different period
-	usageByType[models.UsageTypeUpload] = dailyQuota.BytesUploaded
-	usageByType[models.UsageTypeDownload] = dailyQuota.BytesDownloaded
-	usageByType[models.UsageTypeStorageAdd] = dailyQuota.BytesStored
+	// Get usage by type across all time
+	usageByType, err := b.getUsageByType(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get usage by type: %w", err)
+	}
+
+	// Get the last updated timestamp
+	var lastUpdated time.Time
+	err = b.db.Model(&models.UserQuota{}).
+		Where("user_id = ?", userID).
+		Order("date DESC").
+		Limit(1).
+		Pluck("date", &lastUpdated).
+		Error
+	if err != nil {
+		// If no records exist, use current date
+		lastUpdated = time.Now().Truncate(24 * time.Hour)
+	}
 
 	return &pluginCore.Usage{
 		UserID:          userID,
-		BytesUploaded:   dailyQuota.BytesUploaded,
-		BytesDownloaded: dailyQuota.BytesDownloaded,
-		BytesStored:     dailyQuota.BytesStored,
-		LastUpdated:     time.Now(),
+		BytesUploaded:   totalUploaded,
+		BytesDownloaded: totalDownloaded,
+		BytesStored:     totalStored,
+		LastUpdated:     lastUpdated,
 		UsageByType:     convertUsageTypeMap(usageByType),
 	}, nil
 }
@@ -201,7 +222,7 @@ func (b *BasePolicyEnforcer) recordUserUsageDetail(detail *models.UserUsageDetai
 }
 
 // updateDailyUsage updates the daily aggregated usage for a user
-func (b *BasePolicyEnforcer) updateDailyUsage(userID uint, usageType models.UsageType, bytes uint64) error {
+func (b *BasePolicyEnforcer) updateDailyUsage(userID uint, usageType models.UsageType, bytes int64) error {
 	if err := b.validateUserID(userID); err != nil {
 		return err
 	}
@@ -223,11 +244,22 @@ func (b *BasePolicyEnforcer) updateDailyUsage(userID uint, usageType models.Usag
 			// Set the appropriate field based on usage type
 			switch usageType {
 			case models.UsageTypeUpload:
-				dailyQuota.BytesUploaded = bytes
+				if bytes > 0 {
+					dailyQuota.BytesUploaded = uint64(bytes)
+				}
 			case models.UsageTypeDownload:
-				dailyQuota.BytesDownloaded = bytes
+				if bytes > 0 {
+					dailyQuota.BytesDownloaded = uint64(bytes)
+				}
 			case models.UsageTypeStorageAdd:
-				dailyQuota.BytesStored = bytes
+				if bytes > 0 {
+					dailyQuota.BytesStored = uint64(bytes)
+				}
+			case models.UsageTypeStorageRemove:
+				// For storage removal, we start with 0 and apply negative delta
+				if bytes < 0 {
+					dailyQuota.BytesStored = 0
+				}
 			}
 
 			return tx.Create(&dailyQuota).Error
@@ -238,11 +270,23 @@ func (b *BasePolicyEnforcer) updateDailyUsage(userID uint, usageType models.Usag
 		// Update existing daily quota record
 		switch usageType {
 		case models.UsageTypeUpload:
-			dailyQuota.BytesUploaded += bytes
+			// Only add positive bytes for upload
+			if bytes > 0 {
+				dailyQuota.BytesUploaded += uint64(bytes)
+			}
 		case models.UsageTypeDownload:
-			dailyQuota.BytesDownloaded += bytes
-		case models.UsageTypeStorageAdd:
-			dailyQuota.BytesStored += bytes
+			// Only add positive bytes for download
+			if bytes > 0 {
+				dailyQuota.BytesDownloaded += uint64(bytes)
+			}
+		case models.UsageTypeStorageAdd, models.UsageTypeStorageRemove:
+			// Apply signed delta and clamp to 0 minimum
+			newStored := int64(dailyQuota.BytesStored) + bytes
+			if newStored < 0 {
+				dailyQuota.BytesStored = 0
+			} else {
+				dailyQuota.BytesStored = uint64(newStored)
+			}
 		}
 
 		return tx.Save(&dailyQuota).Error
@@ -282,6 +326,22 @@ func (b *BasePolicyEnforcer) createLimitExceededResult(policy models.Enforcement
 		Limit:        &limit,
 		Policy:       policy,
 	})
+}
+
+// getUsageByType retrieves usage by type for a user across all time
+func (b *BasePolicyEnforcer) getUsageByType(userID uint) (map[models.UsageType]uint64, error) {
+	var usageDetails []models.UserUsageDetail
+	err := b.db.Where("user_id = ?", userID).Find(&usageDetails).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get usage details: %w", err)
+	}
+
+	usageByType := make(map[models.UsageType]uint64)
+	for _, detail := range usageDetails {
+		usageByType[detail.Type] += detail.Bytes
+	}
+
+	return usageByType, nil
 }
 
 // createWarningResult creates a warning quota check result (for threshold policy)

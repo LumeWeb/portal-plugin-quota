@@ -50,11 +50,14 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 		}
 	}
 
-	// Check total upload limit
+	// Check total upload limit against aggregated usage
 	if limits.UploadTotalLimit != nil {
-		usageByType, ok := usage.UsageByType[models.UsageTypeUpload]
-		if ok && usageByType+requestedBytes > *limits.UploadTotalLimit {
-			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, usageByType, *limits.UploadTotalLimit), nil
+		aggregatedUsage, err := h.getAggregatedUsageByType(config.UserID, models.UsageTypeUpload)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		if aggregatedUsage+requestedBytes > *limits.UploadTotalLimit {
+			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, aggregatedUsage, *limits.UploadTotalLimit), nil
 		}
 	}
 
@@ -86,11 +89,14 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 		}
 	}
 
-	// Check total download limit
+	// Check total download limit against aggregated usage
 	if limits.DownloadTotalLimit != nil {
-		usageByType, ok := usage.UsageByType[models.UsageTypeDownload]
-		if ok && usageByType+requestedBytes > *limits.DownloadTotalLimit {
-			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, usageByType, *limits.DownloadTotalLimit), nil
+		aggregatedUsage, err := h.getAggregatedUsageByType(config.UserID, models.UsageTypeDownload)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		if aggregatedUsage+requestedBytes > *limits.DownloadTotalLimit {
+			return h.createLimitExceededResult(models.EnforcementPolicyHardLimits, aggregatedUsage, *limits.DownloadTotalLimit), nil
 		}
 	}
 
@@ -166,7 +172,7 @@ func (h *HardLimitsPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uin
 	}
 
 	// Update daily usage
-	return h.updateDailyUsage(userID, models.UsageTypeUpload, bytes)
+	return h.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes))
 }
 
 // RecordDownload records a download operation and enforces hard limits
@@ -210,7 +216,7 @@ func (h *HardLimitsPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes u
 	}
 
 	// Update daily usage
-	return h.updateDailyUsage(userID, models.UsageTypeDownload, bytes)
+	return h.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes))
 }
 
 // RecordStorageChange records a storage change operation and enforces hard limits
@@ -268,7 +274,7 @@ func (h *HardLimitsPolicyEnforcer) RecordStorageChange(userID, uploadID uint, by
 	}
 
 	// Update daily usage with the correct usage type and byte value
-	return h.updateDailyUsage(userID, usageType, recordBytes)
+	return h.updateDailyUsage(userID, usageType, int64(recordBytes))
 }
 
 // GetDetailedUsage delegates to base enforcer
@@ -414,6 +420,24 @@ func (h *HardLimitsPolicyEnforcer) getEffectiveLimits(config *models.UserQuotaCo
 	}
 
 	return limits, nil
+}
+
+// getAggregatedUsageByType retrieves aggregated usage for a specific type across all time
+func (h *HardLimitsPolicyEnforcer) getAggregatedUsageByType(userID uint, usageType models.UsageType) (uint64, error) {
+	if err := h.validateUserID(userID); err != nil {
+		return 0, err
+	}
+
+	var totalBytes uint64
+	err := h.db.Model(&models.UserUsageDetail{}).
+		Where("user_id = ? AND type = ?", userID, usageType).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&totalBytes).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to get aggregated usage for type %s: %w", usageType, err)
+	}
+
+	return totalBytes, nil
 }
 
 // validateLimitValue validates that a limit value is reasonable

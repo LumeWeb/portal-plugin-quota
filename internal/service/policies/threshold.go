@@ -240,7 +240,7 @@ func (t *ThresholdPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 	}
 
 	// Update daily usage
-	if err := t.updateDailyUsage(userID, models.UsageTypeUpload, bytes); err != nil {
+	if err := t.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes)); err != nil {
 		return err
 	}
 
@@ -281,7 +281,7 @@ func (t *ThresholdPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 	}
 
 	// Update daily usage
-	if err := t.updateDailyUsage(userID, models.UsageTypeDownload, bytes); err != nil {
+	if err := t.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes)); err != nil {
 		return err
 	}
 
@@ -334,12 +334,8 @@ func (t *ThresholdPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		return err
 	}
 
-	// Update daily usage
-	updateBytes := uint64(bytes)
-	if bytes < 0 {
-		updateBytes = uint64(-bytes)
-	}
-	if err := t.updateDailyUsage(userID, usageType, updateBytes); err != nil {
+	// Update daily usage with signed delta
+	if err := t.updateDailyUsage(userID, usageType, bytes); err != nil {
 		return err
 	}
 

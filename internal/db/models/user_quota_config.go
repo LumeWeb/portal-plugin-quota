@@ -10,14 +10,14 @@ type UserQuotaConfig struct {
 	UserID             uint              `gorm:"uniqueIndex"`
 	EnforcementPolicy  EnforcementPolicy `gorm:"index"`
 	QuotaPlanID        *uint64
-	StorageLimit       *uint64
-	UploadDailyLimit   *uint64
-	DownloadDailyLimit *uint64
-	UploadTotalLimit   *uint64
-	DownloadTotalLimit *uint64
-	StorageThreshold   *uint64
-	UploadThreshold    *uint64
-	DownloadThreshold  *uint64
+	StorageLimit       *int64
+	UploadDailyLimit   *int64
+	DownloadDailyLimit *int64
+	UploadTotalLimit   *int64
+	DownloadTotalLimit *int64
+	StorageThreshold   *int64
+	UploadThreshold    *int64
+	DownloadThreshold  *int64
 	
 	// Relationships
 	AllowanceGrants []*AllowanceGrant `gorm:"foreignKey:UserID;references:UserID"`
@@ -49,18 +49,6 @@ func (u *UserQuotaConfig) validate() error {
 	}
 
 
-	// Validate thresholds are <= corresponding limits if both are set
-	if u.StorageLimit != nil && u.StorageThreshold != nil && *u.StorageThreshold > *u.StorageLimit {
-		return ErrInvalidStorageThreshold
-	}
-
-	if u.UploadDailyLimit != nil && u.UploadThreshold != nil && *u.UploadThreshold > *u.UploadDailyLimit {
-		return ErrInvalidUploadThreshold
-	}
-
-	if u.DownloadDailyLimit != nil && u.DownloadThreshold != nil && *u.DownloadThreshold > *u.DownloadDailyLimit {
-		return ErrInvalidDownloadThreshold
-	}
 
 	return nil
 }

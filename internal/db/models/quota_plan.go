@@ -9,14 +9,14 @@ type QuotaPlan struct {
 	gorm.Model
 	Name                   string    `gorm:"uniqueIndex"`
 	Description            string
-	StorageLimit           uint64
-	UploadDailyLimit       uint64
-	DownloadDailyLimit     uint64
-	UploadTotalLimit       uint64
-	DownloadTotalLimit     uint64
-	StorageThreshold       *uint64
-	UploadThreshold        *uint64
-	DownloadThreshold      *uint64
+	StorageLimit           int64
+	UploadDailyLimit       int64
+	DownloadDailyLimit     int64
+	UploadTotalLimit       int64
+	DownloadTotalLimit     int64
+	StorageThreshold       *int64
+	UploadThreshold        *int64
+	DownloadThreshold      *int64
 	IsDefault              bool
 	IsActive               bool
 }
@@ -58,39 +58,28 @@ func (q *QuotaPlan) validate() error {
 		return ErrInvalidPlanName
 	}
 
-	// Validate that limit fields are greater than 0
-	if q.StorageLimit <= 0 {
+	// Validate that limit fields are either -1 (unlimited), 0 (disabled), or positive (actual limit)
+	// For required limits, we check that they're not unreasonably negative
+	if q.StorageLimit < -1 {
 		return ErrInvalidStorageLimit
 	}
 
-	if q.UploadDailyLimit <= 0 {
+	if q.UploadDailyLimit < -1 {
 		return ErrInvalidUploadDailyLimit
 	}
 
-	if q.DownloadDailyLimit <= 0 {
+	if q.DownloadDailyLimit < -1 {
 		return ErrInvalidDownloadDailyLimit
 	}
 
-	if q.UploadTotalLimit <= 0 {
+	if q.UploadTotalLimit < -1 {
 		return ErrInvalidUploadTotalLimit
 	}
 
-	if q.DownloadTotalLimit <= 0 {
+	if q.DownloadTotalLimit < -1 {
 		return ErrInvalidDownloadTotalLimit
 	}
 	
-	// Validate thresholds are <= corresponding limits if both are set
-	if q.StorageThreshold != nil && *q.StorageThreshold > q.StorageLimit {
-		return ErrInvalidStorageThreshold
-	}
-
-	if q.UploadThreshold != nil && *q.UploadThreshold > q.UploadDailyLimit {
-		return ErrInvalidUploadThreshold
-	}
-
-	if q.DownloadThreshold != nil && *q.DownloadThreshold > q.DownloadDailyLimit {
-		return ErrInvalidDownloadThreshold
-	}
 
 	return nil
 }

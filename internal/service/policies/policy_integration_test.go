@@ -12,7 +12,7 @@ import (
 func TestPolicyIntegration_PolicySwitching(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userID := uint(1)
-		uploadDailyLimit := uint64(1000)
+		uploadDailyLimit := int64(1000)
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 			UploadDailyLimit: &uploadDailyLimit,
 		})
@@ -24,12 +24,12 @@ func TestPolicyIntegration_PolicySwitching(t *testing.T) {
 			require.NoError(t, err)
 
 			// Should be allowed within limit
-			result, err := hardLimitsEnforcer.CheckUploadQuota(config, 500)
+			result, err := hardLimitsEnforcer.CheckUploadQuota(config, uint64(500))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 
 			// Should be blocked exceeding limit
-			result, err = hardLimitsEnforcer.CheckUploadQuota(config, 1500)
+			result, err = hardLimitsEnforcer.CheckUploadQuota(config, uint64(1500))
 			require.NoError(t, err)
 			assert.False(t, result.Allowed)
 
@@ -40,7 +40,7 @@ func TestPolicyIntegration_PolicySwitching(t *testing.T) {
 
 			// Test with unlimited policy enforcer
 			unlimitedEnforcer := NewUnlimitedPolicyEnforcer(ctx)
-			result, err = unlimitedEnforcer.CheckUploadQuota(config, 1500)
+			result, err = unlimitedEnforcer.CheckUploadQuota(config, uint64(1500))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})
@@ -52,13 +52,13 @@ func TestPolicyIntegration_PolicySwitching(t *testing.T) {
 			require.NoError(t, err)
 
 			// Should always be allowed
-			result, err := unlimitedEnforcer.CheckUploadQuota(config, 10000)
+			result, err := unlimitedEnforcer.CheckUploadQuota(config, uint64(10000))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 
 			// Switch policy to threshold
-			uploadDailyLimit := uint64(1000)
-			uploadThreshold := uint64(800)
+			uploadDailyLimit := int64(1000)
+			uploadThreshold := int64(800)
 			config.EnforcementPolicy = models.EnforcementPolicyThreshold
 			config.UploadDailyLimit = &uploadDailyLimit
 			config.UploadThreshold = &uploadThreshold
@@ -67,7 +67,7 @@ func TestPolicyIntegration_PolicySwitching(t *testing.T) {
 
 			// Test with threshold policy enforcer
 			thresholdEnforcer := NewThresholdPolicyEnforcer(ctx)
-			result, err = thresholdEnforcer.CheckUploadQuota(userID, 10000)
+			result, err = thresholdEnforcer.CheckUploadQuota(userID, uint64(10000))
 			require.NoError(t, err)
 			assert.False(t, result.Allowed) // Should be blocked now
 		})
@@ -81,14 +81,14 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		user2ID := uint(2)
 		user3ID := uint(3)
 
-		uploadDailyLimit := uint64(1000)
+		uploadDailyLimit := int64(1000)
 		createTestUser(t, ctx, user1ID, models.EnforcementPolicyHardLimits, &testUserLimits{
 			UploadDailyLimit: &uploadDailyLimit,
 		})
 
 		createTestUser(t, ctx, user2ID, models.EnforcementPolicyUnlimited, &testUserLimits{})
 
-		uploadThreshold := uint64(800)
+		uploadThreshold := int64(800)
 		createTestUser(t, ctx, user3ID, models.EnforcementPolicyThreshold, &testUserLimits{
 			UploadDailyLimit: &uploadDailyLimit,
 			UploadThreshold:  &uploadThreshold,
@@ -100,7 +100,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 			config1, err := hardLimitsEnforcer.getUserQuotaConfig(user1ID)
 			require.NoError(t, err)
 
-			result1, err := hardLimitsEnforcer.CheckUploadQuota(config1, 1500)
+			result1, err := hardLimitsEnforcer.CheckUploadQuota(config1, uint64(1500))
 			require.NoError(t, err)
 			assert.False(t, result1.Allowed) // Should be blocked
 
@@ -109,7 +109,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 			config2, err := unlimitedEnforcer.getUserQuotaConfig(user2ID)
 			require.NoError(t, err)
 
-			result2, err := unlimitedEnforcer.CheckUploadQuota(config2, 1500)
+			result2, err := unlimitedEnforcer.CheckUploadQuota(config2, uint64(1500))
 			require.NoError(t, err)
 			assert.True(t, result2.Allowed) // Should be allowed
 
@@ -118,7 +118,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 			_, err = thresholdEnforcer.getUserQuotaConfig(user3ID)
 			require.NoError(t, err)
 
-			result3, err3 := thresholdEnforcer.CheckUploadQuota(user3ID, 1500)
+			result3, err3 := thresholdEnforcer.CheckUploadQuota(user3ID, uint64(1500))
 			require.NoError(t, err3)
 			assert.False(t, result3.Allowed) // Should be blocked
 		})
@@ -128,7 +128,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userID := uint(1)
-		uploadDailyLimit := uint64(1000)
+		uploadDailyLimit := int64(1000)
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 			UploadDailyLimit: &uploadDailyLimit,
 		})
@@ -153,10 +153,10 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 			config, err := hardLimitsEnforcer.getUserQuotaConfig(userID)
 			require.NoError(t, err)
 
-			_, err1 := hardLimitsEnforcer.CheckUploadQuota(config, 100)
-			_, err2 := unlimitedEnforcer.CheckUploadQuota(config, 100)
-			_, err3 := thresholdEnforcer.CheckUploadQuota(userID, 100)
-			_, err4 := allowanceEnforcer.CheckUploadQuota(config, 100)
+			_, err1 := hardLimitsEnforcer.CheckUploadQuota(config, uint64(100))
+			_, err2 := unlimitedEnforcer.CheckUploadQuota(config, uint64(100))
+			_, err3 := thresholdEnforcer.CheckUploadQuota(userID, uint64(100))
+			_, err4 := allowanceEnforcer.CheckUploadQuota(config, uint64(100))
 
 			// All should succeed with valid user ID
 			assert.NoError(t, err1)
@@ -170,10 +170,10 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
 			}
 
-			_, err1 = hardLimitsEnforcer.CheckUploadQuota(invalidConfig, 100)
-			_, err2 = unlimitedEnforcer.CheckUploadQuota(invalidConfig, 100)
-			_, err3 = thresholdEnforcer.CheckUploadQuota(0, 100)
-			_, err4 = allowanceEnforcer.CheckUploadQuota(invalidConfig, 100)
+			_, err1 = hardLimitsEnforcer.CheckUploadQuota(invalidConfig, uint64(100))
+			_, err2 = unlimitedEnforcer.CheckUploadQuota(invalidConfig, uint64(100))
+			_, err3 = thresholdEnforcer.CheckUploadQuota(0, uint64(100))
+			_, err4 = allowanceEnforcer.CheckUploadQuota(invalidConfig, uint64(100))
 
 			// All should return the same error for invalid user ID
 			assert.Error(t, err1)

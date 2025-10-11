@@ -20,7 +20,7 @@ func TestUnlimitedPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 		t.Run("Valid user with unlimited policy", func(t *testing.T) {
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
+			uploadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
 			})
@@ -32,7 +32,7 @@ func TestUnlimitedPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 		t.Run("Invalid bytes should return error", func(t *testing.T) {
 			userID := baseUserID + 2
-			uploadDailyLimit := uint64(1000)
+			uploadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
 			})
@@ -43,7 +43,7 @@ func TestUnlimitedPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 		t.Run("Large bytes amount should still be allowed", func(t *testing.T) {
 			userID := baseUserID + 3
-			uploadDailyLimit := uint64(1000)
+			uploadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
 			})
@@ -62,7 +62,7 @@ func TestUnlimitedPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 		t.Run("Valid user with unlimited policy", func(t *testing.T) {
 			userID := baseUserID + 1
-			downloadDailyLimit := uint64(1000)
+			downloadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
 			})
@@ -74,7 +74,7 @@ func TestUnlimitedPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 		t.Run("Invalid bytes should return error", func(t *testing.T) {
 			userID := baseUserID + 2
-			downloadDailyLimit := uint64(1000)
+			downloadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
 			})
@@ -85,7 +85,7 @@ func TestUnlimitedPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 		t.Run("Large bytes amount should still be allowed", func(t *testing.T) {
 			userID := baseUserID + 3
-			downloadDailyLimit := uint64(1000)
+			downloadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
 			})
@@ -104,7 +104,7 @@ func TestUnlimitedPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 		t.Run("Valid user with unlimited policy", func(t *testing.T) {
 			userID := baseUserID + 1
-			storageLimit := uint64(1000)
+			storageLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				StorageLimit: &storageLimit,
 			})
@@ -116,7 +116,7 @@ func TestUnlimitedPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 		t.Run("Invalid bytes should return error", func(t *testing.T) {
 			userID := baseUserID + 2
-			storageLimit := uint64(1000)
+			storageLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				StorageLimit: &storageLimit,
 			})
@@ -127,7 +127,7 @@ func TestUnlimitedPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 		t.Run("Large bytes amount should still be allowed", func(t *testing.T) {
 			userID := baseUserID + 3
-			storageLimit := uint64(1000)
+			storageLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{
 				StorageLimit: &storageLimit,
 			})

@@ -37,7 +37,7 @@ func TestConfiguration_DefaultCreation(t *testing.T) {
 func TestConfiguration_Updates(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userID := uint(1)
-		initialUploadLimit := uint64(1000)
+		initialUploadLimit := int64(1000)
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 			UploadDailyLimit: &initialUploadLimit,
 		})
@@ -51,7 +51,7 @@ func TestConfiguration_Updates(t *testing.T) {
 			assert.Equal(t, initialUploadLimit, *config.UploadDailyLimit)
 
 			// Update the limit
-			newUploadLimit := uint64(2000)
+			newUploadLimit := int64(2000)
 			config.UploadDailyLimit = &newUploadLimit
 			err = ctx.DB().Save(config).Error
 			require.NoError(t, err)
@@ -109,11 +109,11 @@ func TestConfiguration_QuotaPlanIntegration(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx)
 			limits, err := enforcer.getEffectiveLimits(config)
 			require.NoError(t, err)
-			assert.Equal(t, plan.StorageLimit, *limits.StorageLimit)
-			assert.Equal(t, plan.UploadDailyLimit, *limits.UploadDailyLimit)
-			assert.Equal(t, plan.DownloadDailyLimit, *limits.DownloadDailyLimit)
-			assert.Equal(t, plan.UploadTotalLimit, *limits.UploadTotalLimit)
-			assert.Equal(t, plan.DownloadTotalLimit, *limits.DownloadTotalLimit)
+			assert.Equal(t, uint64(plan.StorageLimit), *limits.StorageLimit)
+			assert.Equal(t, uint64(plan.UploadDailyLimit), *limits.UploadDailyLimit)
+			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limits.DownloadDailyLimit)
+			assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)
+			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit)
 		})
 
 		t.Run("User with custom limits overrides plan limits", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestConfiguration_QuotaPlanIntegration(t *testing.T) {
 			})
 
 			// Create user with plan and custom override
-			customStorageLimit := uint64(3000)
+			customStorageLimit := int64(3000)
 			planID := uint64(plan.ID)
 			config := createTestUser(t, ctx, userID+1, models.EnforcementPolicyHardLimits, &testUserLimits{
 				QuotaPlanID:  &planID,
@@ -138,11 +138,11 @@ func TestConfiguration_QuotaPlanIntegration(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx)
 			limits, err := enforcer.getEffectiveLimits(config)
 			require.NoError(t, err)
-			assert.Equal(t, customStorageLimit, *limits.StorageLimit)            // Custom value
-			assert.Equal(t, plan.UploadDailyLimit, *limits.UploadDailyLimit)     // Plan value
-			assert.Equal(t, plan.DownloadDailyLimit, *limits.DownloadDailyLimit) // Plan value
-			assert.Equal(t, plan.UploadTotalLimit, *limits.UploadTotalLimit)     // Plan value
-			assert.Equal(t, plan.DownloadTotalLimit, *limits.DownloadTotalLimit) // Plan value
+			assert.Equal(t, uint64(customStorageLimit), *limits.StorageLimit)            // Custom value
+			assert.Equal(t, uint64(plan.UploadDailyLimit), *limits.UploadDailyLimit)     // Plan value
+			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limits.DownloadDailyLimit) // Plan value
+			assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)     // Plan value
+			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit) // Plan value
 		})
 	}, testOptions())
 }

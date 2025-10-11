@@ -15,7 +15,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 		userID := uint(1)
 		thresholdUserID := uint(2)
 		thresholdUserID2 := uint(3)         // New user ID for threshold test - use 3 to avoid conflict
-		largeValue := uint64(1000000000000) // 1TB - large but reasonable
+		largeValue := int64(1000000000000) // 1TB - large but reasonable
 		createTestUser(t, ctx, userID, models.EnforcementPolicyUnlimited, &testUserLimits{})
 		createTestUser(t, ctx, thresholdUserID, models.EnforcementPolicyThreshold, &testUserLimits{})
 		createTestUser(t, ctx, thresholdUserID2, models.EnforcementPolicyThreshold, &testUserLimits{})
@@ -28,14 +28,14 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 				UploadDailyLimit:  &largeValue,
 			}
 
-			result, err := enforcer.CheckUploadQuota(config, largeValue/2)
+			result, err := enforcer.CheckUploadQuota(config, uint64(largeValue/2))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})
 
 		t.Run("Threshold policy with large values", func(t *testing.T) {
 			enforcer := NewThresholdPolicyEnforcer(ctx)
-			thresholdValue := uint64(900000000000) // 900GB - below upload limit
+			thresholdValue := int64(900000000000) // 900GB - below upload limit
 
 			// Get existing config for the user
 			config, err := enforcer.getUserQuotaConfig(thresholdUserID2)
@@ -47,7 +47,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			err = ctx.DB().Save(config).Error
 			require.NoError(t, err)
 
-			result, err := enforcer.CheckUploadQuota(thresholdUserID2, thresholdValue/2)
+			result, err := enforcer.CheckUploadQuota(thresholdUserID2, uint64(thresholdValue/2))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})
@@ -57,7 +57,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		userID := uint(1)
-		uploadDailyLimit := uint64(10000)
+		uploadDailyLimit := int64(10000)
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 			UploadDailyLimit: &uploadDailyLimit,
 		})

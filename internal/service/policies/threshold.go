@@ -33,29 +33,37 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuota(userID uint, requestedBytes u
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
-	return t.CheckUploadQuotaWithConfig(config, requestedBytes)
-}
-
-// CheckUploadQuotaWithConfig checks if an upload operation is allowed under threshold policy with a given config
-func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := t.validateRequestedBytes(requestedBytes); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-
-	usage, err := t.getCurrentUsage(config.UserID)
-	if err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-
 	// Resolve effective limits
 	effectiveLimits, err := t.resolveEffectiveLimits(config)
 	if err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
+	return t.CheckUploadQuotaWithConfig(userID, config, requestedBytes, effectiveLimits)
+}
+
+// CheckUploadQuotaWithConfig checks if an upload operation is allowed under threshold policy with a given config
+func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(userID uint, config *models.UserQuotaConfig, requestedBytes uint64, effectiveLimits *pluginCore.EffectiveLimits) (pluginCore.QuotaCheckResult, error) {
+	if err := t.validateRequestedBytes(requestedBytes); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+
+	usage, err := t.getCurrentUsage(userID)
+	if err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+
 	// Check daily upload limit
 	if effectiveLimits.UploadDailyLimit != nil {
-		if usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadDailyLimit {
+		if *effectiveLimits.UploadDailyLimit == 0 {
+			// Limit is 0, which means disabled - deny the operation
+			return t.createLimitExceededResult(
+				models.EnforcementPolicyThreshold,
+				usage.BytesUploaded,
+				0,
+			), nil
+		} else if usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadDailyLimit {
+			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
 				usage.BytesUploaded,
@@ -64,13 +72,18 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(config *models.User
 		}
 
 		// Check threshold warning
-		if effectiveLimits.UploadThreshold != nil && usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadThreshold {
-			return t.createWarningResult(
-				models.EnforcementPolicyThreshold,
-				usage.BytesUploaded,
-				*effectiveLimits.UploadThreshold,
-				*effectiveLimits.UploadDailyLimit,
-			), nil
+		if effectiveLimits.UploadThreshold != nil && *effectiveLimits.UploadThreshold > 0 {
+			if usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadThreshold {
+				// Only warn if we're still within the limit
+				if usage.BytesUploaded+requestedBytes <= *effectiveLimits.UploadDailyLimit {
+					return t.createWarningResult(
+						models.EnforcementPolicyThreshold,
+						usage.BytesUploaded,
+						*effectiveLimits.UploadThreshold,
+						*effectiveLimits.UploadDailyLimit,
+					), nil
+				}
+			}
 		}
 	}
 
@@ -82,7 +95,15 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(config *models.User
 			return pluginCore.QuotaCheckResult{}, err
 		}
 		
-		if cumulativeTotal+requestedBytes > *effectiveLimits.UploadTotalLimit {
+		if *effectiveLimits.UploadTotalLimit == 0 {
+			// Limit is 0, which means disabled - deny the operation
+			return t.createLimitExceededResult(
+				models.EnforcementPolicyThreshold,
+				cumulativeTotal,
+				0,
+			), nil
+		} else if cumulativeTotal+requestedBytes > *effectiveLimits.UploadTotalLimit {
+			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
 				cumulativeTotal,
@@ -91,13 +112,18 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuotaWithConfig(config *models.User
 		}
 
 		// Check threshold warning using cumulative total
-		if effectiveLimits.UploadThreshold != nil && cumulativeTotal+requestedBytes > *effectiveLimits.UploadThreshold {
-			return t.createWarningResult(
-				models.EnforcementPolicyThreshold,
-				cumulativeTotal,
-				*effectiveLimits.UploadThreshold,
-				*effectiveLimits.UploadTotalLimit,
-			), nil
+		if effectiveLimits.UploadThreshold != nil && *effectiveLimits.UploadThreshold > 0 {
+			if cumulativeTotal+requestedBytes > *effectiveLimits.UploadThreshold {
+				// Only warn if we're still within the limit
+				if cumulativeTotal+requestedBytes <= *effectiveLimits.UploadTotalLimit {
+					return t.createWarningResult(
+						models.EnforcementPolicyThreshold,
+						cumulativeTotal,
+						*effectiveLimits.UploadThreshold,
+						*effectiveLimits.UploadTotalLimit,
+					), nil
+				}
+			}
 		}
 	}
 
@@ -115,29 +141,37 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuota(userID uint, requestedBytes
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
-	return t.CheckDownloadQuotaWithConfig(config, requestedBytes)
-}
-
-// CheckDownloadQuotaWithConfig checks if a download operation is allowed under threshold policy with a given config
-func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if err := t.validateRequestedBytes(requestedBytes); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-
-	usage, err := t.getCurrentUsage(config.UserID)
-	if err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-
 	// Resolve effective limits
 	effectiveLimits, err := t.resolveEffectiveLimits(config)
 	if err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
 
+	return t.CheckDownloadQuotaWithConfig(userID, config, requestedBytes, effectiveLimits)
+}
+
+// CheckDownloadQuotaWithConfig checks if a download operation is allowed under threshold policy with a given config
+func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(userID uint, config *models.UserQuotaConfig, requestedBytes uint64, effectiveLimits *pluginCore.EffectiveLimits) (pluginCore.QuotaCheckResult, error) {
+	if err := t.validateRequestedBytes(requestedBytes); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+
+	usage, err := t.getCurrentUsage(userID)
+	if err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
+
 	// Check daily download limit
 	if effectiveLimits.DownloadDailyLimit != nil {
-		if usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadDailyLimit {
+		if *effectiveLimits.DownloadDailyLimit == 0 {
+			// Limit is 0, which means disabled - deny the operation
+			return t.createLimitExceededResult(
+				models.EnforcementPolicyThreshold,
+				usage.BytesDownloaded,
+				0,
+			), nil
+		} else if usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadDailyLimit {
+			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
 				usage.BytesDownloaded,
@@ -146,13 +180,18 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(config *models.Us
 		}
 
 		// Check threshold warning
-		if effectiveLimits.DownloadThreshold != nil && usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadThreshold {
-			return t.createWarningResult(
-				models.EnforcementPolicyThreshold,
-				usage.BytesDownloaded,
-				*effectiveLimits.DownloadThreshold,
-				*effectiveLimits.DownloadDailyLimit,
-			), nil
+		if effectiveLimits.DownloadThreshold != nil && *effectiveLimits.DownloadThreshold > 0 {
+			if usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadThreshold {
+				// Only warn if we're still within the limit
+				if usage.BytesDownloaded+requestedBytes <= *effectiveLimits.DownloadDailyLimit {
+					return t.createWarningResult(
+						models.EnforcementPolicyThreshold,
+						usage.BytesDownloaded,
+						*effectiveLimits.DownloadThreshold,
+						*effectiveLimits.DownloadDailyLimit,
+					), nil
+				}
+			}
 		}
 	}
 
@@ -164,7 +203,15 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(config *models.Us
 			return pluginCore.QuotaCheckResult{}, err
 		}
 		
-		if cumulativeTotal+requestedBytes > *effectiveLimits.DownloadTotalLimit {
+		if *effectiveLimits.DownloadTotalLimit == 0 {
+			// Limit is 0, which means disabled - deny the operation
+			return t.createLimitExceededResult(
+				models.EnforcementPolicyThreshold,
+				cumulativeTotal,
+				0,
+			), nil
+		} else if cumulativeTotal+requestedBytes > *effectiveLimits.DownloadTotalLimit {
+			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
 				cumulativeTotal,
@@ -173,13 +220,18 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuotaWithConfig(config *models.Us
 		}
 
 		// Check threshold warning using cumulative total
-		if effectiveLimits.DownloadThreshold != nil && cumulativeTotal+requestedBytes > *effectiveLimits.DownloadThreshold {
-			return t.createWarningResult(
-				models.EnforcementPolicyThreshold,
-				cumulativeTotal,
-				*effectiveLimits.DownloadThreshold,
-				*effectiveLimits.DownloadTotalLimit,
-			), nil
+		if effectiveLimits.DownloadThreshold != nil && *effectiveLimits.DownloadThreshold > 0 {
+			if cumulativeTotal+requestedBytes > *effectiveLimits.DownloadThreshold {
+				// Only warn if we're still within the limit
+				if cumulativeTotal+requestedBytes <= *effectiveLimits.DownloadTotalLimit {
+					return t.createWarningResult(
+						models.EnforcementPolicyThreshold,
+						cumulativeTotal,
+						*effectiveLimits.DownloadThreshold,
+						*effectiveLimits.DownloadTotalLimit,
+					), nil
+				}
+			}
 		}
 	}
 
@@ -210,7 +262,15 @@ func (t *ThresholdPolicyEnforcer) CheckStorageQuota(userID uint, requestedBytes 
 
 	// Check storage limit
 	if effectiveLimits.StorageLimit != nil {
-		if usage.BytesStored+requestedBytes > *effectiveLimits.StorageLimit {
+		if *effectiveLimits.StorageLimit == 0 {
+			// Limit is 0, which means disabled - deny the operation
+			return t.createLimitExceededResult(
+				models.EnforcementPolicyThreshold,
+				usage.BytesStored,
+				0,
+			), nil
+		} else if usage.BytesStored+requestedBytes > *effectiveLimits.StorageLimit {
+			// Normal limit check for positive values
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
 				usage.BytesStored,
@@ -219,13 +279,15 @@ func (t *ThresholdPolicyEnforcer) CheckStorageQuota(userID uint, requestedBytes 
 		}
 
 		// Check threshold warning
-		if effectiveLimits.StorageThreshold != nil && usage.BytesStored+requestedBytes > *effectiveLimits.StorageThreshold {
-			return t.createWarningResult(
-				models.EnforcementPolicyThreshold,
-				usage.BytesStored,
-				*effectiveLimits.StorageThreshold,
-				*effectiveLimits.StorageLimit,
-			), nil
+		if effectiveLimits.StorageThreshold != nil && *effectiveLimits.StorageThreshold > 0 && *effectiveLimits.StorageLimit > 0 {
+			if usage.BytesStored+requestedBytes > *effectiveLimits.StorageThreshold && usage.BytesStored+requestedBytes <= *effectiveLimits.StorageLimit {
+				return t.createWarningResult(
+					models.EnforcementPolicyThreshold,
+					usage.BytesStored,
+					*effectiveLimits.StorageThreshold,
+					*effectiveLimits.StorageLimit,
+				), nil
+			}
 		}
 	}
 
@@ -247,8 +309,14 @@ func (t *ThresholdPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		return err
 	}
 
+	// Resolve effective limits
+	effectiveLimits, err := t.resolveEffectiveLimits(config)
+	if err != nil {
+		return err
+	}
+
 	// Check quota before recording
-	result, err := t.CheckUploadQuotaWithConfig(config, bytes)
+	result, err := t.CheckUploadQuotaWithConfig(userID, config, bytes, effectiveLimits)
 	if err != nil {
 		return err
 	}
@@ -294,8 +362,14 @@ func (t *ThresholdPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		return err
 	}
 
+	// Resolve effective limits
+	effectiveLimits, err := t.resolveEffectiveLimits(config)
+	if err != nil {
+		return err
+	}
+
 	// Check quota before recording
-	result, err := t.CheckDownloadQuotaWithConfig(config, bytes)
+	result, err := t.CheckDownloadQuotaWithConfig(userID, config, bytes, effectiveLimits)
 	if err != nil {
 		return err
 	}
@@ -421,57 +495,57 @@ func (t *ThresholdPolicyEnforcer) resolveEffectiveLimits(config *models.UserQuot
 
 	// Set limits from plan if available
 	if plan != nil {
-		if plan.StorageLimit > 0 {
-			limits.StorageLimit = &plan.StorageLimit
+		if plan.StorageLimit != 0 {
+			limits.StorageLimit = t.convertLimitValue(plan.StorageLimit)
 		}
-		if plan.UploadDailyLimit > 0 {
-			limits.UploadDailyLimit = &plan.UploadDailyLimit
+		if plan.UploadDailyLimit != 0 {
+			limits.UploadDailyLimit = t.convertLimitValue(plan.UploadDailyLimit)
 		}
-		if plan.DownloadDailyLimit > 0 {
-			limits.DownloadDailyLimit = &plan.DownloadDailyLimit
+		if plan.DownloadDailyLimit != 0 {
+			limits.DownloadDailyLimit = t.convertLimitValue(plan.DownloadDailyLimit)
 		}
-		if plan.UploadTotalLimit > 0 {
-			limits.UploadTotalLimit = &plan.UploadTotalLimit
+		if plan.UploadTotalLimit != 0 {
+			limits.UploadTotalLimit = t.convertLimitValue(plan.UploadTotalLimit)
 		}
-		if plan.DownloadTotalLimit > 0 {
-			limits.DownloadTotalLimit = &plan.DownloadTotalLimit
+		if plan.DownloadTotalLimit != 0 {
+			limits.DownloadTotalLimit = t.convertLimitValue(plan.DownloadTotalLimit)
 		}
-		if plan.StorageThreshold != nil && *plan.StorageThreshold > 0 {
-			limits.StorageThreshold = plan.StorageThreshold
+		if plan.StorageThreshold != nil {
+			limits.StorageThreshold = t.convertLimitValue(*plan.StorageThreshold)
 		}
-		if plan.UploadThreshold != nil && *plan.UploadThreshold > 0 {
-			limits.UploadThreshold = plan.UploadThreshold
+		if plan.UploadThreshold != nil {
+			limits.UploadThreshold = t.convertLimitValue(*plan.UploadThreshold)
 		}
-		if plan.DownloadThreshold != nil && *plan.DownloadThreshold > 0 {
-			limits.DownloadThreshold = plan.DownloadThreshold
+		if plan.DownloadThreshold != nil {
+			limits.DownloadThreshold = t.convertLimitValue(*plan.DownloadThreshold)
 		}
 		limits.QuotaPlanID = lo.ToPtr(uint64(plan.ID))
 	}
 
 	// Override with user-specific limits if set
 	if config.StorageLimit != nil {
-		limits.StorageLimit = config.StorageLimit
+		limits.StorageLimit = t.convertLimitValue(*config.StorageLimit)
 	}
 	if config.UploadDailyLimit != nil {
-		limits.UploadDailyLimit = config.UploadDailyLimit
+		limits.UploadDailyLimit = t.convertLimitValue(*config.UploadDailyLimit)
 	}
 	if config.DownloadDailyLimit != nil {
-		limits.DownloadDailyLimit = config.DownloadDailyLimit
+		limits.DownloadDailyLimit = t.convertLimitValue(*config.DownloadDailyLimit)
 	}
 	if config.UploadTotalLimit != nil {
-		limits.UploadTotalLimit = config.UploadTotalLimit
+		limits.UploadTotalLimit = t.convertLimitValue(*config.UploadTotalLimit)
 	}
 	if config.DownloadTotalLimit != nil {
-		limits.DownloadTotalLimit = config.DownloadTotalLimit
+		limits.DownloadTotalLimit = t.convertLimitValue(*config.DownloadTotalLimit)
 	}
 	if config.StorageThreshold != nil {
-		limits.StorageThreshold = config.StorageThreshold
+		limits.StorageThreshold = t.convertLimitValue(*config.StorageThreshold)
 	}
 	if config.UploadThreshold != nil {
-		limits.UploadThreshold = config.UploadThreshold
+		limits.UploadThreshold = t.convertLimitValue(*config.UploadThreshold)
 	}
 	if config.DownloadThreshold != nil {
-		limits.DownloadThreshold = config.DownloadThreshold
+		limits.DownloadThreshold = t.convertLimitValue(*config.DownloadThreshold)
 	}
 
 	return limits, nil
@@ -499,6 +573,19 @@ func (t *ThresholdPolicyEnforcer) getTotalBytesByType(userID uint, usageType mod
 	}
 
 	return totalBytes, nil
+}
+
+// convertLimitValue converts database int64 limit values to core *uint64 values
+// -1 (database unlimited) → nil (core unlimited)
+// 0 (database disabled) → 0 (core disabled)
+// positive values → same positive values
+func (t *ThresholdPolicyEnforcer) convertLimitValue(value int64) *uint64 {
+	if value == -1 {
+		return nil // unlimited
+	}
+	
+	converted := uint64(value)
+	return &converted
 }
 
 // getDefaultQuotaPlan retrieves the default quota plan

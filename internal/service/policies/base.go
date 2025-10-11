@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -112,7 +111,7 @@ func (b *BasePolicyEnforcer) getCurrentUsage(userID uint) (*pluginCore.Usage, er
 
 	// Aggregate usage across all records for this user
 	var totalUploaded, totalDownloaded, totalStored uint64
-	
+
 	// Get total bytes uploaded
 	err := b.db.Model(&models.UserQuota{}).
 		Where("user_id = ?", userID).
@@ -319,7 +318,7 @@ func (b *BasePolicyEnforcer) createSuccessResult(policy models.EnforcementPolicy
 }
 
 // createLimitExceededResult creates a limit exceeded quota check result
-func (b *BasePolicyEnforcer) createLimitExceededResult(policy models.EnforcementPolicy, currentUsage, limit uint64) pluginCore.QuotaCheckResult {
+func (b *BasePolicyEnforcer) createLimitExceededResult(policy models.EnforcementPolicy, currentUsage uint64, limit uint64) pluginCore.QuotaCheckResult {
 	return b.createQuotaCheckResult(false, models.QuotaCheckReasonLimitExceeded, policy, pluginCore.QuotaCheckDetails{
 		CurrentUsage: currentUsage,
 		Limit:        &limit,
@@ -344,7 +343,7 @@ func (b *BasePolicyEnforcer) getUsageByType(userID uint) (map[models.UsageType]u
 }
 
 // createWarningResult creates a warning quota check result (for threshold policy)
-func (b *BasePolicyEnforcer) createWarningResult(policy models.EnforcementPolicy, currentUsage, threshold, limit uint64) pluginCore.QuotaCheckResult {
+func (b *BasePolicyEnforcer) createWarningResult(policy models.EnforcementPolicy, currentUsage uint64, threshold, limit uint64) pluginCore.QuotaCheckResult {
 	return b.createQuotaCheckResult(true, models.QuotaCheckReasonWarningThreshold, policy, pluginCore.QuotaCheckDetails{
 		CurrentUsage: currentUsage,
 		Threshold:    &threshold,

@@ -142,7 +142,7 @@ func (u *UnlimitedPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 	}
 
 	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, usageType, int64(recordBytes))
+	return u.updateDailyUsage(userID, usageType, bytes)
 }
 
 // GetDetailedUsage delegates to the base enforcer

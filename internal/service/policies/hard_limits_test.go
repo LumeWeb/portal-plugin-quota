@@ -5,12 +5,63 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
+
+// TestHardLimitsPolicyEnforcer_ValidateLimitValue tests the validateLimitValue function
+func TestHardLimitsPolicyEnforcer_ValidateLimitValue(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		enforcer := NewHardLimitsPolicyEnforcer(ctx)
+
+		t.Run("Valid positive limit values", func(t *testing.T) {
+			validValues := []int64{
+				1,
+				100,
+				1000,
+				int64(units.GB),
+				int64(units.TB),
+				int64(units.PB),
+				int64(units.PiB), // Maximum reasonable value
+			}
+
+			for _, value := range validValues {
+				err := enforcer.validateLimitValue(value)
+				assert.NoError(t, err, "Value %d should be valid", value)
+			}
+		})
+
+		t.Run("Valid zero limit value (disabled)", func(t *testing.T) {
+			// 0 means disabled - should be valid
+			err := enforcer.validateLimitValue(0)
+			assert.NoError(t, err, "Zero should be a valid limit value (disabled)")
+		})
+
+		t.Run("Valid negative one limit value (unlimited)", func(t *testing.T) {
+			// -1 means unlimited - should be valid
+			err := enforcer.validateLimitValue(-1)
+			assert.NoError(t, err, "Negative one should be a valid limit value (unlimited)")
+		})
+
+		t.Run("Unreasonably large limit values", func(t *testing.T) {
+			// Values larger than 1 PiB should be rejected
+			unreasonableValues := []int64{
+				int64(units.PiB) + 1,
+				int64(units.PiB) * 10,
+				int64(units.PiB) * 1000,
+			}
+
+			for _, value := range unreasonableValues {
+				err := enforcer.validateLimitValue(value)
+				assert.Error(t, err, "Value %d should be unreasonably large and invalid", value)
+			}
+		})
+	}, testOptions())
+}
 
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 	t.Run("Within daily limit", func(t *testing.T) {
@@ -20,8 +71,8 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
@@ -34,7 +85,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			// Test within daily limit
 			result, err := enforcer.CheckUploadQuota(config, 500)
 			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, models.EnforcementPolicyHardLimits)
+			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())
 	})
 
@@ -45,8 +96,8 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
@@ -62,7 +113,36 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 			// Test exceeding daily limit
 			result, err := enforcer.CheckUploadQuota(config, 500)
 			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, models.EnforcementPolicyHardLimits)
+			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
+		}, testOptions())
+	})
+
+	t.Run("Exceeding total limit", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			enforcer := NewHardLimitsPolicyEnforcer(ctx)
+			baseUserID := uint(2000)
+
+			// Create a test user with high daily limit but lower total limit
+			userID := baseUserID + 2
+			uploadDailyLimit := int64(10000)
+			uploadTotalLimit := int64(1000)
+
+			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
+				UploadDailyLimit: &uploadDailyLimit,
+				UploadTotalLimit: &uploadTotalLimit,
+			})
+			config := &models.UserQuotaConfig{}
+			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
+			require.NoError(t, err)
+
+			// Record uploads to accumulate usage under daily limit but approaching total
+			err = enforcer.RecordUpload(userID, 200, 750, "127.0.0.1")
+			require.NoError(t, err)
+
+			// Test exceeding total limit
+			result, err := enforcer.CheckUploadQuota(config, 500)
+			require.NoError(t, err)
+			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())
 	})
 
@@ -73,8 +153,8 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
@@ -101,8 +181,8 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
@@ -115,7 +195,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			// Test within daily limit
 			result, err := enforcer.CheckDownloadQuota(config, 1000)
 			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, models.EnforcementPolicyHardLimits)
+			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())
 	})
 
@@ -126,8 +206,8 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
@@ -143,7 +223,36 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 			// Test exceeding daily limit
 			result, err := enforcer.CheckDownloadQuota(config, 1000)
 			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, models.EnforcementPolicyHardLimits)
+			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
+		}, testOptions())
+	})
+
+	t.Run("Exceeding total limit", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			enforcer := NewHardLimitsPolicyEnforcer(ctx)
+			baseUserID := uint(5000)
+
+			// Create a test user with high daily limit but lower total limit
+			userID := baseUserID + 2
+			downloadDailyLimit := int64(10000)
+			downloadTotalLimit := int64(2000)
+
+			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
+				DownloadDailyLimit: &downloadDailyLimit,
+				DownloadTotalLimit: &downloadTotalLimit,
+			})
+			config := &models.UserQuotaConfig{}
+			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
+			require.NoError(t, err)
+
+			// Record downloads to accumulate usage under daily limit but approaching total
+			err = enforcer.RecordDownload(userID, 200, 1500, "127.0.0.1")
+			require.NoError(t, err)
+
+			// Test exceeding total limit
+			result, err := enforcer.CheckDownloadQuota(config, 1000)
+			require.NoError(t, err)
+			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())
 	})
 
@@ -154,8 +263,8 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
@@ -182,7 +291,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			storageLimit := uint64(3000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit: &storageLimit,
@@ -194,7 +303,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			// Test within storage limit
 			result, err := enforcer.CheckStorageQuota(config, 1500)
 			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, models.EnforcementPolicyHardLimits)
+			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())
 	})
 
@@ -205,7 +314,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			storageLimit := uint64(3000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit: &storageLimit,
@@ -220,7 +329,36 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 			// Test exceeding storage limit
 			result, err := enforcer.CheckStorageQuota(config, 1000)
 			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, models.EnforcementPolicyHardLimits)
+			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
+		}, testOptions())
+	})
+
+	t.Run("Exceeding total limit", func(t *testing.T) {
+		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+			enforcer := NewHardLimitsPolicyEnforcer(ctx)
+			baseUserID := uint(8000)
+
+			// Create a test user with storage limit and upload total limit
+			userID := baseUserID + 2
+			storageLimit := int64(3000)
+			uploadTotalLimit := int64(500)
+
+			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
+				StorageLimit:     &storageLimit,
+				UploadTotalLimit: &uploadTotalLimit,
+			})
+			config := &models.UserQuotaConfig{}
+			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
+			require.NoError(t, err)
+
+			// Record uploads to accumulate usage under daily limit but approaching total
+			err = enforcer.RecordUpload(userID, 300, 400, "127.0.0.1")
+			require.NoError(t, err)
+
+			// Test exceeding total limit
+			result, err := enforcer.CheckUploadQuota(config, 200)
+			require.NoError(t, err)
+			assertQuotaCheckResult(t, result, false, models.QuotaCheckReasonLimitExceeded, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits))
 		}, testOptions())
 	})
 
@@ -231,7 +369,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			storageLimit := uint64(3000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit: &storageLimit,
@@ -257,8 +395,8 @@ func TestHardLimitsPolicyEnforcer_RecordUpload(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
@@ -286,8 +424,8 @@ func TestHardLimitsPolicyEnforcer_RecordUpload(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
@@ -345,8 +483,8 @@ func TestHardLimitsPolicyEnforcer_RecordDownload(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
@@ -374,8 +512,8 @@ func TestHardLimitsPolicyEnforcer_RecordDownload(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			downloadDailyLimit := uint64(1000)
-			downloadTotalLimit := uint64(5000)
+			downloadDailyLimit := int64(1000)
+			downloadTotalLimit := int64(5000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				DownloadDailyLimit: &downloadDailyLimit,
@@ -428,7 +566,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			storageLimit := uint64(3000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit: &storageLimit,
@@ -452,7 +590,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			storageLimit := uint64(1000)
+			storageLimit := int64(1000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit: &storageLimit,
@@ -472,7 +610,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			storageLimit := uint64(1000)
+			storageLimit := int64(1000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit: &storageLimit,
@@ -521,11 +659,11 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage(t *testing.T) {
 			userID := baseUserID + 1
 
 			// Create a test user with limits
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
-			storageLimit := uint64(3000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit:   &uploadDailyLimit,
@@ -589,11 +727,11 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage(t *testing.T) {
 			userID := baseUserID + 1
 
 			// Create a test user with limits
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
-			storageLimit := uint64(3000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit:   &uploadDailyLimit,
@@ -646,11 +784,11 @@ func TestHardLimitsPolicyEnforcer_GetUsageHistory(t *testing.T) {
 			period := 30 // days
 
 			// Create a test user with limits
-			uploadDailyLimit := uint64(1000)
-			uploadTotalLimit := uint64(5000)
-			downloadDailyLimit := uint64(2000)
-			downloadTotalLimit := uint64(10000)
-			storageLimit := uint64(3000)
+			uploadDailyLimit := int64(1000)
+			uploadTotalLimit := int64(5000)
+			downloadDailyLimit := int64(2000)
+			downloadTotalLimit := int64(10000)
+			storageLimit := int64(3000)
 
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit:   &uploadDailyLimit,
@@ -706,7 +844,7 @@ func TestHardLimitsPolicyEnforcer_ConcurrentAccess(t *testing.T) {
 
 			// Create a test user
 			userID := baseUserID + 1
-			uploadDailyLimit := uint64(1000)
+			uploadDailyLimit := int64(1000)
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				UploadDailyLimit: &uploadDailyLimit,
 			})
@@ -754,11 +892,11 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 			userID := baseUserID + 1
 
 			// Test with custom limits
-			storageLimit := uint64(1000)
-			uploadDailyLimit := uint64(500)
-			downloadDailyLimit := uint64(750)
-			uploadTotalLimit := uint64(2000)
-			downloadTotalLimit := uint64(3000)
+			storageLimit := int64(1000)
+			uploadDailyLimit := int64(500)
+			downloadDailyLimit := int64(750)
+			uploadTotalLimit := int64(2000)
+			downloadTotalLimit := int64(3000)
 
 			config := createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
 				StorageLimit:       &storageLimit,
@@ -771,12 +909,12 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 			limits, err := enforcer.getEffectiveLimits(config)
 			assert.NoError(t, err)
 			assert.Equal(t, userID, limits.UserID)
-			assert.Equal(t, models.EnforcementPolicyHardLimits, limits.EnforcementPolicy)
-			assert.Equal(t, storageLimit, *limits.StorageLimit)
-			assert.Equal(t, uploadDailyLimit, *limits.UploadDailyLimit)
-			assert.Equal(t, downloadDailyLimit, *limits.DownloadDailyLimit)
-			assert.Equal(t, uploadTotalLimit, *limits.UploadTotalLimit)
-			assert.Equal(t, downloadTotalLimit, *limits.DownloadTotalLimit)
+			assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits), limits.EnforcementPolicy)
+			assert.Equal(t, uint64(storageLimit), *limits.StorageLimit)
+			assert.Equal(t, uint64(uploadDailyLimit), *limits.UploadDailyLimit)
+			assert.Equal(t, uint64(downloadDailyLimit), *limits.DownloadDailyLimit)
+			assert.Equal(t, uint64(uploadTotalLimit), *limits.UploadTotalLimit)
+			assert.Equal(t, uint64(downloadTotalLimit), *limits.DownloadTotalLimit)
 		}, testOptions())
 	})
 
@@ -789,11 +927,11 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 
 			// Test with quota plan
 			plan := createTestQuotaPlan(t, ctx, "Test Plan", true, &testPlanLimits{
-				StorageLimit:       uint64(2000),
-				UploadDailyLimit:   uint64(1000),
-				DownloadDailyLimit: uint64(1500),
-				UploadTotalLimit:   uint64(5000),
-				DownloadTotalLimit: uint64(7500),
+				StorageLimit:       int64(2000),
+				UploadDailyLimit:   int64(1000),
+				DownloadDailyLimit: int64(1500),
+				UploadTotalLimit:   int64(5000),
+				DownloadTotalLimit: int64(7500),
 			})
 
 			planID := uint64(plan.ID)
@@ -803,11 +941,11 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 
 			limitsWithPlan, err := enforcer.getEffectiveLimits(configWithPlan)
 			assert.NoError(t, err)
-			assert.Equal(t, plan.StorageLimit, *limitsWithPlan.StorageLimit)
-			assert.Equal(t, plan.UploadDailyLimit, *limitsWithPlan.UploadDailyLimit)
-			assert.Equal(t, plan.DownloadDailyLimit, *limitsWithPlan.DownloadDailyLimit)
-			assert.Equal(t, plan.UploadTotalLimit, *limitsWithPlan.UploadTotalLimit)
-			assert.Equal(t, plan.DownloadTotalLimit, *limitsWithPlan.DownloadTotalLimit)
+			assert.Equal(t, uint64(plan.StorageLimit), *limitsWithPlan.StorageLimit)
+			assert.Equal(t, uint64(plan.UploadDailyLimit), *limitsWithPlan.UploadDailyLimit)
+			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limitsWithPlan.DownloadDailyLimit)
+			assert.Equal(t, uint64(plan.UploadTotalLimit), *limitsWithPlan.UploadTotalLimit)
+			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limitsWithPlan.DownloadTotalLimit)
 		}, testOptions())
 	})
 
@@ -820,15 +958,15 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 
 			// Test with mixed configuration (plan with custom overrides)
 			plan := createTestQuotaPlan(t, ctx, "Test Plan 2", false, &testPlanLimits{
-				StorageLimit:       uint64(2000),
-				UploadDailyLimit:   uint64(1000),
-				DownloadDailyLimit: uint64(1500),
-				UploadTotalLimit:   uint64(5000),
-				DownloadTotalLimit: uint64(7500),
+				StorageLimit:       int64(2000),
+				UploadDailyLimit:   int64(1000),
+				DownloadDailyLimit: int64(1500),
+				UploadTotalLimit:   int64(5000),
+				DownloadTotalLimit: int64(7500),
 			})
 
-			storageLimit := uint64(1000)
-			uploadDailyLimit := uint64(500)
+			storageLimit := int64(1000)
+			uploadDailyLimit := int64(500)
 			planID := uint64(plan.ID)
 
 			configWithMixed := createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
@@ -839,11 +977,11 @@ func TestHardLimitsPolicyEnforcer_getEffectiveLimits(t *testing.T) {
 
 			limitsWithMixed, err := enforcer.getEffectiveLimits(configWithMixed)
 			assert.NoError(t, err)
-			assert.Equal(t, storageLimit, *limitsWithMixed.StorageLimit)                  // Custom value
-			assert.Equal(t, uploadDailyLimit, *limitsWithMixed.UploadDailyLimit)          // Custom value
-			assert.Equal(t, plan.DownloadDailyLimit, *limitsWithMixed.DownloadDailyLimit) // Plan value
-			assert.Equal(t, plan.UploadTotalLimit, *limitsWithMixed.UploadTotalLimit)     // Plan value
-			assert.Equal(t, plan.DownloadTotalLimit, *limitsWithMixed.DownloadTotalLimit) // Plan value
+			assert.Equal(t, uint64(storageLimit), *limitsWithMixed.StorageLimit)                  // Custom value
+			assert.Equal(t, uint64(uploadDailyLimit), *limitsWithMixed.UploadDailyLimit)          // Custom value
+			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limitsWithMixed.DownloadDailyLimit) // Plan value
+			assert.Equal(t, uint64(plan.UploadTotalLimit), *limitsWithMixed.UploadTotalLimit)     // Plan value
+			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limitsWithMixed.DownloadTotalLimit) // Plan value
 		}, testOptions())
 	})
 }

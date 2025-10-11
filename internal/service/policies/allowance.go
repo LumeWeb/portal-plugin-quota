@@ -256,7 +256,7 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 	}
 
 	// Update daily usage with the correct usage type and byte value
-	if err := a.updateDailyUsage(userID, usageType, int64(recordBytes)); err != nil {
+	if err := a.updateDailyUsage(userID, usageType, bytes); err != nil {
 		return fmt.Errorf("failed to update daily storage usage: %w", err)
 	}
 

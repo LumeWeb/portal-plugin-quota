@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
@@ -42,24 +41,27 @@ func (m *MockQuotaService) Name() string {
 
 // testUserLimits represents quota limits for a test user
 type testUserLimits struct {
-	StorageLimit       *uint64
-	UploadDailyLimit   *uint64
-	UploadTotalLimit   *uint64
-	DownloadDailyLimit *uint64
-	DownloadTotalLimit *uint64
-	StorageThreshold   *uint64
-	UploadThreshold    *uint64
-	DownloadThreshold  *uint64
+	StorageLimit       *int64
+	UploadDailyLimit   *int64
+	UploadTotalLimit   *int64
+	DownloadDailyLimit *int64
+	DownloadTotalLimit *int64
+	StorageThreshold   *int64
+	UploadThreshold    *int64
+	DownloadThreshold  *int64
 	QuotaPlanID        *uint64
 }
 
 // testPlanLimits represents quota limits for a test quota plan
 type testPlanLimits struct {
-	StorageLimit       uint64
-	UploadDailyLimit   uint64
-	DownloadDailyLimit uint64
-	UploadTotalLimit   uint64
-	DownloadTotalLimit uint64
+	StorageLimit       int64
+	UploadDailyLimit   int64
+	DownloadDailyLimit int64
+	UploadTotalLimit   int64
+	DownloadTotalLimit int64
+	StorageThreshold   *int64
+	UploadThreshold    *int64
+	DownloadThreshold  *int64
 }
 
 // createTestUser creates a test user in the database
@@ -113,12 +115,11 @@ func createTestQuotaPlan(t *testing.T, ctx coreTesting.TestContext, name string,
 		DownloadDailyLimit: limits.DownloadDailyLimit,
 		UploadTotalLimit:   limits.UploadTotalLimit,
 		DownloadTotalLimit: limits.DownloadTotalLimit,
-		// Set thresholds to reasonable defaults (80% of limits) to avoid validation errors
-		StorageThreshold:  lo.ToPtr(limits.StorageLimit * 80 / 100),
-		UploadThreshold:   lo.ToPtr(limits.UploadDailyLimit * 80 / 100),
-		DownloadThreshold: lo.ToPtr(limits.DownloadDailyLimit * 80 / 100),
-		IsDefault:         isDefault,
-		IsActive:          true,
+		StorageThreshold:   limits.StorageThreshold,
+		UploadThreshold:    limits.UploadThreshold,
+		DownloadThreshold:  limits.DownloadThreshold,
+		IsDefault:          isDefault,
+		IsActive:           true,
 	}
 
 	err := ctx.DB().Create(plan).Error

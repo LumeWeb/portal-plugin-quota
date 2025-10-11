@@ -564,18 +564,6 @@ func (t *ThresholdPolicyEnforcer) resolveEffectiveLimits(config *models.UserQuot
 	return limits, nil
 }
 
-// applyLimit sets a limit field if it passes validation
-func (t *ThresholdPolicyEnforcer) applyLimit(dest **uint64, source *int64, limitName string) error {
-	if source == nil {
-		return nil
-	}
-	
-	if *dest == nil {
-		convertedValue := t.BasePolicyEnforcer.convertLimitValue(*source)
-		*dest = convertedValue
-	}
-	return nil
-}
 
 // getQuotaPlan retrieves a quota plan by ID
 func (t *ThresholdPolicyEnforcer) getQuotaPlan(planID uint64) (*models.QuotaPlan, error) {

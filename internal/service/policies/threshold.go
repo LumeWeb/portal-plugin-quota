@@ -65,23 +65,27 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuota(userID uint, requestedBytes u
 		}
 	}
 
-	// Check total upload limit
+	// Check total upload limit using cumulative total
 	if effectiveLimits.UploadTotalLimit != nil {
-		// For simplicity, we're using daily quota here. In a real implementation,
-		// you might want to track total usage separately
-		if usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadTotalLimit {
+		// Get cumulative uploaded bytes
+		cumulativeTotal, err := t.getTotalBytesByType(userID, models.UsageTypeUpload)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		
+		if cumulativeTotal+requestedBytes > *effectiveLimits.UploadTotalLimit {
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesUploaded,
+				cumulativeTotal,
 				*effectiveLimits.UploadTotalLimit,
 			), nil
 		}
 
-		// Check threshold warning
-		if effectiveLimits.UploadThreshold != nil && usage.BytesUploaded+requestedBytes > *effectiveLimits.UploadThreshold {
+		// Check threshold warning using cumulative total
+		if effectiveLimits.UploadThreshold != nil && cumulativeTotal+requestedBytes > *effectiveLimits.UploadThreshold {
 			return t.createWarningResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesUploaded,
+				cumulativeTotal,
 				*effectiveLimits.UploadThreshold,
 				*effectiveLimits.UploadTotalLimit,
 			), nil
@@ -134,23 +138,27 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuota(userID uint, requestedBytes
 		}
 	}
 
-	// Check total download limit
+	// Check total download limit using cumulative total
 	if effectiveLimits.DownloadTotalLimit != nil {
-		// For simplicity, we're using daily quota here. In a real implementation,
-		// you might want to track total usage separately
-		if usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadTotalLimit {
+		// Get cumulative downloaded bytes
+		cumulativeTotal, err := t.getTotalBytesByType(userID, models.UsageTypeDownload)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		
+		if cumulativeTotal+requestedBytes > *effectiveLimits.DownloadTotalLimit {
 			return t.createLimitExceededResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesDownloaded,
+				cumulativeTotal,
 				*effectiveLimits.DownloadTotalLimit,
 			), nil
 		}
 
-		// Check threshold warning
-		if effectiveLimits.DownloadThreshold != nil && usage.BytesDownloaded+requestedBytes > *effectiveLimits.DownloadThreshold {
+		// Check threshold warning using cumulative total
+		if effectiveLimits.DownloadThreshold != nil && cumulativeTotal+requestedBytes > *effectiveLimits.DownloadThreshold {
 			return t.createWarningResult(
 				models.EnforcementPolicyThreshold,
-				usage.BytesDownloaded,
+				cumulativeTotal,
 				*effectiveLimits.DownloadThreshold,
 				*effectiveLimits.DownloadTotalLimit,
 			), nil
@@ -431,6 +439,20 @@ func (t *ThresholdPolicyEnforcer) getQuotaPlan(planID uint64) (*models.QuotaPlan
 		return nil, err
 	}
 	return &plan, nil
+}
+
+// getTotalBytesByType retrieves the total bytes consumed for a specific usage type across all time
+func (t *ThresholdPolicyEnforcer) getTotalBytesByType(userID uint, usageType models.UsageType) (uint64, error) {
+	var totalBytes uint64
+	err := t.db.Model(&models.UserUsageDetail{}).
+		Where("user_id = ? AND type = ?", userID, usageType).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&totalBytes).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total bytes for type %s: %w", usageType, err)
+	}
+
+	return totalBytes, nil
 }
 
 // getDefaultQuotaPlan retrieves the default quota plan

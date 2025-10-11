@@ -66,6 +66,9 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 
 // CheckDownloadQuota checks if a download operation is allowed under hard limits policy
 func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if err := h.validateUserID(config.UserID); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
 	if err := h.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -105,6 +108,9 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 
 // CheckStorageQuota checks if a storage operation is allowed under hard limits policy
 func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if err := h.validateUserID(config.UserID); err != nil {
+		return pluginCore.QuotaCheckResult{}, err
+	}
 	if err := h.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -375,9 +381,9 @@ func (h *HardLimitsPolicyEnforcer) getEffectiveLimits(config *models.UserQuotaCo
 			limits.DownloadTotalLimit = &plan.DownloadTotalLimit
 		}
 	} else {
-		// If no plan assigned, check for default plan
+		// If no plan assigned, check for default plan that is active
 		var defaultPlan models.QuotaPlan
-		err := h.db.Where("is_default = true").First(&defaultPlan).Error
+		err := h.db.Where("is_default = true AND is_active = true").First(&defaultPlan).Error
 		if err == nil {
 			// Only set limits that aren't already set by custom config (with validation)
 			if limits.StorageLimit == nil && defaultPlan.StorageLimit > 0 {

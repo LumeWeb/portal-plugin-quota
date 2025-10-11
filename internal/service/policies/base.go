@@ -229,77 +229,76 @@ func (b *BasePolicyEnforcer) updateDailyUsage(userID uint, usageType models.Usag
 
 	today := time.Now().Truncate(24 * time.Hour)
 
-	return b.db.Transaction(func(tx *gorm.DB) error {
-		// Try to find existing daily quota record with row locking
-		var dailyQuota models.UserQuota
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
+	// Create the daily quota record with initial values
+	dailyQuota := models.UserQuota{
+		UserID: userID,
+		Date:   today,
+	}
 
-		if err == gorm.ErrRecordNotFound {
-			// Create new daily quota record
-			dailyQuota = models.UserQuota{
-				UserID: userID,
-				Date:   today,
-			}
-
-			// Set the appropriate field based on usage type
-			switch usageType {
-			case models.UsageTypeUpload:
-				if bytes > 0 {
-					dailyQuota.BytesUploaded = uint64(bytes)
-				}
-			case models.UsageTypeDownload:
-				if bytes > 0 {
-					dailyQuota.BytesDownloaded = uint64(bytes)
-				}
-			case models.UsageTypeStorageAdd:
-				if bytes > 0 {
-					dailyQuota.BytesStored = uint64(bytes)
-				}
-			case models.UsageTypeStorageRemove:
-				// For storage removal, we start with 0 and apply negative delta
-				if bytes < 0 {
-					dailyQuota.BytesStored = 0
-				}
-			}
-
-			return tx.Create(&dailyQuota).Error
-		} else if err != nil {
-			return err
+	// Set the appropriate field based on usage type
+	switch usageType {
+	case models.UsageTypeUpload:
+		if bytes > 0 {
+			dailyQuota.BytesUploaded = uint64(bytes)
 		}
+	case models.UsageTypeDownload:
+		if bytes > 0 {
+			dailyQuota.BytesDownloaded = uint64(bytes)
+		}
+	case models.UsageTypeStorageAdd:
+		if bytes > 0 {
+			dailyQuota.BytesStored = uint64(bytes)
+		}
+	case models.UsageTypeStorageRemove:
+		// For storage removal, we start with 0 and apply negative delta
+		if bytes < 0 {
+			dailyQuota.BytesStored = 0
+		}
+	}
 
-		// Update existing daily quota record
-		switch usageType {
-		case models.UsageTypeUpload:
-			// Only add positive bytes for upload
-			if bytes > 0 {
-				dailyQuota.BytesUploaded += uint64(bytes)
-			}
-		case models.UsageTypeDownload:
-			// Only add positive bytes for download
-			if bytes > 0 {
-				dailyQuota.BytesDownloaded += uint64(bytes)
-			}
-		case models.UsageTypeStorageAdd, models.UsageTypeStorageRemove:
+	// Use upsert to handle concurrent access atomically
+	return b.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "date"}},
+		DoUpdates: clause.Assignments(b.getUpdateAssignments(usageType, bytes)),
+	}).Create(&dailyQuota).Error
+}
+
+// getUpdateAssignments returns the assignments for updating quota values atomically
+func (b *BasePolicyEnforcer) getUpdateAssignments(usageType models.UsageType, bytes int64) map[string]interface{} {
+	assignments := make(map[string]interface{})
+
+	switch usageType {
+	case models.UsageTypeUpload:
+		if bytes > 0 {
+			assignments["bytes_uploaded"] = gorm.Expr("bytes_uploaded + ?", bytes)
+		}
+	case models.UsageTypeDownload:
+		if bytes > 0 {
+			assignments["bytes_downloaded"] = gorm.Expr("bytes_downloaded + ?", bytes)
+		}
+	case models.UsageTypeStorageAdd:
+		if bytes > 0 {
+			assignments["bytes_stored"] = gorm.Expr("bytes_stored + ?", bytes)
+		}
+	case models.UsageTypeStorageRemove:
+		if bytes < 0 {
 			// Apply signed delta and clamp to 0 minimum
-			newStored := int64(dailyQuota.BytesStored) + bytes
-			if newStored < 0 {
-				dailyQuota.BytesStored = 0
-			} else {
-				dailyQuota.BytesStored = uint64(newStored)
-			}
+			assignments["bytes_stored"] = gorm.Expr("CASE WHEN bytes_stored + ? < 0 THEN 0 ELSE bytes_stored + ? END", bytes, bytes)
 		}
+	}
 
-		return tx.Save(&dailyQuota).Error
-	})
+	return assignments
 }
 
 // Helper functions
 
 // convertUsageTypeMap converts models.UsageType map to core.UsageType map
 func convertUsageTypeMap(input map[models.UsageType]uint64) map[pluginCore.UsageType]uint64 {
-	return lo.MapEntries(input, func(k models.UsageType, v uint64) (pluginCore.UsageType, uint64) {
-		return pluginCore.UsageType(k), v
-	})
+	output := make(map[pluginCore.UsageType]uint64)
+	for k, v := range input {
+		output[pluginCore.UsageType(k)] = v
+	}
+	return output
 }
 
 // createQuotaCheckResult creates a standard quota check result

@@ -7,18 +7,18 @@ import (
 // QuotaPlan - Reusable quota configuration templates (for subscription-style models)
 type QuotaPlan struct {
 	gorm.Model
-	Name                   string    `gorm:"uniqueIndex"`
-	Description            string
-	StorageLimit           int64
-	UploadDailyLimit       int64
-	DownloadDailyLimit     int64
-	UploadTotalLimit       int64
-	DownloadTotalLimit     int64
-	StorageThreshold       *int64
-	UploadThreshold        *int64
-	DownloadThreshold      *int64
-	IsDefault              bool
-	IsActive               bool
+	Name               string `gorm:"uniqueIndex"`
+	Description        string
+	StorageLimit       int64
+	UploadDailyLimit   int64
+	DownloadDailyLimit int64
+	UploadTotalLimit   int64
+	DownloadTotalLimit int64
+	StorageThreshold   *int64
+	UploadThreshold    *int64
+	DownloadThreshold  *int64
+	IsDefault          bool
+	IsActive           *bool
 }
 
 // BeforeCreate validates the QuotaPlan model before creation
@@ -79,7 +79,6 @@ func (q *QuotaPlan) validate() error {
 	if q.DownloadTotalLimit < -1 {
 		return ErrInvalidDownloadTotalLimit
 	}
-	
 
 	return nil
 }

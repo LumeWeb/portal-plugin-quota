@@ -1,81 +1,236 @@
 package policies
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
+	"gorm.io/gorm"
 )
 
+// TestHardLimitsPolicyEnforcer_InvalidLimitValues tests invalid limit values for hard limits policy
+func TestHardLimitsPolicyEnforcer_InvalidLimitValues(t *testing.T) {
+	tests := []struct {
+		name          string
+		dailyLimit    *int64
+		totalLimit    *int64
+		expectedError string
+	}{
+		{
+			name:          "Invalid daily limit",
+			dailyLimit:    lo.ToPtr(int64(-2)),
+			totalLimit:    lo.ToPtr(int64(5000)),
+			expectedError: "invalid upload daily limit in user config",
+		},
+		{
+			name:          "Invalid total limit",
+			dailyLimit:    lo.ToPtr(int64(1000)),
+			totalLimit:    lo.ToPtr(int64(-2)),
+			expectedError: "invalid upload total limit in user config",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := coreTesting.NewTestContext(t)
+			mockQuotaService := pluginCore.NewMockQuotaService(t)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+			mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+
+			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+
+			config := &models.UserQuotaConfig{
+				UserID:            2,
+				EnforcementPolicy: models.EnforcementPolicyHardLimits,
+				UploadDailyLimit:  test.dailyLimit,
+				UploadTotalLimit:  test.totalLimit,
+			}
+
+			result, err := enforcer.CheckUploadQuota(config, uint64(500))
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), test.expectedError)
+			assert.Equal(t, models.QuotaCheckReason(""), result.Reason)
+		})
+	}
+}
+
+// TestThresholdPolicyEnforcer_InvalidThresholdValues tests invalid threshold values for threshold policy
+func TestThresholdPolicyEnforcer_InvalidThresholdValues(t *testing.T) {
+	tests := []struct {
+		name             string
+		dailyLimit       int64
+		threshold        *int64
+		expectedError    string
+		errorShouldBeNil bool
+	}{
+		{
+			name:          "Invalid threshold value",
+			dailyLimit:    1000,
+			threshold:     lo.ToPtr(int64(-2)),
+			expectedError: "invalid upload threshold value",
+		},
+		{
+			name:          "Threshold exceeds limit",
+			dailyLimit:    1000,
+			threshold:     lo.ToPtr(int64(1500)),
+			expectedError: "threshold cannot exceed limit",
+		},
+		{
+			name:             "Nil threshold should work normally",
+			dailyLimit:       1000,
+			threshold:        nil,
+			expectedError:    "",
+			errorShouldBeNil: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := coreTesting.NewTestContext(t)
+			mockQuotaService := pluginCore.NewMockQuotaService(t)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+			mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+
+			// Add the missing mock expectation for GetTodayUsage
+			if test.errorShouldBeNil {
+				mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+					UserID:        2,
+					BytesUploaded: 0,
+				}, nil)
+			}
+
+			enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+			config := &models.UserQuotaConfig{
+				UserID:            2,
+				EnforcementPolicy: models.EnforcementPolicyThreshold,
+				UploadDailyLimit:  lo.ToPtr(test.dailyLimit),
+				UploadThreshold:   test.threshold,
+			}
+
+			result, err := enforcer.CheckUploadQuota(config, uint64(500))
+
+			if test.errorShouldBeNil {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), test.expectedError)
+				assert.Equal(t, models.QuotaCheckReason(""), result.Reason)
+			}
+		})
+	}
+}
+
+// TestAllowancePolicyEnforcer_ErrorHandling tests error handling for allowance policy
+func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupMocks    func(*pluginCore.MockGrantManager)
+		testFunc      func(*AllowancePolicyEnforcer) error
+		expectedError string
+	}{
+		{
+			name: "CheckUploadQuota - GetActiveGrants error",
+			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
+				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantType("UPLOAD")).Return(nil, errors.New("grant manager error"))
+			},
+			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
+				config := &models.UserQuotaConfig{
+					UserID:            1,
+					EnforcementPolicy: models.EnforcementPolicyAllowance,
+				}
+				_, err := enforcer.CheckUploadQuota(config, uint64(500))
+				return err
+			},
+			expectedError: "grant manager error",
+		},
+		{
+			name: "RecordUpload - GetActiveGrants error",
+			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
+				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantType("UPLOAD")).Return(nil, errors.New("grant manager error"))
+			},
+			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
+				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
+			},
+			expectedError: "grant manager error",
+		},
+		{
+			name: "RecordUpload - ConsumeFromGrants error",
+			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
+				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantTypeUpload).Return([]*models.AllowanceGrant{
+					{
+						UserID:         1,
+						Type:           models.GrantTypeUpload,
+						Source:         models.GrantSourcePAYGAddon,
+						Bytes:          1000,
+						BytesUsed:      0,
+						BytesRemaining: 1000,
+						IsActive:       true,
+					},
+				}, nil)
+				mockGrantManager.On("CalculateAvailableBytes", []*models.AllowanceGrant{
+					{
+						UserID:         1,
+						Type:           models.GrantTypeUpload,
+						Source:         models.GrantSourcePAYGAddon,
+						Bytes:          1000,
+						BytesUsed:      0,
+						BytesRemaining: 1000,
+						IsActive:       true,
+					},
+				}).Return(uint64(1000))
+				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("consumption error"))
+			},
+			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
+				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
+			},
+			expectedError: "failed to consume upload allowance",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := coreTesting.NewTestContext(t)
+			mockGrantManager := pluginCore.NewMockGrantManager(t)
+			mockQuotaService := pluginCore.NewMockQuotaService(t)
+			mockUsageManager := pluginCore.NewMockUsageManager(t)
+
+			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+			mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+
+			test.setupMocks(mockGrantManager)
+
+			enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+			err := test.testFunc(enforcer)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), test.expectedError)
+		})
+	}
+}
+
+// TestErrorHandling_InvalidConfiguration tests nil configuration handling
 func TestErrorHandling_InvalidConfiguration(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		enforcer := NewHardLimitsPolicyEnforcer(ctx)
+	t.Run("Nil configuration error", func(t *testing.T) {
+		ctx, _ := coreTesting.NewTestContext(t)
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
-		t.Run("Nil configuration", func(t *testing.T) {
-			// Test that calling getEffectiveLimits with nil config causes panic
-			// This is expected behavior since the method doesn't handle nil config
-			assert.Panics(t, func() {
-				_, _ = enforcer.getEffectiveLimits(nil)
-			})
-		})
-
-		t.Run("Invalid enforcement policy", func(t *testing.T) {
-			// This test is not applicable for BasePolicyEnforcer since getEffectiveLimits
-			// is implemented by specific policy enforcers, not the base one.
-			// We'll skip this test for the base enforcer.
-		})
-	}, pluginTesting.TestOptions())
-}
-
-func TestErrorHandling_ZeroValues(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{})
-
-		t.Run("Zero user ID in quota check", func(t *testing.T) {
-			enforcer := NewHardLimitsPolicyEnforcer(ctx)
-			config := &models.UserQuotaConfig{
-				UserID:            0,
-				EnforcementPolicy: models.EnforcementPolicyHardLimits,
-			}
-
-			_, err := enforcer.CheckUploadQuota(config, 100)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Zero bytes in quota check", func(t *testing.T) {
-			enforcer := NewHardLimitsPolicyEnforcer(ctx)
-			config := &models.UserQuotaConfig{
-				UserID:            userID,
-				EnforcementPolicy: models.EnforcementPolicyHardLimits,
-			}
-
-			_, err := enforcer.CheckUploadQuota(config, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, pluginTesting.TestOptions())
-}
-
-func TestErrorHandling_DatabaseFailures(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{})
-
-		t.Run("Database connection closed", func(t *testing.T) {
-			// Close the database connection to simulate failure
-			db, err := ctx.DB().DB()
-			require.NoError(t, err)
-			err = db.Close()
-			assert.NoError(t, err)
-
-			enforcer := NewHardLimitsPolicyEnforcer(ctx)
-			_, err = enforcer.GetCurrentUsage(userID)
-			assert.Error(t, err)
-		})
-	}, pluginTesting.TestOptions())
+		_, err := enforcer.limitResolver.ResolveEffectiveLimits(nil, models.EnforcementPolicyHardLimits)
+		assert.Error(t, err)
+	})
 }

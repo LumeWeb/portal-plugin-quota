@@ -9,7 +9,7 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	"go.lumeweb.com/portal/core"
+	portalCore "go.lumeweb.com/portal/core"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -18,25 +18,30 @@ import (
 // UsageManager handles centralized usage recording and shared usage calculations
 // Implements core.UsageManager interface
 type UsageManager struct {
-	ctx           core.Context
+	ctx           portalCore.Context
 	db            *gorm.DB
-	logger        *core.Logger
+	logger        *portalCore.Logger
 	config        *config.QuotaConfig
-	pinService    core.PinService
-	uploadService core.UploadService
+	pinService    portalCore.PinService
+	uploadService portalCore.UploadService
+}
+
+// UsageAggregator aggregates usage data across time periods
+type UsageAggregator interface {
+	GetAggregatedUsageByType(userID uint, usageType pluginModels.UsageType) (uint64, error)
 }
 
 // NewUsageManager creates a new usage manager
-func NewUsageManager(ctx core.Context) *UsageManager {
-	quotaConfig := core.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
+func NewUsageManager(ctx portalCore.Context) *UsageManager {
+	quotaConfig := portalCore.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
 
 	return &UsageManager{
 		ctx:           ctx,
 		db:            ctx.DB(),
 		logger:        ctx.NamedLogger("quota.UsageManager"),
 		config:        quotaConfig,
-		pinService:    core.GetService[core.PinService](ctx, core.PIN_SERVICE),
-		uploadService: core.GetService[core.UploadService](ctx, core.UPLOAD_SERVICE),
+		pinService:    portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
+		uploadService: portalCore.GetService[portalCore.UploadService](ctx, portalCore.UPLOAD_SERVICE),
 	}
 }
 
@@ -61,16 +66,155 @@ func (um *UsageManager) RecordUpload(userID, uploadID uint, bytes uint64, ip str
 		Timestamp:  time.Now(),
 	}
 
-	if err := um.recordUserUsageDetail(detail); err != nil {
+	if err := um.RecordUserUsageDetail(detail); err != nil {
 		return fmt.Errorf("failed to record upload usage detail: %w", err)
 	}
 
 	// Update daily usage
-	if err := um.updateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(bytes)); err != nil {
+	if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(bytes)); err != nil {
 		return fmt.Errorf("failed to update daily upload usage: %w", err)
 	}
 
 	return nil
+}
+
+// GetUserQuotaConfig returns the quota configuration for a user
+func (um *UsageManager) GetUserQuotaConfig(userID uint) (*pluginModels.UserQuotaConfig, error) {
+	if err := um.validateUserID(userID); err != nil {
+		return nil, err
+	}
+
+	var config pluginModels.UserQuotaConfig
+	err := um.db.Where("user_id = ?", userID).First(&config).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Create default config if none exists
+			config = pluginModels.UserQuotaConfig{
+				UserID:            userID,
+				EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+			}
+
+			// Save the default config
+			if createErr := um.db.Create(&config).Error; createErr != nil {
+				return nil, fmt.Errorf("failed to create default quota config: %w", createErr)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to get user quota config: %w", err)
+		}
+	}
+
+	return &config, nil
+}
+
+// GetAggregatedUsageByType returns the aggregated usage for a specific user and usage type
+func (um *UsageManager) GetAggregatedUsageByType(userID uint, usageType pluginModels.UsageType) (uint64, error) {
+	if err := um.validateUserID(userID); err != nil {
+		return 0, err
+	}
+
+	var total uint64
+	err := um.db.Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ?", userID, usageType).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&total).Error
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to aggregate usage by type: %w", err)
+	}
+
+	return total, nil
+}
+
+// GetUsageHistory returns usage history for a user
+func (um *UsageManager) GetUsageHistory(userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
+	if err := um.validateUserID(userID); err != nil {
+		return nil, err
+	}
+
+	if period <= 0 {
+		return nil, fmt.Errorf("period must be positive")
+	}
+
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -period)
+
+	var usageDetails []pluginModels.UserUsageDetail
+	err := um.db.Where("user_id = ? AND type = ? AND timestamp BETWEEN ? AND ?",
+		userID, pluginModels.UsageType(usageType), startDate, endDate).
+		Order("timestamp ASC").
+		Find(&usageDetails).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get usage history: %w", err)
+	}
+
+	var usagePoints []*pluginCore.UsagePoint
+	for _, detail := range usageDetails {
+		usagePoints = append(usagePoints, &pluginCore.UsagePoint{
+			Date:  detail.Timestamp,
+			Bytes: detail.Bytes,
+		})
+	}
+
+	return usagePoints, nil
+}
+
+// GetDetailedUsage returns detailed usage records for a user within a time range
+func (um *UsageManager) GetDetailedUsage(userID uint, start, end time.Time) ([]*pluginCore.UserUsageDetail, error) {
+	if err := um.validateUserID(userID); err != nil {
+		return nil, err
+	}
+
+	if start.After(end) {
+		return nil, fmt.Errorf("start time must be before end time")
+	}
+
+	var usageDetails []pluginModels.UserUsageDetail
+	err := um.db.Where("user_id = ? AND timestamp BETWEEN ? AND ?", userID, start, end).
+		Order("timestamp ASC").
+		Find(&usageDetails).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get detailed usage: %w", err)
+	}
+
+	var coreUsageDetails []*pluginCore.UserUsageDetail
+	for _, detail := range usageDetails {
+		coreUsageDetails = append(coreUsageDetails, &pluginCore.UserUsageDetail{
+			Model: gorm.Model{
+				ID:        detail.ID,
+				CreatedAt: detail.CreatedAt,
+				UpdatedAt: detail.UpdatedAt,
+				DeletedAt: detail.DeletedAt,
+			},
+			UserID:     detail.UserID,
+			UploadID:   detail.UploadID,
+			Type:       pluginCore.UsageType(detail.Type),
+			Bytes:      detail.Bytes,
+			IP:         detail.IP,
+			SharedWith: detail.SharedWith,
+			Timestamp:  detail.Timestamp,
+		})
+	}
+
+	return coreUsageDetails, nil
+}
+
+// GetTotalBytesByType retrieves the total bytes consumed for a specific usage type across all time
+func (um *UsageManager) GetTotalBytesByType(userID uint, usageType pluginCore.UsageType) (uint64, error) {
+	if err := um.validateUserID(userID); err != nil {
+		return 0, err
+	}
+
+	var totalBytes uint64
+	err := um.db.Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ?", userID, pluginModels.UsageType(usageType)).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&totalBytes).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total bytes for type %s: %w", usageType, err)
+	}
+
+	return totalBytes, nil
 }
 
 // RecordDownload records download usage for a user
@@ -112,12 +256,12 @@ func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip s
 		Timestamp:  time.Now(),
 	}
 
-	if err := um.recordUserUsageDetail(detail); err != nil {
+	if err := um.RecordUserUsageDetail(detail); err != nil {
 		return fmt.Errorf("failed to record download usage detail: %w", err)
 	}
 
 	// Update daily usage with the actual bytes consumed by this user
-	if err := um.updateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(sharedBytes)); err != nil {
+	if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(sharedBytes)); err != nil {
 		return fmt.Errorf("failed to update daily download usage: %w", err)
 	}
 
@@ -160,7 +304,7 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 		Timestamp:  time.Now(),
 	}
 
-	if err := um.recordUserUsageDetail(detail); err != nil {
+	if err := um.RecordUserUsageDetail(detail); err != nil {
 		return fmt.Errorf("failed to record storage usage detail: %w", err)
 	}
 
@@ -173,7 +317,7 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 		dailyUsageBytes = int64(sharedBytes)
 	}
 
-	if err := um.updateDailyUsage(userID, usageType, dailyUsageBytes); err != nil {
+	if err := um.UpdateDailyUsage(userID, usageType, dailyUsageBytes); err != nil {
 		return fmt.Errorf("failed to update daily storage usage: %w", err)
 	}
 
@@ -236,32 +380,33 @@ func (um *UsageManager) calculateSharedBytes(totalBytes uint64, userCount uint, 
 
 	// Calculate base shared bytes
 	baseFloat := float64(totalBytes) / float64(userCount)
-	
-	// For precision 0, do exact division
-	if precision == 0 {
-		return uint64(baseFloat)
+
+	// Apply precision for rounding, then scale back to actual bytes
+	var roundedBytes uint64
+	if precision > 0 {
+		multiplier := math.Pow10(precision)
+		scaledFloat := baseFloat * multiplier
+		roundedScaled := math.Ceil(scaledFloat)
+		roundedBytes = uint64(math.Ceil(roundedScaled / multiplier))
+	} else {
+		roundedBytes = uint64(baseFloat) // Floor division for precision 0
 	}
-	
-	// Apply precision scaling and round up
-	multiplier := math.Pow10(precision)
-	scaledFloat := baseFloat * multiplier
-	roundedBytes := uint64(math.Ceil(scaledFloat))
-	
-	// Ensure minimum of 1 byte when totalBytes > 0 and userCount > 0
-	if roundedBytes == 0 && totalBytes > 0 && userCount > 0 {
+
+	// Ensure minimum of 1 byte when using precision and totalBytes > 0 and userCount > 0
+	if precision > 0 && roundedBytes == 0 && totalBytes > 0 && userCount > 0 {
 		roundedBytes = 1
 	}
 
 	return roundedBytes
 }
 
-// recordUserUsageDetail records a detailed usage record
-func (um *UsageManager) recordUserUsageDetail(detail *pluginModels.UserUsageDetail) error {
+// RecordUserUsageDetail records a detailed usage record
+func (um *UsageManager) RecordUserUsageDetail(detail *pluginModels.UserUsageDetail) error {
 	return um.db.Create(detail).Error
 }
 
-// updateDailyUsage updates the daily aggregated usage for a user
-func (um *UsageManager) updateDailyUsage(userID uint, usageType pluginModels.UsageType, bytes int64) error {
+// UpdateDailyUsage updates the daily aggregated usage for a user
+func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.UsageType, bytes int64) error {
 	if err := um.validateUserID(userID); err != nil {
 		return err
 	}
@@ -340,28 +485,85 @@ func (um *UsageManager) validateUserID(userID uint) error {
 }
 
 // GetCurrentUsage retrieves the current daily usage for a user
-func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginModels.UserQuota, error) {
+func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) {
 	if err := um.validateUserID(userID); err != nil {
 		return nil, err
 	}
 
 	today := time.Now().Truncate(24 * time.Hour)
-	var dailyQuota pluginModels.UserQuota
+	tomorrow := today.Add(24 * time.Hour)
 
-	err := um.db.Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
+	// Get uploaded bytes for today
+	var bytesUploaded uint64
+	err := um.db.Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeUpload, today, tomorrow).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&bytesUploaded).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Return empty quota record if none found for today
-			dailyQuota = pluginModels.UserQuota{
-				UserID: userID,
-				Date:   today,
-			}
-			return &dailyQuota, nil
-		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get uploaded bytes: %w", err)
 	}
 
-	return &dailyQuota, nil
+	// Get downloaded bytes for today
+	var bytesDownloaded uint64
+	err = um.db.Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeDownload, today, tomorrow).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&bytesDownloaded).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get downloaded bytes: %w", err)
+	}
+
+	// Get storage add bytes for today
+	var bytesStoredAdd uint64
+	err = um.db.Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeStorageAdd, today, tomorrow).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&bytesStoredAdd).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage add bytes: %w", err)
+	}
+
+	// Get storage remove bytes for today
+	var bytesStoredRemove uint64
+	err = um.db.Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeStorageRemove, today, tomorrow).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&bytesStoredRemove).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage remove bytes: %w", err)
+	}
+
+	// Calculate net stored bytes
+	var bytesStored uint64
+	if bytesStoredAdd > bytesStoredRemove {
+		bytesStored = bytesStoredAdd - bytesStoredRemove
+	}
+
+	// Get aggregated usage by type
+	usageByType := make(map[pluginCore.UsageType]uint64)
+	for _, usageType := range []pluginModels.UsageType{
+		pluginModels.UsageTypeUpload,
+		pluginModels.UsageTypeDownload,
+		pluginModels.UsageTypeStorageAdd,
+		pluginModels.UsageTypeStorageRemove,
+	} {
+		bytes, err := um.GetAggregatedUsageByType(userID, usageType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get aggregated usage: %w", err)
+		}
+		usageByType[pluginCore.UsageType(usageType)] = bytes
+	}
+
+	usage := &pluginCore.Usage{
+		UserID:          userID,
+		BytesUploaded:   bytesUploaded,
+		BytesDownloaded: bytesDownloaded,
+		BytesStored:     bytesStored,
+		LastUpdated:     time.Now(),
+		UsageByType:     usageByType,
+	}
+
+	return usage, nil
 }
 
 // validateBytes validates that bytes value is valid (not zero)

@@ -837,6 +837,52 @@ func (_c *MockQuotaService_GetDetailedUsage_Call) RunAndReturn(run func(userID u
 	return _c
 }
 
+// GetGrantManager provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetGrantManager() GrantManager {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGrantManager")
+	}
+
+	var r0 GrantManager
+	if returnFunc, ok := ret.Get(0).(func() GrantManager); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(GrantManager)
+		}
+	}
+	return r0
+}
+
+// MockQuotaService_GetGrantManager_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetGrantManager'
+type MockQuotaService_GetGrantManager_Call struct {
+	*mock.Call
+}
+
+// GetGrantManager is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) GetGrantManager() *MockQuotaService_GetGrantManager_Call {
+	return &MockQuotaService_GetGrantManager_Call{Call: _e.mock.On("GetGrantManager")}
+}
+
+func (_c *MockQuotaService_GetGrantManager_Call) Run(run func()) *MockQuotaService_GetGrantManager_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetGrantManager_Call) Return(grantManager GrantManager) *MockQuotaService_GetGrantManager_Call {
+	_c.Call.Return(grantManager)
+	return _c
+}
+
+func (_c *MockQuotaService_GetGrantManager_Call) RunAndReturn(run func() GrantManager) *MockQuotaService_GetGrantManager_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetQuotaConfig provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetQuotaConfig(userID uint) (*UserQuotaConfig, error) {
 	ret := _mock.Called(userID)
@@ -961,6 +1007,160 @@ func (_c *MockQuotaService_GetQuotaPlan_Call) RunAndReturn(run func(planID uint)
 	return _c
 }
 
+// GetQuotaPlanManager provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetQuotaPlanManager() QuotaPlanManager {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetQuotaPlanManager")
+	}
+
+	var r0 QuotaPlanManager
+	if returnFunc, ok := ret.Get(0).(func() QuotaPlanManager); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(QuotaPlanManager)
+		}
+	}
+	return r0
+}
+
+// MockQuotaService_GetQuotaPlanManager_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetQuotaPlanManager'
+type MockQuotaService_GetQuotaPlanManager_Call struct {
+	*mock.Call
+}
+
+// GetQuotaPlanManager is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) GetQuotaPlanManager() *MockQuotaService_GetQuotaPlanManager_Call {
+	return &MockQuotaService_GetQuotaPlanManager_Call{Call: _e.mock.On("GetQuotaPlanManager")}
+}
+
+func (_c *MockQuotaService_GetQuotaPlanManager_Call) Run(run func()) *MockQuotaService_GetQuotaPlanManager_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetQuotaPlanManager_Call) Return(quotaPlanManager QuotaPlanManager) *MockQuotaService_GetQuotaPlanManager_Call {
+	_c.Call.Return(quotaPlanManager)
+	return _c
+}
+
+func (_c *MockQuotaService_GetQuotaPlanManager_Call) RunAndReturn(run func() QuotaPlanManager) *MockQuotaService_GetQuotaPlanManager_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetTodayUsage provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetTodayUsage(userID uint) (*Usage, error) {
+	ret := _mock.Called(userID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTodayUsage")
+	}
+
+	var r0 *Usage
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(uint) (*Usage, error)); ok {
+		return returnFunc(userID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(uint) *Usage); ok {
+		r0 = returnFunc(userID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*Usage)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
+		r1 = returnFunc(userID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQuotaService_GetTodayUsage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTodayUsage'
+type MockQuotaService_GetTodayUsage_Call struct {
+	*mock.Call
+}
+
+// GetTodayUsage is a helper method to define mock.On call
+//   - userID uint
+func (_e *MockQuotaService_Expecter) GetTodayUsage(userID interface{}) *MockQuotaService_GetTodayUsage_Call {
+	return &MockQuotaService_GetTodayUsage_Call{Call: _e.mock.On("GetTodayUsage", userID)}
+}
+
+func (_c *MockQuotaService_GetTodayUsage_Call) Run(run func(userID uint)) *MockQuotaService_GetTodayUsage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetTodayUsage_Call) Return(usage *Usage, err error) *MockQuotaService_GetTodayUsage_Call {
+	_c.Call.Return(usage, err)
+	return _c
+}
+
+func (_c *MockQuotaService_GetTodayUsage_Call) RunAndReturn(run func(userID uint) (*Usage, error)) *MockQuotaService_GetTodayUsage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetUsageAggregator provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetUsageAggregator() UsageAggregator {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUsageAggregator")
+	}
+
+	var r0 UsageAggregator
+	if returnFunc, ok := ret.Get(0).(func() UsageAggregator); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(UsageAggregator)
+		}
+	}
+	return r0
+}
+
+// MockQuotaService_GetUsageAggregator_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageAggregator'
+type MockQuotaService_GetUsageAggregator_Call struct {
+	*mock.Call
+}
+
+// GetUsageAggregator is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) GetUsageAggregator() *MockQuotaService_GetUsageAggregator_Call {
+	return &MockQuotaService_GetUsageAggregator_Call{Call: _e.mock.On("GetUsageAggregator")}
+}
+
+func (_c *MockQuotaService_GetUsageAggregator_Call) Run(run func()) *MockQuotaService_GetUsageAggregator_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetUsageAggregator_Call) Return(usageAggregator UsageAggregator) *MockQuotaService_GetUsageAggregator_Call {
+	_c.Call.Return(usageAggregator)
+	return _c
+}
+
+func (_c *MockQuotaService_GetUsageAggregator_Call) RunAndReturn(run func() UsageAggregator) *MockQuotaService_GetUsageAggregator_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetUsageHistory provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetUsageHistory(userID uint, period int, usageType UsageType) ([]*UsagePoint, error) {
 	ret := _mock.Called(userID, period, usageType)
@@ -1031,6 +1231,96 @@ func (_c *MockQuotaService_GetUsageHistory_Call) Return(usagePoints []*UsagePoin
 }
 
 func (_c *MockQuotaService_GetUsageHistory_Call) RunAndReturn(run func(userID uint, period int, usageType UsageType) ([]*UsagePoint, error)) *MockQuotaService_GetUsageHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetUsageManager provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetUsageManager() UsageManager {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUsageManager")
+	}
+
+	var r0 UsageManager
+	if returnFunc, ok := ret.Get(0).(func() UsageManager); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(UsageManager)
+		}
+	}
+	return r0
+}
+
+// MockQuotaService_GetUsageManager_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageManager'
+type MockQuotaService_GetUsageManager_Call struct {
+	*mock.Call
+}
+
+// GetUsageManager is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) GetUsageManager() *MockQuotaService_GetUsageManager_Call {
+	return &MockQuotaService_GetUsageManager_Call{Call: _e.mock.On("GetUsageManager")}
+}
+
+func (_c *MockQuotaService_GetUsageManager_Call) Run(run func()) *MockQuotaService_GetUsageManager_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetUsageManager_Call) Return(usageManager UsageManager) *MockQuotaService_GetUsageManager_Call {
+	_c.Call.Return(usageManager)
+	return _c
+}
+
+func (_c *MockQuotaService_GetUsageManager_Call) RunAndReturn(run func() UsageManager) *MockQuotaService_GetUsageManager_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ID provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) ID() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for ID")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockQuotaService_ID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ID'
+type MockQuotaService_ID_Call struct {
+	*mock.Call
+}
+
+// ID is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) ID() *MockQuotaService_ID_Call {
+	return &MockQuotaService_ID_Call{Call: _e.mock.On("ID")}
+}
+
+func (_c *MockQuotaService_ID_Call) Run(run func()) *MockQuotaService_ID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_ID_Call) Return(s string) *MockQuotaService_ID_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MockQuotaService_ID_Call) RunAndReturn(run func() string) *MockQuotaService_ID_Call {
 	_c.Call.Return(run)
 	return _c
 }

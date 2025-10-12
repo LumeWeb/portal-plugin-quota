@@ -9,3 +9,5 @@ packages:
       PolicyEnforcer: {}
       QuotaService: {}
       UsageManager: {}
+      UsageAggregator: {}
+      QuotaPlanManager: {}

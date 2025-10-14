@@ -437,6 +437,20 @@ func RunInvalidLimitValueTests(t *testing.T, enforcer pluginCore.PolicyEnforcer,
 
 // RunUsageRecordingTests tests usage recording functionality
 func RunUsageRecordingTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, usageManager *pluginCore.MockUsageManager, userID, uploadID uint, bytes uint64, ip string) {
+	// Default unlimited config to allow recording without quota failures
+	usageManager.
+		On("GetUserQuotaConfig", userID).
+		Return(&models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyHardLimits,
+			StorageLimit:       lo.ToPtr(int64(-1)),
+			UploadDailyLimit:   lo.ToPtr(int64(-1)),
+			DownloadDailyLimit: lo.ToPtr(int64(-1)),
+			UploadTotalLimit:   lo.ToPtr(int64(-1)),
+			DownloadTotalLimit: lo.ToPtr(int64(-1)),
+		}, nil).
+		Maybe()
+
 	tests := []struct {
 		name        string
 		testFunc    func() error

@@ -3,7 +3,6 @@ package models
 import (
 	"time"
 
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 

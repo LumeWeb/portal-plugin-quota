@@ -67,8 +67,8 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
-		} else if usage.BytesUploaded+requestedBytes > limitValue {
-			// Normal limit check for positive values
+		} else if limitValue < usage.BytesUploaded || requestedBytes > limitValue-usage.BytesUploaded {
+			// Normal limit check for positive values using overflow-safe subtraction
 			return h.createFailureResult(
 				models.QuotaCheckReasonLimitExceeded,
 				models.EnforcementPolicyHardLimits,
@@ -100,8 +100,8 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
-		} else if aggregatedUsage+requestedBytes > limitValue {
-			// Normal limit check for positive values
+		} else if limitValue < aggregatedUsage || requestedBytes > limitValue-aggregatedUsage {
+			// Normal limit check for positive values using overflow-safe subtraction
 			return h.createFailureResult(
 				models.QuotaCheckReasonLimitExceeded,
 				models.EnforcementPolicyHardLimits,
@@ -156,8 +156,8 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
-		} else if usage.BytesDownloaded+requestedBytes > limitValue {
-			// Normal limit check for positive values
+		} else if limitValue < usage.BytesDownloaded || requestedBytes > limitValue-usage.BytesDownloaded {
+			// Normal limit check for positive values using overflow-safe subtraction
 			return h.createFailureResult(
 				models.QuotaCheckReasonLimitExceeded,
 				models.EnforcementPolicyHardLimits,
@@ -189,8 +189,8 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCo
 					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
-		} else if aggregatedUsage+requestedBytes > limitValue {
-			// Normal limit check for positive values
+		} else if limitValue < aggregatedUsage || requestedBytes > limitValue-aggregatedUsage {
+			// Normal limit check for positive values using overflow-safe subtraction
 			return h.createFailureResult(
 				models.QuotaCheckReasonLimitExceeded,
 				models.EnforcementPolicyHardLimits,
@@ -245,8 +245,8 @@ func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(config *models.UserQuotaCon
 					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
-		} else if usage.BytesStored+requestedBytes > limitValue {
-			// Normal limit check for positive values
+		} else if limitValue < usage.BytesStored || requestedBytes > limitValue-usage.BytesStored {
+			// Normal limit check for positive values using overflow-safe subtraction
 			return h.createFailureResult(
 				models.QuotaCheckReasonLimitExceeded,
 				models.EnforcementPolicyHardLimits,
@@ -292,7 +292,7 @@ func (h *HardLimitsPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes u
 	if err := h.validateUserID(userID); err != nil {
 		return err
 	}
-	if err := h.validateBytes(bytes); err != nil {
+	if err := h.validateRequestedBytes(bytes); err != nil {
 		return err
 	}
 
@@ -312,8 +312,8 @@ func (h *HardLimitsPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes u
 		return fmt.Errorf("download blocked: %s", result.Reason)
 	}
 
-	// Delegate to UsageManager for actual recording
-	return h.quotaService.GetUsageManager().RecordDownload(userID, uploadID, bytes, ip)
+	// Delegate to BasePolicyEnforcer for actual recording (includes validation)
+	return h.delegateRecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange records a storage change operation and enforces hard limits

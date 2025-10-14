@@ -137,26 +137,28 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 
 	t.Run("GetDetailedUsage", func(t *testing.T) {
 		userID := setup.dataManager.NextUserID()
-		start := time.Now().Add(-time.Hour)
-		end := time.Now().Add(time.Hour)
+		start := time.Now().UTC().Add(-time.Hour)
+		end := time.Now().UTC().Add(time.Hour)
+		earlierTime := time.Now().UTC().Add(-30 * time.Minute)
+		laterTime := time.Now().UTC()
 
-		// Set up mock expectations
+		// Set up mock expectations with chronological order
 		expectedDetails := []*models.UserUsageDetail{
-			{
-				UserID:    userID,
-				UploadID:  setup.dataManager.NextUploadID(),
-				Type:      models.UsageTypeUpload,
-				Bytes:     100,
-				IP:        "192.168.1.1",
-				Timestamp: time.Now(),
-			},
 			{
 				UserID:    userID,
 				UploadID:  setup.dataManager.NextUploadID(),
 				Type:      models.UsageTypeDownload,
 				Bytes:     200,
 				IP:        "192.168.1.2",
-				Timestamp: time.Now().Add(-30 * time.Minute),
+				Timestamp: earlierTime,
+			},
+			{
+				UserID:    userID,
+				UploadID:  setup.dataManager.NextUploadID(),
+				Type:      models.UsageTypeUpload,
+				Bytes:     100,
+				IP:        "192.168.1.1",
+				Timestamp: laterTime,
 			},
 		}
 
@@ -166,8 +168,8 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, details, 2)
 
-		// Verify the records are returned in descending order by timestamp
-		assert.True(t, details[0].Timestamp.After(details[1].Timestamp) || details[0].Timestamp.Equal(details[1].Timestamp))
+		// Verify the records are returned in ascending order by timestamp
+		assert.True(t, details[0].Timestamp.Before(details[1].Timestamp) || details[0].Timestamp.Equal(details[1].Timestamp))
 	})
 
 	t.Run("GetCurrentUsage", func(t *testing.T) {

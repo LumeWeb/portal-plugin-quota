@@ -15,11 +15,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Helper function to create pointer to int64
-func int64Ptr(v int64) *int64 {
-	return &v
-}
-
 // thresholdTestSetup holds common test setup components
 type thresholdTestSetup struct {
 	ctx                  coreTesting.TestContext
@@ -725,9 +720,7 @@ func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
 		}, nil).Once()
 
 		totalUsage := uint64(25000)
-		// First call during quota check
-		mockUsageManager.On("GetTotalBytesByType", userID, models.UsageTypeUpload).Return(totalUsage, nil).Once()
-		// Second call during success response creation
+		// Only one call expected during quota check
 		mockUsageManager.On("GetTotalBytesByType", userID, models.UsageTypeUpload).Return(totalUsage, nil).Once()
 
 		result, err := enforcer.CheckUploadQuota(config, uint64(100))
@@ -821,9 +814,7 @@ func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
 		}, nil).Once()
 
 		totalUsage := uint64(25000)
-		// First call during quota check
-		mockUsageManager.On("GetTotalBytesByType", userID, models.UsageTypeDownload).Return(totalUsage, nil).Once()
-		// Second call during success response creation
+		// Only one call expected during quota check
 		mockUsageManager.On("GetTotalBytesByType", userID, models.UsageTypeDownload).Return(totalUsage, nil).Once()
 
 		result, err := enforcer.CheckDownloadQuota(config, uint64(100))

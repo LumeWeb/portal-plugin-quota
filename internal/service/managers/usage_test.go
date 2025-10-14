@@ -2,6 +2,7 @@ package managers
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -1111,4 +1112,51 @@ func TestUsageManager_Validation_MultipleScenarios_Success(t *testing.T) {
 
 		dataManager.Cleanup()
 	}, testOptionsWithPrecision0())
+}
+
+// TestUsageManager_RecordStorageChange_MinInt64 tests handling of math.MinInt64 to prevent overflow
+func TestUsageManager_RecordStorageChange_MinInt64(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		dataManager := testdata.NewTestDataManager(ctx)
+		userID := dataManager.NextUserID()
+		uploadID := dataManager.NextUploadID()
+		ip := "192.168.1.1"
+
+		// Create test user
+		limits := &testdata.TestUserLimits{
+			StorageLimit:       nil,
+			UploadDailyLimit:   nil,
+			DownloadDailyLimit: nil,
+			UploadTotalLimit:   nil,
+			DownloadTotalLimit: nil,
+		}
+		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
+
+		usageManager := NewUsageManager(ctx)
+
+		// Test with math.MinInt64
+		bytes := int64(math.MinInt64)
+
+		// This should not cause an overflow panic when converting to uint64
+		err := usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
+		require.NoError(t, err)
+
+		// Verify that a record was created with the correct values
+		var details []pluginModels.UserUsageDetail
+		err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&details).Error
+		require.NoError(t, err)
+		assert.Len(t, details, 1)
+
+		detail := details[0]
+		assert.Equal(t, userID, detail.UserID)
+		assert.Equal(t, uploadID, detail.UploadID)
+		assert.Equal(t, pluginModels.UsageTypeStorageRemove, detail.Type)
+		// math.MinInt64 should be converted to math.MaxInt64
+		assert.Equal(t, uint64(math.MaxInt64), detail.Bytes)
+		assert.Equal(t, uint(1), detail.SharedWith)
+		assert.Equal(t, ip, detail.IP)
+		assert.WithinDuration(t, time.Now(), detail.Timestamp, time.Second*10)
+
+		dataManager.Cleanup()
+	}, pluginTesting.TestOptions())
 }

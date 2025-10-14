@@ -1,8 +1,9 @@
 package core
 
 import (
-	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"time"
+
+	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
 // QuotaCheckResult represents the result of a quota check
@@ -53,7 +54,7 @@ type EffectiveLimits struct {
 	UploadThreshold    *uint64           `json:"upload_threshold,omitempty"`
 	DownloadThreshold  *uint64           `json:"download_threshold,omitempty"`
 	QuotaPlanID        *uint64           `json:"quota_plan_id,omitempty"`
-	
+
 	// Track whether limits were explicitly configured (even if unlimited)
 	HasStorageLimitConfig       bool `json:"has_storage_limit_config"`
 	HasUploadDailyLimitConfig   bool `json:"has_upload_daily_limit_config"`

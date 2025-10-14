@@ -1,7 +1,6 @@
 package managers
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -63,7 +62,7 @@ func (um *UsageManager) RecordUpload(userID, uploadID uint, bytes uint64, ip str
 		Bytes:      bytes,
 		IP:         ip,
 		SharedWith: 1, // Only the uploader
-		Timestamp:  time.Now(),
+		Timestamp:  time.Now().UTC(),
 	}
 
 	if err := um.RecordUserUsageDetail(detail); err != nil {
@@ -84,24 +83,16 @@ func (um *UsageManager) GetUserQuotaConfig(userID uint) (*pluginModels.UserQuota
 		return nil, err
 	}
 
-	var config pluginModels.UserQuotaConfig
-	err := um.db.Where("user_id = ?", userID).First(&config).Error
+	// Use FirstOrCreate to prevent race conditions when multiple goroutines
+	// try to create the same user config simultaneously
+	config := pluginModels.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+	}
 
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Create default config if none exists
-			config = pluginModels.UserQuotaConfig{
-				UserID:            userID,
-				EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
-			}
-
-			// Save the default config
-			if createErr := um.db.Create(&config).Error; createErr != nil {
-				return nil, fmt.Errorf("failed to create default quota config: %w", createErr)
-			}
-		} else {
-			return nil, fmt.Errorf("failed to get user quota config: %w", err)
-		}
+	result := um.db.Where("user_id = ?", userID).FirstOrCreate(&config)
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to get or create user quota config: %w", result.Error)
 	}
 
 	return &config, nil
@@ -255,7 +246,7 @@ func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip s
 		Bytes:      sharedBytes,
 		IP:         ip,
 		SharedWith: sharedWith,
-		Timestamp:  time.Now(),
+		Timestamp:  time.Now().UTC(),
 	}
 
 	if err := um.RecordUserUsageDetail(detail); err != nil {
@@ -286,7 +277,12 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 
 	if bytes < 0 {
 		usageType = pluginModels.UsageTypeStorageRemove
-		recordBytes = uint64(-bytes)
+		// Handle math.MinInt64 case to prevent overflow when converting to uint64
+		if bytes == math.MinInt64 {
+			recordBytes = math.MaxInt64
+		} else {
+			recordBytes = uint64(-bytes)
+		}
 	} else {
 		usageType = pluginModels.UsageTypeStorageAdd
 		recordBytes = uint64(bytes)
@@ -303,7 +299,7 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 		Bytes:      sharedBytes,
 		IP:         ip,
 		SharedWith: sharedWith,
-		Timestamp:  time.Now(),
+		Timestamp:  time.Now().UTC(),
 	}
 
 	if err := um.RecordUserUsageDetail(detail); err != nil {
@@ -372,26 +368,17 @@ func (um *UsageManager) calculateSharedBytes(totalBytes uint64, userCount uint, 
 		return 0
 	}
 
-	// Ensure precision is within reasonable bounds
-	if precision < 0 {
-		precision = 0
-	}
-	if precision > 10 {
-		precision = 10
-	}
-
 	// Calculate base shared bytes
 	baseFloat := float64(totalBytes) / float64(userCount)
 
-	// Apply precision for rounding, then scale back to actual bytes
+	// Precision semantics:
+	//   0  -> floor to whole byte
+	//   >0 -> ceil to whole byte
 	var roundedBytes uint64
 	if precision > 0 {
-		multiplier := math.Pow10(precision)
-		scaledFloat := baseFloat * multiplier
-		roundedScaled := math.Ceil(scaledFloat)
-		roundedBytes = uint64(math.Ceil(roundedScaled / multiplier))
+		roundedBytes = uint64(math.Ceil(baseFloat))
 	} else {
-		roundedBytes = uint64(baseFloat) // Floor division for precision 0
+		roundedBytes = uint64(baseFloat) // floor
 	}
 
 	// Ensure minimum of 1 byte when using precision and totalBytes > 0 and userCount > 0
@@ -485,7 +472,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 		return nil, err
 	}
 
-	today := time.Now().Truncate(24 * time.Hour)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
 	tomorrow := today.Add(24 * time.Hour)
 
 	// Get uploaded bytes for today
@@ -554,7 +541,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 		BytesUploaded:   bytesUploaded,
 		BytesDownloaded: bytesDownloaded,
 		BytesStored:     bytesStored,
-		LastUpdated:     time.Now(),
+		LastUpdated:     time.Now().UTC(),
 		UsageByType:     usageByType,
 	}
 

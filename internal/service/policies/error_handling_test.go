@@ -157,7 +157,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - ConsumeFromGrants error",
+			name: "RecordUpload - ConsumeFromGrants returns generic error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
 				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("grant manager error"))
 			},
@@ -167,7 +167,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - ConsumeFromGrants error",
+			name: "RecordUpload - ConsumeFromGrants wraps as failed to consume upload allowance",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
 				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("consumption error"))
 			},

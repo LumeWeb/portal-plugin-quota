@@ -29,7 +29,7 @@ func (q *QuotaPlanManagerDefault) GetQuotaPlanByID(id uint64) (*models.QuotaPlan
 	q.logger.Debug("GetQuotaPlanByID: retrieving quota plan by ID", zap.Uint64("id", id))
 
 	var plan models.QuotaPlan
-	err := q.db.Where("id = ?", id).First(&plan).Error
+	err := q.db.First(&plan, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			q.logger.Debug("GetQuotaPlanByID: quota plan not found", zap.Uint64("id", id))

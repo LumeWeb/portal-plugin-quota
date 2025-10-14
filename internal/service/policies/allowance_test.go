@@ -9,7 +9,6 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"gorm.io/gorm"
 )
 
 // TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed tests the CheckUploadQuota method with sufficient allowance
@@ -329,6 +328,8 @@ func TestAllowancePolicyEnforcer_RecordUpload_GrantConsumptionFailure_Integratio
 	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to consume upload allowance")
+	// Ensure no recording happened
+	mockUsageManager.AssertNotCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
 
 	dataManager.Cleanup()
 }
@@ -350,20 +351,7 @@ func TestAllowancePolicyEnforcer_RecordDownload_SuccessfulRecording_Integration_
 	ip := "192.168.1.1"
 
 	// Set up mock expectations
-	grants := []*models.AllowanceGrant{
-		{
-			UserID:         userID,
-			Type:           models.GrantTypeDownload,
-			Source:         models.GrantSourcePAYGAddon,
-			Bytes:          1000,
-			BytesUsed:      0,
-			BytesRemaining: 1000,
-			IsActive:       true,
-		},
-	}
 	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
-	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeDownload).Return(grants, nil)
-	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes).Return([]*models.AllowanceConsumption{}, nil)
 	mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil)
 
@@ -393,25 +381,14 @@ func TestAllowancePolicyEnforcer_RecordDownload_GrantConsumptionFailure_Integrat
 	ip := "192.168.1.2"
 
 	// Set up mock expectations for failure
-	grants := []*models.AllowanceGrant{
-		{
-			UserID:         userID,
-			Type:           models.GrantTypeDownload,
-			Source:         models.GrantSourcePAYGAddon,
-			Bytes:          1000,
-			BytesUsed:      0,
-			BytesRemaining: 1000,
-			IsActive:       true,
-		},
-	}
 	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
-	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeDownload).Return(grants, nil)
-	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes).Return(nil, assert.AnError)
 
 	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to consume download allowance")
+	// Ensure no recording happened
+	mockUsageManager.AssertNotCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
 
 	dataManager.Cleanup()
 }
@@ -522,6 +499,8 @@ func TestAllowancePolicyEnforcer_RecordStorageChange_GrantConsumptionFailure_Int
 	err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to consume storage allowance")
+	// Ensure no recording happened
+	mockUsageManager.AssertNotCalled(t, "RecordStorageChange", userID, uploadID, bytes, ip)
 
 	dataManager.Cleanup()
 }
@@ -573,23 +552,8 @@ func TestAllowancePolicyEnforcer_RecordDownload_SufficientAllowance_Unit_Success
 	ip := "192.168.1.1"
 
 	// Set up mock expectations
-	grants := []*models.AllowanceGrant{
-		{
-			Model:          gorm.Model{},
-			UserID:         userID,
-			Type:           models.GrantTypeDownload,
-			Source:         models.GrantSourcePAYGAddon,
-			Bytes:          1000,
-			BytesUsed:      0,
-			BytesRemaining: 1000,
-			ExpiryDate:     nil,
-			IsActive:       true,
-		},
-	}
 	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
 	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeDownload).Return(grants, nil).Once()
-	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000)).Once()
 	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes).Return([]*models.AllowanceConsumption{}, nil).Once()
 	mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil).Once()
 

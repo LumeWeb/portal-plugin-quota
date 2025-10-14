@@ -54,7 +54,7 @@ func (b *BasePolicyEnforcer) validateRecordParams(userID, uploadID uint, bytes u
 	if uploadID == 0 {
 		return models.ErrInvalidUploadID
 	}
-	return b.validateBytes(bytes)
+	return b.validateRequestedBytes(bytes)
 }
 
 // validateStorageRecordParams validates common parameters for storage recording
@@ -93,14 +93,6 @@ func (b *BasePolicyEnforcer) delegateRecordStorageChange(userID, uploadID uint, 
 		return err
 	}
 	return b.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
-}
-
-// validateBytes validates that bytes value is valid (not zero)
-func (b *BasePolicyEnforcer) validateBytes(bytes uint64) error {
-	if bytes == 0 {
-		return models.ErrInvalidBytes
-	}
-	return nil
 }
 
 // QuotaResultBuilder helps build quota check results with a fluent interface

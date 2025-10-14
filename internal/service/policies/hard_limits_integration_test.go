@@ -29,7 +29,6 @@ func TestHardLimitsPolicyEnforcer_ValidateLimitValue_ValidLimits_Integration_Suc
 		int64(units.GiB),
 		int64(units.TiB),
 		int64(units.PiB),
-		int64(units.PiB), // Maximum reasonable value
 	}
 
 	for _, value := range validValues {

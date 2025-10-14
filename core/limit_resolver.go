@@ -1,7 +1,6 @@
 package core
 
 import (
-	"math"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
@@ -58,13 +57,8 @@ type ThresholdCheckResult struct {
 func EvaluateThreshold(currentUsage, requestedBytes, threshold, limit uint64) ThresholdCheckResult {
 	if threshold == 0 {
 		// Threshold is 0, which means always warn
-		// Check for overflow before calculating new usage
-		withinLimit := true
-		if currentUsage > math.MaxUint64-requestedBytes {
-			withinLimit = false
-		} else {
-			withinLimit = currentUsage+requestedBytes <= limit
-		}
+		// Check if within limit using overflow-safe subtraction
+		withinLimit := currentUsage <= limit && requestedBytes <= limit-currentUsage
 
 		return ThresholdCheckResult{
 			ShouldWarn:     true,
@@ -76,10 +70,24 @@ func EvaluateThreshold(currentUsage, requestedBytes, threshold, limit uint64) Th
 		}
 	}
 
-	newUsage := currentUsage + requestedBytes
-	wouldExceedThreshold := newUsage > threshold
-	wouldCrossThreshold := currentUsage < threshold && newUsage >= threshold
-	withinLimit := newUsage <= limit
+	// Check if within limit using overflow-safe subtraction
+	withinLimit := currentUsage <= limit && requestedBytes <= limit-currentUsage
+
+	// Check if would exceed threshold using overflow-safe logic
+	wouldExceedThreshold := false
+	if threshold >= currentUsage {
+		wouldExceedThreshold = requestedBytes > threshold-currentUsage
+	} else {
+		// If current usage already exceeds threshold, then any additional usage would exceed it
+		wouldExceedThreshold = true
+	}
+
+	// Check if would cross threshold using overflow-safe logic
+	wouldCrossThreshold := false
+	if threshold > currentUsage {
+		wouldCrossThreshold = requestedBytes >= threshold-currentUsage
+	}
+	// If threshold <= currentUsage, we're already at or past the threshold, so no crossing occurs
 
 	shouldWarn := (wouldExceedThreshold || wouldCrossThreshold) && withinLimit
 
@@ -90,10 +98,18 @@ func EvaluateThreshold(currentUsage, requestedBytes, threshold, limit uint64) Th
 		reason = models.QuotaCheckReasonOK
 	}
 
+	// Only calculate newUsage if we know it won't overflow (when withinLimit is true)
+	var newUsage uint64
+	if withinLimit {
+		newUsage = currentUsage + requestedBytes
+	} else {
+		newUsage = currentUsage // Keep current usage when overflow would occur
+	}
+
 	return ThresholdCheckResult{
 		ShouldWarn:     shouldWarn,
 		WithinLimit:    withinLimit,
-		CurrentUsage:   currentUsage,
+		CurrentUsage:   newUsage,
 		Threshold:      &threshold,
 		Limit:          &limit,
 		DecisionReason: reason,

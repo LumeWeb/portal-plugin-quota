@@ -378,3 +378,84 @@ func TestDefaultLimitResolver_ErrorCases(t *testing.T) {
 func intPtr(i int64) *int64 {
 	return &i
 }
+
+func TestDefaultLimitResolver_applyPlanLimits_HasConfigFlags(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	resolver := NewLimitResolver(ctx, mockQuotaService)
+
+	t.Run("AllPlanLimitsExplicitlySet", func(t *testing.T) {
+		// Test with all plan limit values explicitly set
+		plan := &models.QuotaPlan{
+			StorageLimit:       -1,  // unlimited
+			UploadDailyLimit:   0,   // disabled
+			DownloadDailyLimit: 100, // normal value
+			UploadTotalLimit:   -1,  // unlimited
+			DownloadTotalLimit: 0,   // disabled
+		}
+
+		limits := &pluginCore.EffectiveLimits{}
+		err := resolver.applyPlanLimits(limits, plan)
+		require.NoError(t, err)
+
+		// All flags should be true since the fields were explicitly provided in the plan
+		assert.True(t, limits.HasStorageLimitConfig)
+		assert.True(t, limits.HasUploadDailyLimitConfig)
+		assert.True(t, limits.HasDownloadDailyLimitConfig)
+		assert.True(t, limits.HasUploadTotalLimitConfig)
+		assert.True(t, limits.HasDownloadTotalLimitConfig)
+
+		// StorageLimit and UploadTotalLimit should be nil (unlimited)
+		assert.Nil(t, limits.StorageLimit)
+		assert.Nil(t, limits.UploadTotalLimit)
+
+		// UploadDailyLimit and DownloadTotalLimit should be nil (disabled/zero)
+		assert.Nil(t, limits.UploadDailyLimit)
+		assert.Nil(t, limits.DownloadTotalLimit)
+
+		// DownloadDailyLimit should be set to the value
+		assert.NotNil(t, limits.DownloadDailyLimit)
+		assert.Equal(t, uint64(100), *limits.DownloadDailyLimit)
+	})
+
+	t.Run("PlanWithMixedValues", func(t *testing.T) {
+		// Test with mixed plan limit values
+		storageThreshold := int64(500)
+		plan := &models.QuotaPlan{
+			StorageLimit:       1000,
+			UploadDailyLimit:   -1, // unlimited
+			DownloadDailyLimit: 0,  // disabled
+			StorageThreshold:   &storageThreshold,
+		}
+
+		limits := &pluginCore.EffectiveLimits{}
+		err := resolver.applyPlanLimits(limits, plan)
+		require.NoError(t, err)
+
+		// All limit config flags should be true
+		assert.True(t, limits.HasStorageLimitConfig)
+		assert.True(t, limits.HasUploadDailyLimitConfig)
+		assert.True(t, limits.HasDownloadDailyLimitConfig)
+		
+		// Total limits weren't set in plan, but we still mark them as configured 
+		// since they exist in the plan structure
+		assert.True(t, limits.HasUploadTotalLimitConfig)
+		assert.True(t, limits.HasDownloadTotalLimitConfig)
+
+		// Check the actual values
+		assert.NotNil(t, limits.StorageLimit)
+		assert.Equal(t, uint64(1000), *limits.StorageLimit)
+		
+		assert.Nil(t, limits.UploadDailyLimit) // -1 becomes nil (unlimited)
+		assert.Nil(t, limits.DownloadDailyLimit) // 0 becomes nil (disabled)
+		
+		// Total limits default to 0, so they become nil with TreatZeroAsNil behavior
+		assert.Nil(t, limits.UploadTotalLimit)
+		assert.Nil(t, limits.DownloadTotalLimit)
+		
+		// Threshold should be set
+		assert.True(t, limits.HasStorageThresholdConfig)
+		assert.NotNil(t, limits.StorageThreshold)
+		assert.Equal(t, uint64(500), *limits.StorageThreshold)
+	})
+}

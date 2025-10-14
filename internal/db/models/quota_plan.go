@@ -1,6 +1,7 @@
 package models
 
 import (
+	"github.com/samber/lo"
 	"gorm.io/gorm"
 )
 
@@ -23,6 +24,10 @@ type QuotaPlan struct {
 
 // BeforeCreate validates the QuotaPlan model before creation
 func (q *QuotaPlan) BeforeCreate(_ *gorm.DB) error {
+	// Default active unless explicitly set
+	if q.IsActive == nil {
+		q.IsActive = lo.ToPtr(true)
+	}
 	return q.validate()
 }
 

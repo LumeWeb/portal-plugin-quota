@@ -173,28 +173,17 @@ func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		return err
 	}
 
-	// Get active grants for download
-	grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(userID, models.GrantTypeDownload)
+	// Consume allowance from grants atomically
+	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes)
 	if err != nil {
-		return fmt.Errorf("failed to get active download grants: %w", err)
-	}
-
-	// Calculate available bytes from grants
-	availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
-
-	// Check if we have enough allowance
-	if bytes > availableBytes {
-		return fmt.Errorf("insufficient download allowance: requested %d, available %d", bytes, availableBytes)
-	}
-
-	// Consume allowance from grants
-	_, err = a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes)
-	if err != nil {
+		// Check if this is an insufficiency error
+		if errors.Is(err, models.ErrInsufficientAllowance) {
+			return fmt.Errorf("insufficient download allowance")
+		}
 		return fmt.Errorf("failed to consume download allowance: %w", err)
 	}
 
-	// Delegate to UsageManager for actual recording
-	return a.quotaService.GetUsageManager().RecordDownload(userID, uploadID, bytes, ip)
+	return a.delegateRecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange records a storage change operation and consumes allowance
@@ -229,8 +218,11 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		}
 	}
 
-	// Delegate to UsageManager for actual recording
-	return a.quotaService.GetUsageManager().RecordStorageChange(userID, uploadID, bytes, ip)
+	// Validate and delegate (ensures uploadID > 0 and non-zero bytes)
+	if err := a.validateStorageRecordParams(userID, uploadID, bytes); err != nil {
+		return err
+	}
+	return a.delegateRecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage delegates to the usage manager

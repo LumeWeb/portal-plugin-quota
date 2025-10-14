@@ -6,8 +6,8 @@ import (
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 

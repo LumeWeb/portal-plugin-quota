@@ -116,12 +116,10 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
 			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
 
-			// Setup aggregator only when daily limit check would pass
-			if test.dailyLimit > 0 && test.currentUsage+test.requestBytes <= uint64(test.dailyLimit) {
-				mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-				mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
-				mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeUpload).Return(uint64(0), nil)
-			}
+			// Setup aggregator mocks as optional
+			mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
+			mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator).Maybe()
+			mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeUpload).Return(test.currentUsage, nil).Maybe()
 
 			result, err := enforcer.CheckUploadQuota(config, test.requestBytes)
 			require.NoError(t, err)
@@ -335,10 +333,10 @@ func TestAllowancePolicyEnforcer_BoundaryConditions(t *testing.T) {
 					IsActive:       true,
 				},
 			},
-			requestBytes:      ^uint64(0), // Maximum uint64
+			requestBytes:      math.MaxUint64, // Maximum uint64
 			expectedAllowed:   true,
 			expectedReason:    models.QuotaCheckReasonOK,
-			expectedAllowance: lo.ToPtr(^uint64(0)),
+			expectedAllowance: lo.ToPtr(uint64(math.MaxUint64)),
 		},
 	}
 
@@ -420,7 +418,7 @@ func TestUnlimitedPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			EnforcementPolicy: models.EnforcementPolicyUnlimited,
 		}
 
-		result, err := enforcer.CheckUploadQuota(config, uint64(^uint64(0))) // Maximum uint64
+		result, err := enforcer.CheckUploadQuota(config, math.MaxUint64) // Maximum uint64
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)

@@ -160,21 +160,22 @@ func (r *DefaultLimitResolver) ApplyLimit(dest **uint64, source int64, limitName
 }
 
 // applyPlanLimits applies limits from a quota plan
+// 0 values are treated as disabled limits (not as unlimited)
 func (r *DefaultLimitResolver) applyPlanLimits(limits *pluginCore.EffectiveLimits, plan *models.QuotaPlan) error {
-	// Apply basic limits
-	if err := r.ApplyLimit(&limits.StorageLimit, plan.StorageLimit, "storage limit in quota plan", pluginCore.WithTreatZeroAsNil()); err != nil {
+	// Apply basic limits with special handling for zero values in plans
+	if err := r.applyPlanLimit(&limits.StorageLimit, plan.StorageLimit, "storage limit in quota plan"); err != nil {
 		return err
 	}
-	if err := r.ApplyLimit(&limits.UploadDailyLimit, plan.UploadDailyLimit, "upload daily limit in quota plan", pluginCore.WithTreatZeroAsNil()); err != nil {
+	if err := r.applyPlanLimit(&limits.UploadDailyLimit, plan.UploadDailyLimit, "upload daily limit in quota plan"); err != nil {
 		return err
 	}
-	if err := r.ApplyLimit(&limits.DownloadDailyLimit, plan.DownloadDailyLimit, "download daily limit in quota plan", pluginCore.WithTreatZeroAsNil()); err != nil {
+	if err := r.applyPlanLimit(&limits.DownloadDailyLimit, plan.DownloadDailyLimit, "download daily limit in quota plan"); err != nil {
 		return err
 	}
-	if err := r.ApplyLimit(&limits.UploadTotalLimit, plan.UploadTotalLimit, "upload total limit in quota plan", pluginCore.WithTreatZeroAsNil()); err != nil {
+	if err := r.applyPlanLimit(&limits.UploadTotalLimit, plan.UploadTotalLimit, "upload total limit in quota plan"); err != nil {
 		return err
 	}
-	if err := r.ApplyLimit(&limits.DownloadTotalLimit, plan.DownloadTotalLimit, "download total limit in quota plan", pluginCore.WithTreatZeroAsNil()); err != nil {
+	if err := r.applyPlanLimit(&limits.DownloadTotalLimit, plan.DownloadTotalLimit, "download total limit in quota plan"); err != nil {
 		return err
 	}
 
@@ -201,26 +202,43 @@ func (r *DefaultLimitResolver) applyPlanLimits(limits *pluginCore.EffectiveLimit
 		limits.HasDownloadThresholdConfig = true
 	}
 
-	// Mark which limits were configured (only if they were actually applied)
-	if limits.StorageLimit != nil {
-		limits.HasStorageLimitConfig = true
+	// Mark which limits were configured (based on whether the plan had them set, regardless of value)
+	// Since these are int64 fields in the plan, we assume they were explicitly set when the plan was defined
+	limits.HasStorageLimitConfig = true
+	limits.HasUploadDailyLimitConfig = true
+	limits.HasDownloadDailyLimitConfig = true
+	limits.HasUploadTotalLimitConfig = true
+	limits.HasDownloadTotalLimitConfig = true
+	return nil
+}
+
+// applyPlanLimit applies a single limit from a quota plan with special handling for zero values
+// For quota plans: 0 = disabled (nil), -1 = unlimited (nil), positive = actual limit
+func (r *DefaultLimitResolver) applyPlanLimit(dest **uint64, source int64, limitName string) error {
+	// Allow -1 (unlimited), 0 (disabled), and positive values
+	if source < -1 {
+		return fmt.Errorf("invalid %s: %d (must be -1, 0, or positive)", limitName, source)
 	}
-	if limits.UploadDailyLimit != nil {
-		limits.HasUploadDailyLimitConfig = true
+
+	// Check if the value is unreasonably large (1 PiB should be enough for most use cases)
+	if source > 0 && source > int64(units.PiB) {
+		return fmt.Errorf("limit value %d is unreasonably large", source)
 	}
-	if limits.DownloadDailyLimit != nil {
-		limits.HasDownloadDailyLimitConfig = true
+
+	var convertedValue *uint64
+	if source == -1 || source == 0 {
+		convertedValue = nil // -1 and 0 are both treated as nil for quota plans
+	} else {
+		converted := uint64(source)
+		convertedValue = &converted
 	}
-	if limits.UploadTotalLimit != nil {
-		limits.HasUploadTotalLimitConfig = true
-	}
-	if limits.DownloadTotalLimit != nil {
-		limits.HasDownloadTotalLimitConfig = true
-	}
+
+	*dest = convertedValue
 	return nil
 }
 
 // applyUserLimits applies user-specific limits that override plan limits
+// 0 values are treated as disabled limits
 func (r *DefaultLimitResolver) applyUserLimits(limits *pluginCore.EffectiveLimits, config *models.UserQuotaConfig) error {
 	if config.StorageLimit != nil {
 		if err := r.ApplyLimit(&limits.StorageLimit, *config.StorageLimit, "storage limit in user config"); err != nil {

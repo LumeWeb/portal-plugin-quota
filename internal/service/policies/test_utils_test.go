@@ -430,6 +430,7 @@ func CreateTestUsagePoint(date time.Time, bytes uint64, usageType models.UsageTy
 
 // AssertQuotaCheckResult asserts that a quota check result matches expected values
 func AssertQuotaCheckResult(t *testing.T, result *pluginCore.QuotaCheckResult, allowed bool, reason models.QuotaCheckReason, policy models.EnforcementPolicy) {
+	t.Helper()
 	assert.Equal(t, allowed, result.Allowed)
 	assert.Equal(t, reason, result.Reason)
 	assert.Equal(t, policy, result.Details.Policy)
@@ -437,6 +438,7 @@ func AssertQuotaCheckResult(t *testing.T, result *pluginCore.QuotaCheckResult, a
 
 // AssertQuotaCheckResultWithDetails asserts that a quota check result matches expected values including details
 func AssertQuotaCheckResultWithDetails(t *testing.T, result *pluginCore.QuotaCheckResult, expectedAllowed bool, expectedReason models.QuotaCheckReason, expectedPolicy models.EnforcementPolicy, expectedCurrentUsage, expectedLimit uint64) {
+	t.Helper()
 	AssertQuotaCheckResult(t, result, expectedAllowed, expectedReason, expectedPolicy)
 	assert.Equal(t, expectedCurrentUsage, result.Details.CurrentUsage, "Quota check result current usage mismatch")
 	assert.NotNil(t, result.Details.Limit, "Quota check result limit should not be nil")
@@ -445,6 +447,7 @@ func AssertQuotaCheckResultWithDetails(t *testing.T, result *pluginCore.QuotaChe
 
 // AssertQuotaCheckResultWithAllowance asserts that a quota check result matches expected values for allowance policy
 func AssertQuotaCheckResultWithAllowance(t *testing.T, result *pluginCore.QuotaCheckResult, expectedAllowed bool, expectedReason models.QuotaCheckReason, expectedPolicy models.EnforcementPolicy, expectedAllowance, expectedAllowanceUsed uint64) {
+	t.Helper()
 	AssertQuotaCheckResult(t, result, expectedAllowed, expectedReason, expectedPolicy)
 	assert.NotNil(t, result.Details.Allowance, "Quota check result allowance should not be nil")
 	assert.Equal(t, expectedAllowance, *result.Details.Allowance, "Quota check result allowance mismatch")
@@ -454,6 +457,7 @@ func AssertQuotaCheckResultWithAllowance(t *testing.T, result *pluginCore.QuotaC
 
 // AssertQuotaCheckResultWithThreshold asserts that a quota check result matches expected values for threshold policy
 func AssertQuotaCheckResultWithThreshold(t *testing.T, result *pluginCore.QuotaCheckResult, expectedAllowed bool, expectedReason models.QuotaCheckReason, expectedPolicy models.EnforcementPolicy, expectedCurrentUsage, expectedThreshold, expectedLimit uint64) {
+	t.Helper()
 	AssertQuotaCheckResult(t, result, expectedAllowed, expectedReason, expectedPolicy)
 	assert.Equal(t, expectedCurrentUsage, result.Details.CurrentUsage, "Quota check result current usage mismatch")
 	assert.NotNil(t, result.Details.Threshold, "Quota check result threshold should not be nil")
@@ -464,6 +468,7 @@ func AssertQuotaCheckResultWithThreshold(t *testing.T, result *pluginCore.QuotaC
 
 // AssertUsageRecorded asserts that usage was recorded with expected values
 func AssertUsageRecorded(t *testing.T, usageManager *pluginCore.MockUsageManager, userID, uploadID uint, bytes uint64, ip string, usageType models.UsageType) {
+	t.Helper()
 	switch usageType {
 	case models.UsageTypeUpload:
 		usageManager.AssertCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
@@ -482,7 +487,7 @@ func createMockGrantManager(t *testing.T) *pluginCore.MockGrantManager {
 }
 
 // RunBoundaryConditionTests executes common boundary condition tests for quota policies
-func RunBoundaryConditionTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy) {
+func RunBoundaryConditionTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy, usageAgg *pluginCore.MockUsageAggregator) {
 	tests := []struct {
 		name            string
 		userID          uint
@@ -562,6 +567,11 @@ func RunBoundaryConditionTests(t *testing.T, enforcer pluginCore.PolicyEnforcer,
 				EnforcementPolicy: policy,
 				UploadDailyLimit:  lo.ToPtr(test.dailyLimit),
 				UploadTotalLimit:  lo.ToPtr(test.totalLimit),
+			}
+
+			// Stub usage aggregation calls if MockUsageAggregator is provided
+			if usageAgg != nil {
+				usageAgg.On("GetAggregatedUsageByType", test.userID, models.UsageTypeUpload).Return(test.currentUsage, nil).Maybe()
 			}
 
 			result, err := enforcer.CheckUploadQuota(config, test.requestBytes)

@@ -12,14 +12,14 @@ import (
 // UnlimitedPolicyEnforcer implements PolicyEnforcer for the UNLIMITED policy
 type UnlimitedPolicyEnforcer struct {
 	*BasePolicyEnforcer
-	quotaService pluginCore.QuotaService
+	usageManager pluginCore.UsageManager
 }
 
 // NewUnlimitedPolicyEnforcer creates a new unlimited policy enforcer
 func NewUnlimitedPolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaService) *UnlimitedPolicyEnforcer {
 	return &UnlimitedPolicyEnforcer{
 		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager()),
-		quotaService:       quotaService,
+		usageManager:      quotaService.GetUsageManager(),
 	}
 }
 
@@ -97,7 +97,6 @@ func (u *UnlimitedPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 
 // GetDetailedUsage delegates to the base enforcer
 func (u *UnlimitedPolicyEnforcer) GetDetailedUsage(userID uint, start, end time.Time) ([]*models.UserUsageDetail, error) {
-
 	return u.usageManager.GetDetailedUsage(userID, start, end)
 }
 

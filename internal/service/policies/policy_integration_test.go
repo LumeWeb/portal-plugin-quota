@@ -289,10 +289,9 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 		_, err4 := allowanceEnforcer.CheckUploadQuota(invalidConfig, uint64(100))
 
 		// All should return the same error for invalid user ID
-		expectedError := "user_id must be greater than 0"
 		for _, err := range []error{err1, err2, err3, err4} {
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), expectedError)
+			assert.ErrorIs(t, err, models.ErrInvalidUserID)
 		}
 
 		dataManager.Cleanup()

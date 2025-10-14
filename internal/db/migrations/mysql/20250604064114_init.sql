@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS quota_plans (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP NULL DEFAULT NULL
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+    INDEX idx_quota_plans_default_active (is_default, is_active)
 );
 
 CREATE TABLE IF NOT EXISTS user_quota_configs (

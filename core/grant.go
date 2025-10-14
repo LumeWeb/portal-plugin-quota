@@ -18,7 +18,7 @@ type GrantManager interface {
 	GetActiveGrantsByTypeLocked(userID uint, grantType GrantType, tx *gorm.DB) ([]*AllowanceGrant, error)
 
 	// GetActiveGrantsLocked gets all active grants for a user (all types) with row-level locking
-	GetActiveGrantsLocked(userID uint) ([]*AllowanceGrant, error)
+	GetActiveGrantsLocked(userID uint, tx *gorm.DB) ([]*AllowanceGrant, error)
 
 	// GetActiveGrants gets all active grants for a user (all types)
 	GetActiveGrants(userID uint) ([]*AllowanceGrant, error)

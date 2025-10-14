@@ -1,1266 +1,1176 @@
 package policies
 
 import (
+	"math"
 	"testing"
-	"time"
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"sync"
+	"gorm.io/gorm"
 )
 
-// TestThresholdPolicyEnforcer_CheckUploadQuota tests the CheckUploadQuota method
-func TestThresholdPolicyEnforcer_CheckUploadQuota(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(30000)
-
-		t.Run("Within daily limit", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: lo.ToPtr(int64(1000)),
-				UploadThreshold:  lo.ToPtr(int64(800)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update the user config with upload daily limit
-			config.UploadDailyLimit = lo.ToPtr(int64(1000))
-			config.UploadThreshold = lo.ToPtr(int64(800))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			result, err := enforcer.CheckUploadQuota(config.UserID, 500)
-			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold))
-		})
-
-		t.Run("Exceeding daily limit", func(t *testing.T) {
-			userID := baseUserID + 2
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: lo.ToPtr(int64(1000)),
-				UploadThreshold:  lo.ToPtr(int64(800)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with upload daily limit
-			config.UploadDailyLimit = lo.ToPtr(int64(1000))
-			config.UploadThreshold = lo.ToPtr(int64(800))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's close to limit
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 600)
-
-			result, err := enforcer.CheckUploadQuota(config.UserID, 500)
-			require.NoError(t, err)
-			assertQuotaCheckResultWithDetails(t, result, false, models.QuotaCheckReasonLimitExceeded,
-				pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), 600, 1000)
-		})
-
-		t.Run("At threshold warning level", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: lo.ToPtr(int64(1000)),
-				UploadThreshold:  lo.ToPtr(int64(800)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with upload daily limit and threshold
-			config.UploadDailyLimit = lo.ToPtr(int64(1000))
-			config.UploadThreshold = lo.ToPtr(int64(800))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's at threshold
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 700)
-
-			result, err := enforcer.CheckUploadQuota(config.UserID, 200)
-			require.NoError(t, err)
-			assertQuotaCheckResultWithThreshold(t, result, true, models.QuotaCheckReasonWarningThreshold,
-				pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), 700, 800, 1000)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			userID := baseUserID + 4
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Test invalid bytes (0)
-			result, err := enforcer.CheckUploadQuota(config.UserID, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
-		})
-	}, testOptions())
+// thresholdTestSetup holds common test setup components
+type thresholdTestSetup struct {
+	ctx                  coreTesting.TestContext
+	mockQuotaService     *pluginCore.MockQuotaService
+	mockUsageManager     *pluginCore.MockUsageManager
+	mockQuotaPlanManager *pluginCore.MockQuotaPlanManager
+	enforcer             *ThresholdPolicyEnforcer
+	dataManager          *testdata.TestDataManager
 }
 
-func TestThresholdPolicyEnforcer_CheckDownloadQuota(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(31000)
+// setupThresholdTest creates a new test setup with mocked dependencies
+func setupThresholdTest(t *testing.T) *thresholdTestSetup {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
 
-		t.Run("Within daily limit", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				DownloadDailyLimit: lo.ToPtr(int64(2000)),
-				DownloadThreshold:  lo.ToPtr(int64(1500)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	// Setup base mock expectations
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
 
-			// Update the user config with download daily limit
-			config.DownloadDailyLimit = lo.ToPtr(int64(2000))
-			config.DownloadThreshold = lo.ToPtr(int64(1500))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
-			result, err := enforcer.CheckDownloadQuota(config.UserID, 1000)
-			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold))
-		})
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
 
-		t.Run("Exceeding daily limit", func(t *testing.T) {
-			userID := baseUserID + 2
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				DownloadDailyLimit: lo.ToPtr(int64(2000)),
-				DownloadThreshold:  lo.ToPtr(int64(1500)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with download daily limit
-			config.DownloadDailyLimit = lo.ToPtr(int64(2000))
-			config.DownloadThreshold = lo.ToPtr(int64(1500))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's close to limit
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 1500)
-
-			result, err := enforcer.CheckDownloadQuota(config.UserID, 1000)
-			require.NoError(t, err)
-			assertQuotaCheckResultWithDetails(t, result, false, models.QuotaCheckReasonLimitExceeded,
-				pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), 1500, 2000)
-		})
-
-		t.Run("At threshold warning level", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				DownloadDailyLimit: lo.ToPtr(int64(2000)),
-				DownloadThreshold:  lo.ToPtr(int64(1500)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with download daily limit and threshold
-			config.DownloadDailyLimit = lo.ToPtr(int64(2000))
-			config.DownloadThreshold = lo.ToPtr(int64(1500))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's at threshold
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 1400)
-
-			result, err := enforcer.CheckDownloadQuota(config.UserID, 200)
-			require.NoError(t, err)
-			assertQuotaCheckResultWithThreshold(t, result, true, models.QuotaCheckReasonWarningThreshold,
-				pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), 1400, 1500, 2000)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			userID := baseUserID + 4
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Test invalid bytes (0)
-			result, err := enforcer.CheckDownloadQuota(config.UserID, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
-		})
-	}, testOptions())
+	return &thresholdTestSetup{
+		ctx:                  ctx,
+		mockQuotaService:     mockQuotaService,
+		mockUsageManager:     mockUsageManager,
+		mockQuotaPlanManager: mockQuotaPlanManager,
+		enforcer:             enforcer,
+		dataManager:          dataManager,
+	}
 }
 
-func TestThresholdPolicyEnforcer_CheckStorageQuota(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(32000)
+// TestThresholdPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_Allowed tests upload quota within daily limit
+func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_Allowed(t *testing.T) {
+	setup := setupThresholdTest(t)
 
-		t.Run("Within storage limit", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(3000)),
-				StorageThreshold: lo.ToPtr(int64(2000)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	config := &models.UserQuotaConfig{
+		UserID:            1,
+		EnforcementPolicy: models.EnforcementPolicyThreshold,
+		UploadDailyLimit:  lo.ToPtr(int64(1000)),
+		UploadThreshold:   lo.ToPtr(int64(800)),
+	}
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	// Mock current usage
+	setup.mockQuotaService.On("GetTodayUsage", uint(1)).Return(&pluginCore.Usage{
+		UserID:        1,
+		BytesUploaded: 200,
+	}, nil).Maybe()
 
-			// Update the user config with storage limit
-			config.StorageLimit = lo.ToPtr(int64(3000))
-			config.StorageThreshold = lo.ToPtr(int64(2000))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			result, err := enforcer.CheckStorageQuota(config.UserID, 1500)
-			require.NoError(t, err)
-			assertQuotaCheckResult(t, result, true, models.QuotaCheckReasonOK, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold))
-		})
-
-		t.Run("Exceeding storage limit", func(t *testing.T) {
-			userID := baseUserID + 2
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(3000)),
-				StorageThreshold: lo.ToPtr(int64(2000)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with storage limit
-			config.StorageLimit = lo.ToPtr(int64(3000))
-			config.StorageThreshold = lo.ToPtr(int64(2000))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's close to limit
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeStorageAdd, 2500)
-
-			result, err := enforcer.CheckStorageQuota(config.UserID, 1000)
-			require.NoError(t, err)
-			assertQuotaCheckResultWithDetails(t, result, false, models.QuotaCheckReasonLimitExceeded,
-				pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), 2500, 3000)
-		})
-
-		t.Run("At threshold warning level", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(3000)),
-				StorageThreshold: lo.ToPtr(int64(2000)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with storage limit and threshold
-			config.StorageLimit = lo.ToPtr(int64(3000))
-			config.StorageThreshold = lo.ToPtr(int64(2000))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's at threshold
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeStorageAdd, 1900)
-
-			result, err := enforcer.CheckStorageQuota(config.UserID, 200)
-			require.NoError(t, err)
-			assertQuotaCheckResultWithThreshold(t, result, true, models.QuotaCheckReasonWarningThreshold,
-				pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), 1900, 2000, 3000)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			userID := baseUserID + 4
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Test invalid bytes (0)
-			result, err := enforcer.CheckStorageQuota(config.UserID, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-			assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
-		})
-
-		t.Run("Storage limit set to 0 (disabled)", func(t *testing.T) {
-			userID := baseUserID + 5
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit: lo.ToPtr(int64(0)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			result, err := enforcer.CheckStorageQuota(userID, 100)
-			require.NoError(t, err)
-			assert.False(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
-		})
-
-		t.Run("Storage limit set to unlimited", func(t *testing.T) {
-			userID := baseUserID + 6
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit: (*int64)(nil),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			result, err := enforcer.CheckStorageQuota(userID, 1000000)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		})
-
-		t.Run("Threshold set to 0 with positive limit", func(t *testing.T) {
-			userID := baseUserID + 7
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(3000)),
-				StorageThreshold: lo.ToPtr(int64(0)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with storage limit and threshold
-			config.StorageLimit = lo.ToPtr(int64(3000))
-			config.StorageThreshold = lo.ToPtr(int64(0))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Should not warn when threshold is 0, even if approaching limit
-			result, err := enforcer.CheckStorageQuota(config.UserID, 1500)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		})
-
-		t.Run("Threshold set to -1 with positive limit", func(t *testing.T) {
-			userID := baseUserID + 8
-			negativeOne := int64(-1) // Will be converted to -1 in config
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(3000)),
-				StorageThreshold: &negativeOne,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with storage limit and threshold
-			config.StorageLimit = lo.ToPtr(int64(3000))
-			config.StorageThreshold = &negativeOne
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Should not warn when threshold is -1, even if approaching limit
-			result, err := enforcer.CheckStorageQuota(config.UserID, 1500)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		})
-	}, testOptions())
+	result, err := setup.enforcer.CheckUploadQuota(config, uint64(500))
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), result.Details.Policy)
 }
 
-func TestThresholdPolicyEnforcer_RecordUpload(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(33000)
+// TestThresholdPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integration_Blocked tests upload quota exceeding daily limit
+func TestThresholdPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integration_Blocked(t *testing.T) {
+	setup := setupThresholdTest(t)
 
-		t.Run("Successful upload recording", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	config := &models.UserQuotaConfig{
+		UserID:            2,
+		EnforcementPolicy: models.EnforcementPolicyThreshold,
+		UploadDailyLimit:  lo.ToPtr(int64(1000)),
+		UploadThreshold:   lo.ToPtr(int64(800)),
+	}
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	// Mock current usage that's close to daily limit
+	setup.mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+		UserID:        2,
+		BytesUploaded: 800,
+	}, nil).Maybe()
 
-			// Update the user config with upload daily limit
-			config.UploadDailyLimit = lo.ToPtr(int64(1000))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Record upload
-			err = enforcer.RecordUpload(userID, 100, 500, "127.0.0.1")
-			assert.NoError(t, err)
-
-			// Verify the usage was recorded
-			usage, err := enforcer.GetCurrentUsage(userID)
-			require.NoError(t, err)
-			assert.Equal(t, uint64(500), usage.BytesUploaded)
-		})
-
-		t.Run("Upload that exceeds quota", func(t *testing.T) {
-			userID := baseUserID + 2
-			uploadDailyLimit := int64(1000)
-			uploadThreshold := int64(800)
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: &uploadDailyLimit,
-				UploadThreshold:  &uploadThreshold,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's close to limit
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 600)
-
-			// Test upload that exceeds quota
-			err = enforcer.RecordUpload(userID, 101, 500, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "upload blocked")
-		})
-
-		t.Run("Invalid user ID", func(t *testing.T) {
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Test invalid user ID
-			err := enforcer.RecordUpload(0, 102, 100, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Test invalid bytes
-			err := enforcer.RecordUpload(userID, 103, 0, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	result, err := setup.enforcer.CheckUploadQuota(config, uint64(300))
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
 }
 
-func TestThresholdPolicyEnforcer_RecordDownload(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(34000)
+// TestThresholdPolicyEnforcer_CheckUploadQuota_AtThresholdWarningLevel_Integration_Warning tests upload quota at threshold warning level
+func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThresholdWarningLevel_Integration_Warning(t *testing.T) {
+	setup := setupThresholdTest(t)
 
-		t.Run("Successful download recording", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	config := &models.UserQuotaConfig{
+		UserID:            3,
+		EnforcementPolicy: models.EnforcementPolicyThreshold,
+		UploadDailyLimit:  lo.ToPtr(int64(1000)),
+		UploadThreshold:   lo.ToPtr(int64(800)),
+	}
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	// Mock current usage that's at threshold
+	setup.mockQuotaService.On("GetTodayUsage", uint(3)).Return(&pluginCore.Usage{
+		UserID:        3,
+		BytesUploaded: 700,
+	}, nil).Maybe()
 
-			// Update the user config with download daily limit
-			config.DownloadDailyLimit = lo.ToPtr(int64(2000))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Record download
-			err = enforcer.RecordDownload(userID, 200, 1000, "127.0.0.1")
-			assert.NoError(t, err)
-
-			// Verify the usage was recorded
-			usage, err := enforcer.GetCurrentUsage(userID)
-			require.NoError(t, err)
-			assert.Equal(t, uint64(1000), usage.BytesDownloaded)
-		})
-
-		t.Run("Download that exceeds quota", func(t *testing.T) {
-			userID := baseUserID + 2
-			downloadDailyLimit := int64(1000)
-			downloadThreshold := int64(800)
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				DownloadDailyLimit: &downloadDailyLimit,
-				DownloadThreshold:  &downloadThreshold,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's close to limit
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 600)
-
-			// Test download that exceeds quota
-			err = enforcer.RecordDownload(userID, 201, 500, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "download blocked")
-		})
-
-		t.Run("Invalid user ID", func(t *testing.T) {
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Test invalid user ID
-			err := enforcer.RecordDownload(0, 202, 100, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Test invalid bytes
-			err := enforcer.RecordDownload(userID, 203, 0, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	result, err := setup.enforcer.CheckUploadQuota(config, uint64(200))
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+	assert.NotNil(t, result.Details.Threshold)
+	assert.Equal(t, uint64(800), *result.Details.Threshold)
 }
 
-func TestThresholdPolicyEnforcer_RecordStorageChange(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(35000)
+// TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integration_Allowed tests download quota within daily limit
+func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integration_Allowed(t *testing.T) {
+	setup := setupThresholdTest(t)
 
-		t.Run("Successful storage addition recording", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	config := &models.UserQuotaConfig{
+		UserID:             1,
+		EnforcementPolicy:  models.EnforcementPolicyThreshold,
+		DownloadDailyLimit: lo.ToPtr(int64(2000)),
+		DownloadThreshold:  lo.ToPtr(int64(1500)),
+	}
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	// Mock current usage
+	setup.mockQuotaService.On("GetTodayUsage", uint(1)).Return(&pluginCore.Usage{
+		UserID:          1,
+		BytesDownloaded: 500,
+	}, nil).Maybe()
 
-			// Update the user config with storage limit
-			config.StorageLimit = lo.ToPtr(int64(3000))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Record storage change
-			err = enforcer.RecordStorageChange(userID, 300, 1500, "127.0.0.1")
-			assert.NoError(t, err)
-
-			// Verify the usage was recorded
-			usage, err := enforcer.GetCurrentUsage(userID)
-			require.NoError(t, err)
-			assert.Equal(t, uint64(1500), usage.BytesStored)
-		})
-
-		t.Run("Storage addition that exceeds quota", func(t *testing.T) {
-			userID := baseUserID + 2
-			storageLimit := int64(1000)
-			storageThreshold := int64(800)
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     &storageLimit,
-				StorageThreshold: &storageThreshold,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Test storage addition that exceeds quota
-			err = enforcer.RecordStorageChange(userID, 301, 1500, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "storage change blocked")
-		})
-
-		t.Run("Storage removal (no quota enforcement)", func(t *testing.T) {
-			userID := baseUserID + 3
-			storageLimit := int64(1000)
-			storageThreshold := int64(800)
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     &storageLimit,
-				StorageThreshold: &storageThreshold,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Test storage removal
-			err = enforcer.RecordStorageChange(userID, 302, -500, "127.0.0.1")
-			assert.NoError(t, err)
-		})
-
-		t.Run("Invalid user ID", func(t *testing.T) {
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Test invalid user ID
-			err := enforcer.RecordStorageChange(0, 303, 100, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Zero bytes", func(t *testing.T) {
-			userID := baseUserID + 4
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Test zero bytes
-			err := enforcer.RecordStorageChange(userID, 304, 0, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-
-		t.Run("Storage addition with limit set to 0 (disabled)", func(t *testing.T) {
-			userID := baseUserID + 5
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit: lo.ToPtr(int64(0)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Should be blocked because storage limit is 0 (disabled)
-			err := enforcer.RecordStorageChange(userID, 305, 100, "127.0.0.1")
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "storage change blocked")
-		})
-
-		t.Run("Storage addition with unlimited limit", func(t *testing.T) {
-			userID := baseUserID + 6
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit: (*int64)(nil),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Should be allowed because storage limit is unlimited
-			err := enforcer.RecordStorageChange(userID, 306, 1000000, "127.0.0.1")
-			assert.NoError(t, err)
-		})
-	}, testOptions())
+	result, err := setup.enforcer.CheckDownloadQuota(config, uint64(900))
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), result.Details.Policy)
 }
 
-func TestThresholdPolicyEnforcer_GetDetailedUsage(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(36001)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
+// TestThresholdPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integration_Blocked tests download quota exceeding daily limit
+func TestThresholdPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integration_Blocked(t *testing.T) {
+	setup := setupThresholdTest(t)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx)
+	config := &models.UserQuotaConfig{
+		UserID:             2,
+		EnforcementPolicy:  models.EnforcementPolicyThreshold,
+		DownloadDailyLimit: lo.ToPtr(int64(2000)),
+		DownloadThreshold:  lo.ToPtr(int64(1500)),
+	}
 
-		// Record some usage
-		err := enforcer.RecordUpload(userID, 400, 500, "127.0.0.1")
-		require.NoError(t, err)
+	// Mock current usage that's close to daily limit
+	setup.mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+		UserID:          2,
+		BytesDownloaded: 1800,
+	}, nil).Maybe()
 
-		err = enforcer.RecordDownload(userID, 401, 1000, "127.0.0.1")
-		require.NoError(t, err)
+	result, err := setup.enforcer.CheckDownloadQuota(config, uint64(300))
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+}
 
-		err = enforcer.RecordStorageChange(userID, 402, 1500, "127.0.0.1")
-		require.NoError(t, err)
+// TestThresholdPolicyEnforcer_CheckDownloadQuota_AtThresholdWarningLevel_Integration_Warning tests download quota at threshold warning level
+func TestThresholdPolicyEnforcer_CheckDownloadQuota_AtThresholdWarningLevel_Integration_Warning(t *testing.T) {
+	setup := setupThresholdTest(t)
 
-		// Test getting detailed usage
-		start := time.Now().Add(-time.Hour)
-		end := time.Now().Add(time.Hour)
+	config := &models.UserQuotaConfig{
+		UserID:             3,
+		EnforcementPolicy:  models.EnforcementPolicyThreshold,
+		DownloadDailyLimit: lo.ToPtr(int64(2000)),
+		DownloadThreshold:  lo.ToPtr(int64(1500)),
+	}
 
-		details, err := enforcer.GetDetailedUsage(userID, start, end)
-		assert.NoError(t, err)
-		assert.Len(t, details, 3)
+	// Mock current usage that's at threshold
+	setup.mockQuotaService.On("GetTodayUsage", uint(3)).Return(&pluginCore.Usage{
+		UserID:          3,
+		BytesDownloaded: 1400,
+	}, nil).Maybe()
 
-		// Verify the types of usage recorded
-		types := make(map[models.UsageType]bool)
-		for _, detail := range details {
-			types[detail.Type] = true
+	result, err := setup.enforcer.CheckDownloadQuota(config, uint64(200))
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+	assert.NotNil(t, result.Details.Threshold)
+	assert.Equal(t, uint64(1500), *result.Details.Threshold)
+}
+
+// TestThresholdPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integration_Allowed tests storage quota within storage limit
+func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integration_Allowed(t *testing.T) {
+	setup := setupThresholdTest(t)
+
+	config := &models.UserQuotaConfig{
+		UserID:            1,
+		EnforcementPolicy: models.EnforcementPolicyThreshold,
+		StorageLimit:      lo.ToPtr(int64(3000)),
+		StorageThreshold:  lo.ToPtr(int64(2000)),
+	}
+
+	// Mock current usage
+	setup.mockQuotaService.On("GetTodayUsage", uint(1)).Return(&pluginCore.Usage{
+		UserID:      1,
+		BytesStored: 1000,
+	}, nil).Maybe()
+
+	result, err := setup.enforcer.CheckStorageQuota(config, uint64(900))
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), result.Details.Policy)
+}
+
+// TestThresholdPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integration_Blocked tests storage quota exceeding storage limit
+func TestThresholdPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integration_Blocked(t *testing.T) {
+	setup := setupThresholdTest(t)
+
+	config := &models.UserQuotaConfig{
+		UserID:            2,
+		EnforcementPolicy: models.EnforcementPolicyThreshold,
+		StorageLimit:      lo.ToPtr(int64(3000)),
+		StorageThreshold:  lo.ToPtr(int64(2000)),
+	}
+
+	// Mock current usage that's close to storage limit
+	setup.mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+		UserID:      2,
+		BytesStored: 2800,
+	}, nil).Maybe()
+
+	result, err := setup.enforcer.CheckStorageQuota(config, uint64(300))
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+}
+
+// TestThresholdPolicyEnforcer_CheckStorageQuota_AtThresholdWarningLevel_Integration_Warning tests storage quota at threshold warning level
+func TestThresholdPolicyEnforcer_CheckStorageQuota_AtThresholdWarningLevel_Integration_Warning(t *testing.T) {
+	setup := setupThresholdTest(t)
+
+	config := &models.UserQuotaConfig{
+		UserID:            3,
+		EnforcementPolicy: models.EnforcementPolicyThreshold,
+		StorageLimit:      lo.ToPtr(int64(3000)),
+		StorageThreshold:  lo.ToPtr(int64(2000)),
+	}
+
+	// Mock current usage that's at threshold
+	setup.mockQuotaService.On("GetTodayUsage", uint(3)).Return(&pluginCore.Usage{
+		UserID:      3,
+		BytesStored: 1900,
+	}, nil).Maybe()
+
+	result, err := setup.enforcer.CheckStorageQuota(config, uint64(200))
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+	assert.NotNil(t, result.Details.Threshold)
+	assert.Equal(t, uint64(2000), *result.Details.Threshold)
+}
+
+// TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed tests the CheckUploadQuota method with mocks
+func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	// Setup base mocks that will be used by all tests
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockUsageManager.On("GetTotalBytesByType", mock.Anything, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+	mockUsageManager.On("GetTotalBytesByType", mock.Anything, models.UsageTypeDownload).Return(uint64(0), nil).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager).Maybe()
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	t.Run("Within limit below threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadTotalLimit:  lo.ToPtr(int64(5000)),
+			UploadThreshold:   lo.ToPtr(int64(800)), // 80% threshold
 		}
 
-		assert.True(t, types[models.UsageTypeUpload])
-		assert.True(t, types[models.UsageTypeDownload])
-		assert.True(t, types[models.UsageTypeStorageAdd])
-	}, testOptions())
-}
+		// Mock current usage below threshold
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 300,
+		}, nil).Once()
 
-func TestThresholdPolicyEnforcer_GetCurrentUsage(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(37001)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-
-		enforcer := NewThresholdPolicyEnforcer(ctx)
-
-		// Record some usage
-		err := enforcer.RecordUpload(userID, 500, 300, "127.0.0.1")
+		result, err := enforcer.CheckUploadQuota(config, uint64(200))
 		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Nil(t, result.Details.Threshold)
+	})
 
-		err = enforcer.RecordDownload(userID, 501, 600, "127.0.0.1")
-		require.NoError(t, err)
-
-		err = enforcer.RecordStorageChange(userID, 502, 900, "127.0.0.1")
-		require.NoError(t, err)
-
-		// Test getting current usage
-		usage, err := enforcer.GetCurrentUsage(userID)
-		assert.NoError(t, err)
-		assert.Equal(t, userID, usage.UserID)
-		assert.Equal(t, uint64(300), usage.BytesUploaded)
-		assert.Equal(t, uint64(600), usage.BytesDownloaded)
-		assert.Equal(t, uint64(900), usage.BytesStored)
-	}, testOptions())
-}
-
-func TestThresholdPolicyEnforcer_GetUsageHistory(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(38001)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-
-		enforcer := NewThresholdPolicyEnforcer(ctx)
-
-		usageType := models.UsageTypeUpload
-		period := 30 // days
-
-		// Record some usage
-		err := enforcer.RecordUpload(userID, 600, 200, "127.0.0.1")
-		require.NoError(t, err)
-
-		err = enforcer.RecordUpload(userID, 601, 400, "127.0.0.1")
-		require.NoError(t, err)
-
-		// Test getting usage history
-		history, err := enforcer.GetUsageHistory(userID, period, pluginCore.UsageType(usageType))
-		assert.NoError(t, err)
-		assert.Len(t, history, 2)
-
-		// Verify the bytes values
-		bytes := make([]uint64, 0)
-		for _, point := range history {
-			bytes = append(bytes, point.Bytes)
+	t.Run("Within limit above threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadTotalLimit:  lo.ToPtr(int64(5000)),
+			UploadThreshold:   lo.ToPtr(int64(800)), // 80% threshold
 		}
 
-		assert.Contains(t, bytes, uint64(200))
-		assert.Contains(t, bytes, uint64(400))
-	}, testOptions())
-}
+		// Mock current usage above threshold but below limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 750,
+		}, nil).Once()
 
-func TestThresholdPolicyEnforcer_ThresholdWarningBehavior(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(40000)
-
-		t.Run("Unlimited limits should not warn", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: nil,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Should not warn when limit is unlimited
-			result, err := enforcer.CheckUploadQuota(userID, 1000000)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		})
-
-		t.Run("Disabled limits should not warn (should deny)", func(t *testing.T) {
-			userID := baseUserID + 2
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: lo.ToPtr(int64(0)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Should deny when limit is 0 (disabled)
-			result, err := enforcer.CheckUploadQuota(userID, 100)
-			require.NoError(t, err)
-			assert.False(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
-		})
-
-		t.Run("Normal threshold warnings with positive limits", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: lo.ToPtr(int64(1000)),
-				UploadThreshold:  lo.ToPtr(int64(800)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get existing user config and update it
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-
-			// Update config with upload daily limit and threshold
-			config.UploadDailyLimit = lo.ToPtr(int64(1000))
-			config.UploadThreshold = lo.ToPtr(int64(800))
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's at threshold level (400 bytes, so 400+500=900 > 800 threshold)
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 400)
-
-			// Should warn when approaching threshold
-			result, err := enforcer.CheckUploadQuota(config.UserID, 500)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
-		})
-
-		t.Run("Threshold warnings with mixed limit types", func(t *testing.T) {
-			userID := baseUserID + 4
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit:   nil, // Unlimited
-				UploadTotalLimit:   lo.ToPtr(int64(1000)),
-				UploadThreshold:    lo.ToPtr(int64(800)),
-				DownloadDailyLimit: nil, // Unlimited
-				DownloadTotalLimit: lo.ToPtr(int64(2000)),
-				DownloadThreshold:  lo.ToPtr(int64(1500)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Get the user config and set daily limits to unlimited
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-			config.UploadDailyLimit = nil
-			config.DownloadDailyLimit = nil
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
-
-			// Create usage that's at threshold level for download (400 bytes, so 400+1200=1600 > 1500 threshold)
-			createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 400)
-
-			// Should not warn for upload daily since it's unlimited
-			result, err := enforcer.CheckUploadQuota(config.UserID, 500)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-
-			// Should warn for download total since it has a normal limit
-			result, err = enforcer.CheckDownloadQuota(config.UserID, 1200)
-			require.NoError(t, err)
-			assert.True(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
-		})
-	}, testOptions())
-}
-
-func TestThresholdPolicyEnforcer_ConcurrentAccess(t *testing.T) {
-	t.Run("Concurrent quota checks", func(t *testing.T) {
-		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-			baseUserID := uint(50000)
-			userID := baseUserID + 1
-
-			uploadDailyLimit := int64(1000)
-			uploadThreshold := int64(800)
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: &uploadDailyLimit,
-				UploadThreshold:  &uploadThreshold,
-			})
-
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Run concurrent quota checks
-			var results []pluginCore.QuotaCheckResult
-			var errors []error
-			var mu sync.Mutex
-			var wg sync.WaitGroup
-
-			numGoroutines := 5
-			for i := 0; i < numGoroutines; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					result, err := enforcer.CheckUploadQuota(userID, 100)
-					mu.Lock()
-					results = append(results, result)
-					errors = append(errors, err)
-					mu.Unlock()
-				}()
-			}
-
-			wg.Wait()
-
-			// All should succeed
-			for _, err := range errors {
-				assert.NoError(t, err)
-			}
-
-			// All should be allowed
-			for _, result := range results {
-				assert.True(t, result.Allowed)
-			}
-		}, testOptions())
+		result, err := enforcer.CheckUploadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+		assert.NotNil(t, result.Details.Threshold)
+		assert.Equal(t, uint64(800), *result.Details.Threshold)
 	})
 
-	t.Run("Concurrent quota checks with 0 limit (should all deny)", func(t *testing.T) {
-		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-			baseUserID := uint(51000)
-			userID := baseUserID + 1
+	t.Run("Exceeding limit", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadTotalLimit:  lo.ToPtr(int64(5000)),
+			UploadThreshold:   lo.ToPtr(int64(800)),
+		}
 
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: lo.ToPtr(int64(0)), // Disabled
-			})
+		// Mock current usage close to limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 950,
+		}, nil).Once()
 
-			enforcer := NewThresholdPolicyEnforcer(ctx)
-
-			// Run concurrent quota checks
-			var results []pluginCore.QuotaCheckResult
-			var errors []error
-			var mu sync.Mutex
-			var wg sync.WaitGroup
-
-			numGoroutines := 5
-			for i := 0; i < numGoroutines; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					result, err := enforcer.CheckUploadQuota(userID, 100)
-					mu.Lock()
-					results = append(results, result)
-					errors = append(errors, err)
-					mu.Unlock()
-				}()
-			}
-
-			wg.Wait()
-
-			// All should succeed (no error in validation)
-			for _, err := range errors {
-				assert.NoError(t, err)
-			}
-
-			// All should be denied because limit is 0
-			for _, result := range results {
-				assert.False(t, result.Allowed)
-				assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
-			}
-		}, testOptions())
+		result, err := enforcer.CheckUploadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
 	})
 
-	t.Run("Concurrent quota checks with -1 limit (should all allow)", func(t *testing.T) {
-		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-			baseUserID := uint(52000)
-			userID := baseUserID + 1
+	t.Run("No threshold configured", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadTotalLimit:  lo.ToPtr(int64(5000)),
+			// No threshold configured
+		}
 
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				UploadDailyLimit: nil,
-			})
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 300,
+		}, nil).Once()
 
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+		result, err := enforcer.CheckUploadQuota(config, uint64(200))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Nil(t, result.Details.Threshold)
+	})
 
-			// Run concurrent quota checks
-			var results []pluginCore.QuotaCheckResult
-			var errors []error
-			var mu sync.Mutex
-			var wg sync.WaitGroup
-
-			numGoroutines := 5
-			for i := 0; i < numGoroutines; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					result, err := enforcer.CheckUploadQuota(userID, 1000000)
-					mu.Lock()
-					results = append(results, result)
-					errors = append(errors, err)
-					mu.Unlock()
-				}()
-			}
-
-			wg.Wait()
-
-			// All should succeed
-			for _, err := range errors {
-				assert.NoError(t, err)
-			}
-
-			// All should be allowed because limit is -1 (unlimited)
-			for _, result := range results {
-				assert.True(t, result.Allowed)
-				assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-			}
-		}, testOptions())
+	t.Cleanup(func() {
+		dataManager.Cleanup()
 	})
 }
 
-func TestThresholdPolicyEnforcer_resolveEffectiveLimits(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		baseUserID := uint(39000)
+// TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed tests the CheckDownloadQuota method with mocks
+func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
-		t.Run("Custom limits only", func(t *testing.T) {
-			userID := baseUserID + 1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:       lo.ToPtr(int64(1000)),
-				UploadDailyLimit:   lo.ToPtr(int64(500)),
-				DownloadDailyLimit: lo.ToPtr(int64(750)),
-				UploadTotalLimit:   lo.ToPtr(int64(2000)),
-				DownloadTotalLimit: lo.ToPtr(int64(3000)),
-				StorageThreshold:   lo.ToPtr(int64(800)),
-				UploadThreshold:    lo.ToPtr(int64(400)),
-				DownloadThreshold:  lo.ToPtr(int64(600)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
 
-			config, err := enforcer.getUserQuotaConfig(userID)
-			assert.NoError(t, err)
-			assert.Equal(t, int64(1000), *config.StorageLimit)
-			assert.Equal(t, int64(500), *config.UploadDailyLimit)
-			assert.Equal(t, int64(750), *config.DownloadDailyLimit)
-			assert.Equal(t, int64(2000), *config.UploadTotalLimit)
-			assert.Equal(t, int64(3000), *config.DownloadTotalLimit)
-			assert.Equal(t, int64(800), *config.StorageThreshold)
-			assert.Equal(t, int64(400), *config.UploadThreshold)
-			assert.Equal(t, int64(600), *config.DownloadThreshold)
-		})
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
 
-		t.Run("Quota plan limits", func(t *testing.T) {
-			userID := baseUserID + 2
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
-			// Create a quota plan with threshold values
-			storageThreshold := int64(800)
-			uploadThreshold := int64(400)
-			downloadThreshold := int64(600)
-			plan := createTestQuotaPlan(t, ctx, "Test Plan", false, &testPlanLimits{
-				StorageLimit:       1000,
-				UploadDailyLimit:   500,
-				DownloadDailyLimit: 750,
-				UploadTotalLimit:   2000,
-				DownloadTotalLimit: 3000,
-				StorageThreshold:   &storageThreshold,
-				UploadThreshold:    &uploadThreshold,
-				DownloadThreshold:  &downloadThreshold,
-			})
+	t.Run("Within limit below threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			DownloadDailyLimit: lo.ToPtr(int64(2000)),
+			DownloadThreshold:  lo.ToPtr(int64(1600)), // 80% threshold
+		}
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+		// Mock current usage below threshold
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 500,
+		}, nil).Once()
 
-			// Update the user config to use the plan
-			planID := uint64(plan.ID)
-			config.QuotaPlanID = &planID
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
+		result, err := enforcer.CheckDownloadQuota(config, uint64(1000))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason) // Should be OK since 500+1000=1500 < 1600 threshold
+		assert.Nil(t, result.Details.Threshold)
+	})
 
-			limits, err := enforcer.resolveEffectiveLimits(config)
-			assert.NoError(t, err)
-			assert.Equal(t, uint64(plan.StorageLimit), *limits.StorageLimit)
-			assert.Equal(t, uint64(plan.UploadDailyLimit), *limits.UploadDailyLimit)
-			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limits.DownloadDailyLimit)
-			assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)
-			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit)
-			assert.Equal(t, uint64(*plan.StorageThreshold), *limits.StorageThreshold)
-			assert.Equal(t, uint64(*plan.UploadThreshold), *limits.UploadThreshold)
-			assert.Equal(t, uint64(*plan.DownloadThreshold), *limits.DownloadThreshold)
-		})
+	t.Run("Within limit above threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			DownloadDailyLimit: lo.ToPtr(int64(2000)),
+			DownloadThreshold:  lo.ToPtr(int64(1600)), // 80% threshold
+		}
 
-		t.Run("Mixed configuration", func(t *testing.T) {
-			userID := baseUserID + 3
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:    lo.ToPtr(int64(1000)),
-				UploadThreshold: lo.ToPtr(int64(400)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+		// Mock current usage above threshold but below limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 1500,
+		}, nil).Once()
 
-			// Create a quota plan with threshold values
-			storageThreshold := int64(1500)
-			downloadThreshold := int64(1200)
-			plan := createTestQuotaPlan(t, ctx, "Test Plan 2", false, &testPlanLimits{
-				StorageLimit:       2000,
-				UploadDailyLimit:   1000,
-				DownloadDailyLimit: 1500,
-				UploadTotalLimit:   5000,
-				DownloadTotalLimit: 7500,
-				StorageThreshold:   &storageThreshold,
-				DownloadThreshold:  &downloadThreshold,
-			})
+		result, err := enforcer.CheckDownloadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+		assert.NotNil(t, result.Details.Threshold)
+		assert.Equal(t, uint64(1600), *result.Details.Threshold)
+	})
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	t.Run("Exceeding limit", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			DownloadDailyLimit: lo.ToPtr(int64(2000)),
+			DownloadThreshold:  lo.ToPtr(int64(1600)),
+		}
 
-			// Update the user config with mixed configuration
-			planID := uint64(plan.ID)
-			config.QuotaPlanID = &planID
-			config.StorageLimit = lo.ToPtr(int64(1000))   // Override plan's storage limit
-			config.UploadThreshold = lo.ToPtr(int64(400)) // Override plan's upload threshold
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
+		// Mock current usage close to limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 1900,
+		}, nil).Once()
 
-			limits, err := enforcer.resolveEffectiveLimits(config)
-			assert.NoError(t, err)
-			assert.Equal(t, uint64(1000), *limits.StorageLimit)                          // Custom value
-			assert.Equal(t, uint64(plan.UploadDailyLimit), *limits.UploadDailyLimit)     // Plan value
-			assert.Equal(t, uint64(plan.DownloadDailyLimit), *limits.DownloadDailyLimit) // Plan value
-			assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)     // Plan value
-			assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit) // Plan value
-			assert.Equal(t, uint64(*plan.StorageThreshold), *limits.StorageThreshold)    // Plan value
-			assert.Equal(t, uint64(400), *limits.UploadThreshold)                        // Custom value
-			assert.Equal(t, uint64(*plan.DownloadThreshold), *limits.DownloadThreshold)  // Plan value
-		})
+		result, err := enforcer.CheckDownloadQuota(config, uint64(200))
+		require.NoError(t, err)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+	})
 
-		t.Run("Default plan", func(t *testing.T) {
-			userID := baseUserID + 4
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	t.Run("No threshold configured", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			DownloadDailyLimit: lo.ToPtr(int64(2000)),
+			// No threshold configured
+		}
 
-			// Create a default quota plan with threshold values
-			defaultStorageThreshold := int64(400)
-			defaultUploadThreshold := int64(200)
-			defaultDownloadThreshold := int64(250)
-			defaultPlan := createTestQuotaPlan(t, ctx, "Default Plan", true, &testPlanLimits{
-				StorageLimit:       500,
-				UploadDailyLimit:   250,
-				DownloadDailyLimit: 300,
-				UploadTotalLimit:   1000,
-				DownloadTotalLimit: 1500,
-				StorageThreshold:   &defaultStorageThreshold,
-				UploadThreshold:    &defaultUploadThreshold,
-				DownloadThreshold:  &defaultDownloadThreshold,
-			})
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 500,
+		}, nil).Once()
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+		result, err := enforcer.CheckDownloadQuota(config, uint64(1000))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Nil(t, result.Details.Threshold)
+	})
 
-			// Ensure no custom plan is set
-			config.QuotaPlanID = nil
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
 
-			limits, err := enforcer.resolveEffectiveLimits(config)
-			assert.NoError(t, err)
-			assert.Equal(t, uint64(defaultPlan.StorageLimit), *limits.StorageLimit)
-			assert.Equal(t, uint64(defaultPlan.UploadDailyLimit), *limits.UploadDailyLimit)
-			assert.Equal(t, uint64(defaultPlan.DownloadDailyLimit), *limits.DownloadDailyLimit)
-			assert.Equal(t, uint64(defaultPlan.UploadTotalLimit), *limits.UploadTotalLimit)
-			assert.Equal(t, uint64(defaultPlan.DownloadTotalLimit), *limits.DownloadTotalLimit)
-			assert.Equal(t, uint64(*defaultPlan.StorageThreshold), *limits.StorageThreshold)
-			assert.Equal(t, uint64(*defaultPlan.UploadThreshold), *limits.UploadThreshold)
-			assert.Equal(t, uint64(*defaultPlan.DownloadThreshold), *limits.DownloadThreshold)
-		})
+// TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed tests the CheckStorageQuota method with mocks
+func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
-		t.Run("Limits set to 0 (disabled)", func(t *testing.T) {
-			userID := baseUserID + 5
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:       lo.ToPtr(int64(0)),
-				UploadDailyLimit:   lo.ToPtr(int64(0)),
-				DownloadDailyLimit: lo.ToPtr(int64(0)),
-				UploadTotalLimit:   lo.ToPtr(int64(0)),
-				DownloadTotalLimit: lo.ToPtr(int64(0)),
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
 
-			// Get the user config
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
 
-			limits, err := enforcer.resolveEffectiveLimits(config)
-			assert.NoError(t, err)
-			assert.Equal(t, uint64(0), *limits.StorageLimit)
-			assert.Equal(t, uint64(0), *limits.UploadDailyLimit)
-			assert.Equal(t, uint64(0), *limits.DownloadDailyLimit)
-			assert.Equal(t, uint64(0), *limits.UploadTotalLimit)
-			assert.Equal(t, uint64(0), *limits.DownloadTotalLimit)
-		})
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
-		t.Run("Limits set to -1 (unlimited)", func(t *testing.T) {
-			userID := baseUserID + 6
-			negativeOne := int64(-1) // Will be converted to -1
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:       &negativeOne,
-				UploadDailyLimit:   &negativeOne,
-				DownloadDailyLimit: &negativeOne,
-				UploadTotalLimit:   &negativeOne,
-				DownloadTotalLimit: &negativeOne,
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	t.Run("Within limit below threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			StorageLimit:      lo.ToPtr(int64(3000)),
+			StorageThreshold:  lo.ToPtr(int64(2400)), // 80% threshold
+		}
 
-			// Get the user config and set limits to -1
-			config := &models.UserQuotaConfig{}
-			err := ctx.DB().Where("user_id = ?", userID).First(config).Error
-			require.NoError(t, err)
-			negativeOneInt64 := int64(-1)
-			config.StorageLimit = &negativeOneInt64
-			config.UploadDailyLimit = &negativeOneInt64
-			config.DownloadDailyLimit = &negativeOneInt64
-			config.UploadTotalLimit = &negativeOneInt64
-			config.DownloadTotalLimit = &negativeOneInt64
-			err = ctx.DB().Save(config).Error
-			require.NoError(t, err)
+		// Mock current usage below threshold (1000 + 500 = 1500 < 2400)
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:      userID,
+			BytesStored: 1000,
+		}, nil).Once()
 
-			limits, err := enforcer.resolveEffectiveLimits(config)
-			assert.NoError(t, err)
-			assert.Nil(t, limits.StorageLimit)       // -1 converted to nil (unlimited)
-			assert.Nil(t, limits.UploadDailyLimit)   // -1 converted to nil (unlimited)
-			assert.Nil(t, limits.DownloadDailyLimit) // -1 converted to nil (unlimited)
-			assert.Nil(t, limits.UploadTotalLimit)   // -1 converted to nil (unlimited)
-			assert.Nil(t, limits.DownloadTotalLimit) // -1 converted to nil (unlimited)
-		})
+		result, err := enforcer.CheckStorageQuota(config, uint64(500))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Nil(t, result.Details.Threshold)
+	})
 
-		t.Run("Thresholds set to 0 or unlimited with positive limits", func(t *testing.T) {
-			userID := baseUserID + 7
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(1000)),
-				StorageThreshold: nil, // Unlimited
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+	t.Run("Within limit above threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			StorageLimit:      lo.ToPtr(int64(3000)),
+			StorageThreshold:  lo.ToPtr(int64(2400)), // 80% threshold
+		}
 
-			config, err := enforcer.getUserQuotaConfig(userID)
-			assert.NoError(t, err)
-			assert.Equal(t, int64(1000), *config.StorageLimit)
-			assert.Nil(t, config.StorageThreshold) // Unlimited
-		})
+		// Mock current usage just below threshold (2300 + 200 = 2500 > 2400)
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:      userID,
+			BytesStored: 2300,
+		}, nil).Once()
 
-		t.Run("Threshold validation with positive limits", func(t *testing.T) {
-			userID := baseUserID + 8
-			createTestUser(t, ctx, userID, models.EnforcementPolicyThreshold, &testUserLimits{
-				StorageLimit:     lo.ToPtr(int64(1000)),
-				StorageThreshold: lo.ToPtr(int64(1500)), // Invalid: threshold > limit
-			})
-			enforcer := NewThresholdPolicyEnforcer(ctx)
+		result, err := enforcer.CheckStorageQuota(config, uint64(200))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+		assert.NotNil(t, result.Details.Threshold)
+		assert.Equal(t, uint64(2400), *result.Details.Threshold)
+	})
 
-			config, err := enforcer.getUserQuotaConfig(userID)
-			assert.NoError(t, err)
-			assert.Equal(t, int64(1000), *config.StorageLimit)
-			assert.Equal(t, int64(1500), *config.StorageThreshold)
-		})
-	}, testOptions())
+	t.Run("Exceeding limit", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			StorageLimit:      lo.ToPtr(int64(3000)),
+			StorageThreshold:  lo.ToPtr(int64(2400)),
+		}
+
+		// Mock current usage close to limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:      userID,
+			BytesStored: 2900,
+		}, nil)
+
+		result, err := enforcer.CheckStorageQuota(config, uint64(200))
+		require.NoError(t, err)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+
+// TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning tests threshold warning behavior
+func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Warning at exactly threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadThreshold:   lo.ToPtr(int64(800)),
+		}
+
+		// Mock current usage exactly at threshold
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 800,
+		}, nil)
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+	})
+
+	t.Run("Warning when reaching threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadThreshold:   lo.ToPtr(int64(800)),
+		}
+
+		// Mock current usage just below threshold
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 799,
+		}, nil)
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+	})
+
+	t.Run("Warning with zero threshold", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000)),
+			UploadThreshold:   lo.ToPtr(int64(0)),
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 100,
+		}, nil)
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonWarningThreshold, result.Reason)
+		assert.NotNil(t, result.Details.Threshold)
+		assert.Equal(t, uint64(0), *result.Details.Threshold)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+
+// TestThresholdPolicyEnforcer_UploadSuccessDimensionAware tests dimension-aware success responses for uploads
+func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager).Maybe()
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Only daily limit exists - reports daily usage", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+			UploadThreshold:   nil,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(*config.UploadDailyLimit), *result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Run("Only total limit exists - reports total usage", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadTotalLimit:  lo.ToPtr(int64(50000)),
+			UploadThreshold:   nil,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 5000,
+		}, nil).Once()
+
+		totalUsage := uint64(25000)
+		// Only one call expected during quota check
+		mockUsageManager.On("GetTotalBytesByType", userID, models.UsageTypeUpload).Return(totalUsage, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, totalUsage, result.Details.CurrentUsage)
+		assert.Equal(t, uint64(*config.UploadTotalLimit), *result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Run("Neither daily nor total limit exists", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Nil(t, result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+
+// TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware tests dimension-aware success responses for downloads
+func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager).Maybe()
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Only daily limit exists - reports daily usage", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			DownloadDailyLimit: lo.ToPtr(int64(10000)),
+			DownloadThreshold:  nil,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckDownloadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(*config.DownloadDailyLimit), *result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Run("Only total limit exists - reports total usage", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			DownloadTotalLimit: lo.ToPtr(int64(50000)),
+			DownloadThreshold:  nil,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 5000,
+		}, nil).Once()
+
+		totalUsage := uint64(25000)
+		// Only one call expected during quota check
+		mockUsageManager.On("GetTotalBytesByType", userID, models.UsageTypeDownload).Return(totalUsage, nil).Once()
+
+		result, err := enforcer.CheckDownloadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, totalUsage, result.Details.CurrentUsage)
+		assert.Equal(t, uint64(*config.DownloadTotalLimit), *result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Run("Neither daily nor total limit exists", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:          userID,
+			BytesDownloaded: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckDownloadQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Nil(t, result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+
+// TestThresholdPolicyEnforcer_StorageSuccessDimensionAware tests dimension-aware success responses for storage
+func TestThresholdPolicyEnforcer_StorageSuccessDimensionAware(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+	mockUsageManager.On("GetTotalBytesByType", mock.Anything, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+	mockUsageManager.On("GetTotalBytesByType", mock.Anything, models.UsageTypeDownload).Return(uint64(0), nil).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Storage limit exists - reports storage usage", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			StorageLimit:      lo.ToPtr(int64(10000)),
+			StorageThreshold:  nil,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:      userID,
+			BytesStored: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckStorageQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(*config.StorageLimit), *result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Run("No storage limit exists", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:      userID,
+			BytesStored: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckStorageQuota(config, uint64(100))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Nil(t, result.Details.Limit)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+
+// TestThresholdPolicyEnforcer_OverflowPrevention tests uint64 overflow prevention
+func TestThresholdPolicyEnforcer_OverflowPrevention(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager).Maybe()
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Current usage near max uint64", func(t *testing.T) {
+		currentUsage := uint64(math.MaxUint64 - 5) // Max uint64 - 5
+		requestedBytes := uint64(10)
+		limit := uint64(math.MaxUint64) // Max uint64
+		threshold := uint64(math.MaxUint64 - 15)
+		policy := models.EnforcementPolicyThreshold
+
+		result := enforcer.checkThresholdWithLimit(currentUsage, requestedBytes, &threshold, limit, policy)
+		assert.NotNil(t, result)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+	})
+
+	t.Run("Requested bytes near max uint64", func(t *testing.T) {
+		currentUsage := uint64(1000)
+		requestedBytes := uint64(math.MaxUint64 - 1000) // Large but valid uint64
+		limit := uint64(10000)
+		threshold := uint64(5000)
+		policy := models.EnforcementPolicyThreshold
+
+		result := enforcer.checkThresholdWithLimit(currentUsage, requestedBytes, &threshold, limit, policy)
+		assert.NotNil(t, result)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+	})
+
+	t.Run("Current usage equals limit exactly", func(t *testing.T) {
+		currentUsage := uint64(10000)
+		requestedBytes := uint64(1)
+		limit := uint64(10000)
+		threshold := uint64(5000)
+		policy := models.EnforcementPolicyThreshold
+
+		result := enforcer.checkThresholdWithLimit(currentUsage, requestedBytes, &threshold, limit, policy)
+		assert.NotNil(t, result)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+	})
+
+	t.Run("Valid operation without overflow", func(t *testing.T) {
+		currentUsage := uint64(5000)
+		requestedBytes := uint64(1000)
+		limit := uint64(10000)
+		threshold := uint64(7500)
+		policy := models.EnforcementPolicyThreshold
+
+		result := enforcer.checkThresholdWithLimit(currentUsage, requestedBytes, &threshold, limit, policy)
+		assert.Nil(t, result) // No action needed - below threshold
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+
+// TestThresholdPolicyEnforcer_EdgeCases tests edge cases and boundary conditions
+func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager).Maybe()
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Current usage exactly equals limit", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+		}
+
+		// Mock current usage exactly at limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 10000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1))
+		require.NoError(t, err)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+	})
+
+	t.Run("Requested bytes exactly equals remaining capacity", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+		}
+
+		// Mock current usage one byte under limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 9999,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	})
+
+	t.Run("Small requested bytes", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+		}
+
+		// Mock current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	})
+
+	t.Run("Large limits and usage values", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(1000000000)), // Large but valid int64
+		}
+
+		// Mock large current usage
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 500000000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1000000))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	})
+
+	t.Run("Mixed daily and total limit scenarios - daily limit exceeded", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			UploadDailyLimit:  lo.ToPtr(int64(5000)),
+			UploadTotalLimit:  lo.ToPtr(int64(50000)),
+		}
+
+		// Mock current usage exactly at daily limit
+		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			UserID:        userID,
+			BytesUploaded: 5000,
+		}, nil).Once()
+
+		result, err := enforcer.CheckUploadQuota(config, uint64(1))
+		require.NoError(t, err)
+		assert.False(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
+		assert.Equal(t, uint64(*config.UploadDailyLimit), *result.Details.Limit)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+}
+func TestThresholdPolicyEnforcer_ResolveEffectiveLimits_CustomLimits_Unit_Success(t *testing.T) {
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
+
+	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+	t.Run("Custom limits with thresholds", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyThreshold,
+			StorageLimit:       lo.ToPtr(int64(1000)),
+			UploadDailyLimit:   lo.ToPtr(int64(500)),
+			DownloadDailyLimit: lo.ToPtr(int64(750)),
+			StorageThreshold:   lo.ToPtr(int64(800)),
+			UploadThreshold:    lo.ToPtr(int64(400)),
+			DownloadThreshold:  lo.ToPtr(int64(600)),
+		}
+
+		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyThreshold)
+		assert.NoError(t, err)
+		assert.Equal(t, userID, limits.UserID)
+		assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), limits.EnforcementPolicy)
+		assert.Equal(t, uint64(1000), *limits.StorageLimit)
+		assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
+		assert.Equal(t, uint64(750), *limits.DownloadDailyLimit)
+		assert.Equal(t, uint64(800), *limits.StorageThreshold)
+		assert.Equal(t, uint64(400), *limits.UploadThreshold)
+		assert.Equal(t, uint64(600), *limits.DownloadThreshold)
+	})
+
+	t.Run("Nil thresholds", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			StorageLimit:      lo.ToPtr(int64(1000)),
+			UploadDailyLimit:  lo.ToPtr(int64(500)),
+			// Thresholds are nil
+		}
+
+		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyThreshold)
+		assert.NoError(t, err)
+		assert.Equal(t, userID, limits.UserID)
+		assert.Equal(t, uint64(1000), *limits.StorageLimit)
+		assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
+		assert.Nil(t, limits.StorageThreshold)
+		assert.Nil(t, limits.UploadThreshold)
+	})
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
 }

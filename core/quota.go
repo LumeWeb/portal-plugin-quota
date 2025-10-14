@@ -4,12 +4,14 @@ import (
 	"time"
 
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"go.lumeweb.com/portal/core"
 )
 
 const QUOTA_SERVICE = "quota"
 
 // QuotaService is the interface for quota management functionality
 type QuotaService interface {
+	core.Service
 	// Usage Recording
 	RecordUpload(userID, uploadID uint, bytes uint64, ip string) error
 	RecordDownload(userID, uploadID uint, bytes uint64, ip string) error
@@ -24,6 +26,7 @@ type QuotaService interface {
 	GetCurrentUsage(userID uint) (*Usage, error)
 	GetUsageHistory(userID uint, period int, usageType UsageType) ([]*UsagePoint, error)
 	GetDetailedUsage(userID uint, start, end time.Time) ([]*UserUsageDetail, error)
+	GetTodayUsage(userID uint) (*Usage, error)
 
 	// Configuration Management
 	SetQuotaConfig(userID uint, config *UserQuotaConfig) error
@@ -48,4 +51,21 @@ type QuotaService interface {
 	// System Management
 	Reconcile() error
 	CleanupOldRecords(retentionDays int) error
+
+	// Usage Manager getter
+	GetUsageManager() UsageManager
+
+	// Grant Manager getter
+	GetGrantManager() GrantManager
+
+	// Usage Aggregator getter
+	GetUsageAggregator() UsageAggregator
+
+	GetQuotaPlanManager() QuotaPlanManager
+}
+
+// QuotaPlanManager abstracts database operations related to quota plans
+type QuotaPlanManager interface {
+	GetQuotaPlanByID(id uint64) (*models.QuotaPlan, error)
+	GetDefaultQuotaPlan() (*models.QuotaPlan, error)
 }

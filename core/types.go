@@ -1,8 +1,9 @@
 package core
 
 import (
-	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"time"
+
+	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
 // QuotaCheckResult represents the result of a quota check
@@ -53,6 +54,29 @@ type EffectiveLimits struct {
 	UploadThreshold    *uint64           `json:"upload_threshold,omitempty"`
 	DownloadThreshold  *uint64           `json:"download_threshold,omitempty"`
 	QuotaPlanID        *uint64           `json:"quota_plan_id,omitempty"`
+
+	// Track whether limits were explicitly configured (even if unlimited)
+	HasStorageLimitConfig       bool `json:"has_storage_limit_config"`
+	HasUploadDailyLimitConfig   bool `json:"has_upload_daily_limit_config"`
+	HasDownloadDailyLimitConfig bool `json:"has_download_daily_limit_config"`
+	HasUploadTotalLimitConfig   bool `json:"has_upload_total_limit_config"`
+	HasDownloadTotalLimitConfig bool `json:"has_download_total_limit_config"`
+	HasStorageThresholdConfig   bool `json:"has_storage_threshold_config"`
+	HasUploadThresholdConfig    bool `json:"has_upload_threshold_config"`
+	HasDownloadThresholdConfig  bool `json:"has_download_threshold_config"`
+}
+
+// HasAnyLimits returns true if any limits are configured for this user
+// This includes both finite limits and unlimited limits (represented as nil)
+func (e EffectiveLimits) HasAnyLimits() bool {
+	return e.HasStorageLimitConfig ||
+		e.HasUploadDailyLimitConfig ||
+		e.HasDownloadDailyLimitConfig ||
+		e.HasUploadTotalLimitConfig ||
+		e.HasDownloadTotalLimitConfig ||
+		e.HasStorageThresholdConfig ||
+		e.HasUploadThresholdConfig ||
+		e.HasDownloadThresholdConfig
 }
 
 // AllowanceBalance represents the current allowance balance for a user

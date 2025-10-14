@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"fmt"
 	"time"
 
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
@@ -11,17 +12,22 @@ import (
 // UnlimitedPolicyEnforcer implements PolicyEnforcer for the UNLIMITED policy
 type UnlimitedPolicyEnforcer struct {
 	*BasePolicyEnforcer
+	usageManager pluginCore.UsageManager
 }
 
 // NewUnlimitedPolicyEnforcer creates a new unlimited policy enforcer
-func NewUnlimitedPolicyEnforcer(ctx core.Context) *UnlimitedPolicyEnforcer {
+func NewUnlimitedPolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaService) *UnlimitedPolicyEnforcer {
 	return &UnlimitedPolicyEnforcer{
-		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx),
+		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager()),
+		usageManager:      quotaService.GetUsageManager(),
 	}
 }
 
 // CheckUploadQuota always allows uploads since there are no limits
 func (u *UnlimitedPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if config == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config cannot be nil")
+	}
 	if err := u.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -34,6 +40,9 @@ func (u *UnlimitedPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfi
 
 // CheckDownloadQuota always allows downloads since there are no limits
 func (u *UnlimitedPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if config == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config cannot be nil")
+	}
 	if err := u.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -46,6 +55,9 @@ func (u *UnlimitedPolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCon
 
 // CheckStorageQuota always allows storage since there are no limits
 func (u *UnlimitedPolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	if config == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config cannot be nil")
+	}
 	if err := u.validateRequestedBytes(requestedBytes); err != nil {
 		return pluginCore.QuotaCheckResult{}, err
 	}
@@ -58,110 +70,42 @@ func (u *UnlimitedPolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConf
 
 // RecordUpload simply records usage without any limit checking
 func (u *UnlimitedPolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint64, ip string) error {
-	if err := u.validateUserID(userID); err != nil {
+	if err := u.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
 
-	if err := u.validateBytes(bytes); err != nil {
-		return err
-	}
-
-	// Record detailed usage
-	detail := &models.UserUsageDetail{
-		UserID:     userID,
-		UploadID:   uploadID,
-		Type:       models.UsageTypeUpload,
-		Bytes:      bytes,
-		IP:         ip,
-		Timestamp:  time.Now(),
-		SharedWith: 1, // Uploads are not shared
-	}
-
-	if err := u.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, models.UsageTypeUpload, int64(bytes))
+	return u.delegateRecordUpload(userID, uploadID, bytes, ip)
 }
 
 // RecordDownload simply records usage without any limit checking
 func (u *UnlimitedPolicyEnforcer) RecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
-	if err := u.validateUserID(userID); err != nil {
+	if err := u.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
 
-	if err := u.validateBytes(bytes); err != nil {
-		return err
-	}
-
-	// Record detailed usage
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      models.UsageTypeDownload,
-		Bytes:     bytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := u.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, models.UsageTypeDownload, int64(bytes))
+	return u.delegateRecordDownload(userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange simply records usage without any limit checking
 func (u *UnlimitedPolicyEnforcer) RecordStorageChange(userID, uploadID uint, bytes int64, ip string) error {
-	if err := u.validateUserID(userID); err != nil {
+	if err := u.validateStorageRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
 
-	if bytes == 0 {
-		return models.ErrInvalidBytes
-	}
-
-	// Record detailed usage
-	var usageType models.UsageType
-	var recordBytes uint64
-	if bytes > 0 {
-		usageType = models.UsageTypeStorageAdd
-		recordBytes = uint64(bytes)
-	} else {
-		usageType = models.UsageTypeStorageRemove
-		recordBytes = uint64(-bytes)
-	}
-
-	detail := &models.UserUsageDetail{
-		UserID:    userID,
-		UploadID:  uploadID,
-		Type:      usageType,
-		Bytes:     recordBytes,
-		IP:        ip,
-		Timestamp: time.Now(),
-	}
-
-	if err := u.recordUserUsageDetail(detail); err != nil {
-		return err
-	}
-
-	// Update daily aggregated usage
-	return u.updateDailyUsage(userID, usageType, bytes)
+	return u.delegateRecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage delegates to the base enforcer
 func (u *UnlimitedPolicyEnforcer) GetDetailedUsage(userID uint, start, end time.Time) ([]*models.UserUsageDetail, error) {
-	return u.getDetailedUsage(userID, start, end)
+	return u.usageManager.GetDetailedUsage(userID, start, end)
 }
 
 // GetCurrentUsage delegates to the base enforcer
 func (u *UnlimitedPolicyEnforcer) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) {
-	return u.getCurrentUsage(userID)
+	return u.usageManager.GetCurrentUsage(userID)
 }
 
 // GetUsageHistory delegates to the base enforcer
 func (u *UnlimitedPolicyEnforcer) GetUsageHistory(userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
-	return u.getUsageHistory(userID, period, models.UsageType(usageType))
+	return u.usageManager.GetUsageHistory(userID, period, usageType)
 }

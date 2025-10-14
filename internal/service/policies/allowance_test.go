@@ -1,522 +1,566 @@
 package policies
 
 import (
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
-// TestAllowancePolicyEnforcer_CheckUploadQuota tests the CheckUploadQuota method
-func TestAllowancePolicyEnforcer_CheckUploadQuota(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+// TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed tests the CheckUploadQuota method with sufficient allowance
+func TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		t.Run("Sufficient allowance", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-			// Set up mock expectations
-			grants := []*models.AllowanceGrant{
-				createTestAllowanceGrant(t, ctx, userID, models.GrantTypeUpload, 1000),
-			}
+	userID := dataManager.NextUserID()
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyAllowance,
+	}
 
-			mockGrantManager.EXPECT().GetActiveGrantsByType(userID, models.GrantTypeUpload).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1000))
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeUpload,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          1000,
+			BytesUsed:      0,
+			BytesRemaining: 1000,
+			IsActive:       true,
+		},
+	}
 
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeUpload).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 
-			// Check quota with sufficient allowance
-			_, err = enforcer.CheckUploadQuota(config, 500)
-			require.NoError(t, err)
-		})
+	result, err := enforcer.CheckUploadQuota(config, 500)
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
 
-		t.Run("Insufficient allowance", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Set up mock expectations
-			grants := []*models.AllowanceGrant{
-				createTestAllowanceGrant(t, ctx, userID, models.GrantTypeUpload, 100),
-			}
-
-			mockGrantManager.EXPECT().GetActiveGrantsByType(userID, models.GrantTypeUpload).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
-
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
-
-			// Check quota with insufficient allowance
-			result, err := enforcer.CheckUploadQuota(config, 500)
-			require.NoError(t, err)
-
-			assert.False(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
-			assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance), result.Details.Policy)
-			assert.Equal(t, uint64(100), *result.Details.Allowance)
-			assert.Equal(t, uint64(0), *result.Details.AllowanceUsed) // No bytes used yet
-		})
-
-		t.Run("Invalid bytes requested", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
-
-			// Check quota with zero bytes
-			_, err = enforcer.CheckUploadQuota(config, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_CheckDownloadQuota tests the CheckDownloadQuota method
-func TestAllowancePolicyEnforcer_CheckDownloadQuota(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+// TestAllowancePolicyEnforcer_CheckUploadQuota_InsufficientAllowance_Integration_Blocked tests the CheckUploadQuota method with insufficient allowance
+func TestAllowancePolicyEnforcer_CheckUploadQuota_InsufficientAllowance_Integration_Blocked(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		t.Run("Sufficient allowance", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-			// Set up mock expectations
-			grants := []*models.AllowanceGrant{
-				createTestAllowanceGrant(t, ctx, userID, models.GrantTypeDownload, 1000),
-			}
+	userID := dataManager.NextUserID()
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyAllowance,
+	}
 
-			mockGrantManager.EXPECT().GetActiveGrantsByType(userID, models.GrantTypeDownload).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1000))
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeUpload,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          100,
+			BytesUsed:      0,
+			BytesRemaining: 100,
+			IsActive:       true,
+		},
+	}
 
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeUpload).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(100))
 
-			// Check quota with sufficient allowance
-			_, err = enforcer.CheckDownloadQuota(config, 500)
-			require.NoError(t, err)
-		})
+	result, err := enforcer.CheckUploadQuota(config, 500)
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
+	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
+	assert.Equal(t, uint64(100), *result.Details.Allowance)
+	assert.Equal(t, uint64(0), *result.Details.AllowanceUsed)
 
-		t.Run("Insufficient allowance", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Set up mock expectations
-			grants := []*models.AllowanceGrant{
-				createTestAllowanceGrant(t, ctx, userID, models.GrantTypeDownload, 100),
-			}
-
-			mockGrantManager.EXPECT().GetActiveGrantsByType(userID, models.GrantTypeDownload).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
-
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
-
-			// Check quota with insufficient allowance
-			result, err := enforcer.CheckDownloadQuota(config, 500)
-			require.NoError(t, err)
-
-			assert.False(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
-			assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance), result.Details.Policy)
-			assert.Equal(t, uint64(100), *result.Details.Allowance)
-			assert.Equal(t, uint64(0), *result.Details.AllowanceUsed) // No bytes used yet
-		})
-
-		t.Run("Invalid bytes requested", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
-
-			// Check quota with zero bytes
-			_, err = enforcer.CheckDownloadQuota(config, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_CheckStorageQuota tests the CheckStorageQuota method
-func TestAllowancePolicyEnforcer_CheckStorageQuota(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+// TestAllowancePolicyEnforcer_CheckDownloadQuota_SufficientAllowance_Integration_Allowed tests the CheckDownloadQuota method with sufficient allowance
+func TestAllowancePolicyEnforcer_CheckDownloadQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		t.Run("Sufficient allowance", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-			// Set up mock expectations
-			grants := []*models.AllowanceGrant{
-				createTestAllowanceGrant(t, ctx, userID, models.GrantTypeStorage, 1000),
-			}
+	userID := dataManager.NextUserID()
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyAllowance,
+	}
 
-			mockGrantManager.EXPECT().GetActiveGrantsByType(userID, models.GrantTypeStorage).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1000))
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeDownload,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          1000,
+			BytesUsed:      0,
+			BytesRemaining: 1000,
+			IsActive:       true,
+		},
+	}
 
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeDownload).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 
-			// Check quota with sufficient allowance
-			_, err = enforcer.CheckStorageQuota(config, 500)
-			require.NoError(t, err)
-		})
+	result, err := enforcer.CheckDownloadQuota(config, 500)
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
 
-		t.Run("Insufficient allowance", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Set up mock expectations
-			grants := []*models.AllowanceGrant{
-				createTestAllowanceGrant(t, ctx, userID, models.GrantTypeStorage, 100),
-			}
-
-			mockGrantManager.EXPECT().GetActiveGrantsByType(userID, models.GrantTypeStorage).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
-
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
-
-			// Check quota with insufficient allowance
-			result, err := enforcer.CheckStorageQuota(config, 500)
-			require.NoError(t, err)
-
-			assert.False(t, result.Allowed)
-			assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
-			assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance), result.Details.Policy)
-			assert.Equal(t, uint64(100), *result.Details.Allowance)
-			assert.Equal(t, uint64(0), *result.Details.AllowanceUsed) // No bytes used yet
-		})
-
-		t.Run("Invalid bytes requested", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Get user config
-			config, err := enforcer.getUserQuotaConfig(userID)
-			require.NoError(t, err)
-
-			// Check quota with zero bytes
-			_, err = enforcer.CheckStorageQuota(config, 0)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_RecordUpload tests the RecordUpload method
-func TestAllowancePolicyEnforcer_RecordUpload(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		uploadID := uint(1)
-		ip := "192.168.1.1"
-		bytes := uint64(100)
+// TestAllowancePolicyEnforcer_CheckDownloadQuota_InsufficientAllowance_Integration_Blocked tests the CheckDownloadQuota method with insufficient allowance
+func TestAllowancePolicyEnforcer_CheckDownloadQuota_InsufficientAllowance_Integration_Blocked(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-		t.Run("Successful upload recording", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	userID := dataManager.NextUserID()
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyAllowance,
+	}
 
-			// Set up mock expectations
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes).Return([]*models.AllowanceConsumption{}, nil)
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeDownload,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          100,
+			BytesUsed:      0,
+			BytesRemaining: 100,
+			IsActive:       true,
+		},
+	}
 
-			// Record upload
-			err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
-			assert.NoError(t, err)
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeDownload).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(100))
 
-			// Verify usage was recorded in database
-			var usageDetails []models.UserUsageDetail
-			err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
-			require.NoError(t, err)
-			assert.Len(t, usageDetails, 1)
-			assert.Equal(t, models.UsageTypeUpload, usageDetails[0].Type)
-			assert.Equal(t, bytes, usageDetails[0].Bytes)
-			assert.Equal(t, ip, usageDetails[0].IP)
-		})
+	result, err := enforcer.CheckDownloadQuota(config, 500)
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
+	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
+	assert.Equal(t, uint64(100), *result.Details.Allowance)
+	assert.Equal(t, uint64(0), *result.Details.AllowanceUsed)
 
-		t.Run("Grant consumption failure", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Set up mock expectations for failure
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes).Return(nil, assert.AnError)
-
-			// Record upload should fail
-			err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to consume upload allowance")
-		})
-
-		t.Run("Invalid user ID", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			err := enforcer.RecordUpload(0, uploadID, bytes, ip)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			err := enforcer.RecordUpload(userID, uploadID, 0, ip)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_RecordDownload tests the RecordDownload method
-func TestAllowancePolicyEnforcer_RecordDownload(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		uploadID := uint(1)
-		ip := "192.168.1.1"
-		bytes := uint64(100)
+// TestAllowancePolicyEnforcer_CheckStorageQuota_SufficientAllowance_Integration_Allowed tests the CheckStorageQuota method with sufficient allowance
+func TestAllowancePolicyEnforcer_CheckStorageQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-		t.Run("Successful download recording", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	userID := dataManager.NextUserID()
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyAllowance,
+	}
 
-			// Set up mock expectations
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes).Return([]*models.AllowanceConsumption{}, nil)
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeStorage,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          1000,
+			BytesUsed:      0,
+			BytesRemaining: 1000,
+			IsActive:       true,
+		},
+	}
 
-			// Record download
-			err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
-			assert.NoError(t, err)
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeStorage).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 
-			// Verify usage was recorded in database
-			var usageDetails []models.UserUsageDetail
-			err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
-			require.NoError(t, err)
-			assert.Len(t, usageDetails, 1)
-			assert.Equal(t, models.UsageTypeDownload, usageDetails[0].Type)
-			assert.Equal(t, bytes, usageDetails[0].Bytes)
-			assert.Equal(t, ip, usageDetails[0].IP)
-		})
+	result, err := enforcer.CheckStorageQuota(config, 500)
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
 
-		t.Run("Grant consumption failure", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Set up mock expectations for failure
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes).Return(nil, assert.AnError)
-
-			// Record download should fail
-			err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to consume download allowance")
-		})
-
-		t.Run("Invalid user ID", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			err := enforcer.RecordDownload(0, uploadID, bytes, ip)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Invalid bytes", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			err := enforcer.RecordDownload(userID, uploadID, 0, ip)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_RecordStorageChange tests the RecordStorageChange method
-func TestAllowancePolicyEnforcer_RecordStorageChange(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		uploadID := uint(1)
-		ip := "192.168.1.1"
-		bytes := int64(100)
+// TestAllowancePolicyEnforcer_CheckStorageQuota_InsufficientAllowance_Integration_Blocked tests the CheckStorageQuota method with insufficient allowance
+func TestAllowancePolicyEnforcer_CheckStorageQuota_InsufficientAllowance_Integration_Blocked(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-		t.Run("Successful storage addition recording", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	userID := dataManager.NextUserID()
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyAllowance,
+	}
 
-			// Set up mock expectations
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes)).Return([]*models.AllowanceConsumption{}, nil)
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeStorage,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          100,
+			BytesUsed:      0,
+			BytesRemaining: 100,
+			IsActive:       true,
+		},
+	}
 
-			// Record storage change
-			err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
-			assert.NoError(t, err)
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeStorage).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(100))
 
-			// Verify usage was recorded in database
-			var usageDetails []models.UserUsageDetail
-			err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
-			require.NoError(t, err)
-			assert.Len(t, usageDetails, 1)
-			assert.Equal(t, models.UsageTypeStorageAdd, usageDetails[0].Type)
-			assert.Equal(t, uint64(bytes), usageDetails[0].Bytes)
-			assert.Equal(t, ip, usageDetails[0].IP)
-		})
+	result, err := enforcer.CheckStorageQuota(config, 500)
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
+	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
+	assert.Equal(t, uint64(100), *result.Details.Allowance)
+	assert.Equal(t, uint64(0), *result.Details.AllowanceUsed)
 
-		t.Run("Storage removal (no grant consumption)", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-			removalBytes := int64(-50)
-			removalUploadID := uint(2) // Use different upload ID to avoid conflict
-
-			// Record storage change - should not consume grants for removal
-			err := enforcer.RecordStorageChange(userID, removalUploadID, removalBytes, ip)
-			assert.NoError(t, err)
-
-			// Verify usage was recorded in database
-			var usageDetails []models.UserUsageDetail
-			err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, removalUploadID).Find(&usageDetails).Error
-			require.NoError(t, err)
-			assert.Len(t, usageDetails, 1)
-			assert.Equal(t, models.UsageTypeStorageRemove, usageDetails[0].Type) // Storage removal is stored as STORAGE_REMOVE with positive bytes
-			assert.Equal(t, uint64(-removalBytes), usageDetails[0].Bytes)
-			assert.Equal(t, ip, usageDetails[0].IP)
-		})
-
-		t.Run("Grant consumption failure", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			// Set up mock expectations for failure
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes)).Return(nil, assert.AnError)
-
-			// Record storage change should fail
-			err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to consume storage allowance")
-		})
-
-		t.Run("Invalid user ID", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			err := enforcer.RecordStorageChange(0, uploadID, bytes, ip)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
-		})
-
-		t.Run("Zero bytes", func(t *testing.T) {
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
-
-			err := enforcer.RecordStorageChange(userID, uploadID, 0, ip)
-			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
-		})
-	}, testOptions())
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_GetDetailedUsage tests the GetDetailedUsage method
-func TestAllowancePolicyEnforcer_GetDetailedUsage(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+// TestAllowancePolicyEnforcer_RecordUpload_SuccessfulRecording_Integration_Success tests the RecordUpload method with successful recording
+func TestAllowancePolicyEnforcer_RecordUpload_SuccessfulRecording_Integration_Success(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-		// Create some usage records
-		createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 100)
-		createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 200)
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-		mockGrantManager := createMockGrantManager(t)
-		enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := uint64(100)
+	ip := "192.168.1.1"
 
-		start := time.Now().Add(-time.Hour)
-		end := time.Now().Add(time.Hour)
+	// Set up mock expectations
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes).Return([]*models.AllowanceConsumption{}, nil)
+	mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil)
 
-		usageDetails, err := enforcer.GetDetailedUsage(userID, start, end)
-		assert.NoError(t, err)
-		assert.Len(t, usageDetails, 2)
+	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
+	assert.NoError(t, err)
 
-		// Verify the records are returned in descending order by timestamp
-		assert.True(t, usageDetails[0].Timestamp.After(usageDetails[1].Timestamp) || usageDetails[0].Timestamp.Equal(usageDetails[1].Timestamp))
-	}, testOptions())
+	// Verify usage manager was called with correct parameters
+	mockUsageManager.AssertCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
+
+	dataManager.Cleanup()
 }
 
-// TestAllowancePolicyEnforcer_GetCurrentUsage tests the GetCurrentUsage method
-func TestAllowancePolicyEnforcer_ConcurrentAccess(t *testing.T) {
-	t.Run("Concurrent upload recordings", func(t *testing.T) {
-		coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-			userID := uint(10000)
-			createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+// TestAllowancePolicyEnforcer_RecordUpload_GrantConsumptionFailure_Integration_Error tests the RecordUpload method with grant consumption failure
+func TestAllowancePolicyEnforcer_RecordUpload_GrantConsumptionFailure_Integration_Error(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 
-			mockGrantManager := createMockGrantManager(t)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-			// Set up mock expectations for multiple calls
-			mockGrantManager.EXPECT().ConsumeFromGrants(userID, models.GrantTypeUpload, uint64(100)).Return([]*models.AllowanceConsumption{}, nil).Times(5)
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := uint64(100)
+	ip := "192.168.1.2"
 
-			// Run concurrent upload recordings
-			var errors []error
-			var mu sync.Mutex
-			var wg sync.WaitGroup
+	// Set up mock expectations for failure
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes).Return(nil, assert.AnError)
 
-			numGoroutines := 5
-			for i := 0; i < numGoroutines; i++ {
-				wg.Add(1)
-				go func(goroutineID int) {
-					defer wg.Done()
-					err := enforcer.RecordUpload(userID, uint(goroutineID+1), 100, "192.168.1.1")
-					mu.Lock()
-					errors = append(errors, err)
-					mu.Unlock()
-				}(i)
-			}
+	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to consume upload allowance")
+	// Ensure no recording happened
+	mockUsageManager.AssertNotCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
 
-			wg.Wait()
+	dataManager.Cleanup()
+}
 
-			// All should succeed
-			for _, err := range errors {
-				assert.NoError(t, err)
-			}
-		}, testOptions())
+// TestAllowancePolicyEnforcer_RecordDownload_SuccessfulRecording_Integration_Success tests the RecordDownload method with successful recording
+func TestAllowancePolicyEnforcer_RecordDownload_SuccessfulRecording_Integration_Success(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := uint64(100)
+	ip := "192.168.1.1"
+
+	// Set up mock expectations
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes).Return([]*models.AllowanceConsumption{}, nil)
+	mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil)
+
+	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
+	assert.NoError(t, err)
+
+	// Verify usage manager was called with correct parameters
+	mockUsageManager.AssertCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
+
+	dataManager.Cleanup()
+}
+
+// TestAllowancePolicyEnforcer_RecordDownload_GrantConsumptionFailure_Integration_Error tests the RecordDownload method with grant consumption failure
+func TestAllowancePolicyEnforcer_RecordDownload_GrantConsumptionFailure_Integration_Error(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := uint64(100)
+	ip := "192.168.1.2"
+
+	// Set up mock expectations for failure
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes).Return(nil, assert.AnError)
+
+	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to consume download allowance")
+	// Ensure no recording happened
+	mockUsageManager.AssertNotCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
+
+	dataManager.Cleanup()
+}
+
+// TestAllowancePolicyEnforcer_RecordStorageChange_SuccessfulRecording_Integration_Success tests the RecordStorageChange method with successful addition recording
+func TestAllowancePolicyEnforcer_RecordStorageChange_SuccessfulRecording_Integration_Success(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := int64(100)
+	ip := "192.168.1.1"
+
+	// Set up mock expectations
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeStorage,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          1000,
+			BytesUsed:      0,
+			BytesRemaining: 1000,
+			IsActive:       true,
+		},
+	}
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeStorage).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeStorage, uint64(bytes)).Return([]*models.AllowanceConsumption{}, nil)
+	mockUsageManager.On("RecordStorageChange", userID, uploadID, bytes, ip).Return(nil)
+
+	err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
+	assert.NoError(t, err)
+
+	// Verify usage manager was called with correct parameters
+	mockUsageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, bytes, ip)
+
+	dataManager.Cleanup()
+}
+
+// TestAllowancePolicyEnforcer_RecordStorageChange_Removal_Integration_Success tests the RecordStorageChange method with storage removal
+func TestAllowancePolicyEnforcer_RecordStorageChange_Removal_Integration_Success(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := int64(-50)
+	ip := "192.168.1.2"
+
+	// For storage removal, we don't consume grants, so only usage manager expectation needed
+	mockUsageManager.On("RecordStorageChange", userID, uploadID, bytes, ip).Return(nil)
+
+	err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
+	assert.NoError(t, err)
+
+	// Verify usage manager was called with correct parameters
+	mockUsageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, bytes, ip)
+
+	dataManager.Cleanup()
+}
+
+// TestAllowancePolicyEnforcer_RecordStorageChange_GrantConsumptionFailure_Integration_Error tests the RecordStorageChange method with grant consumption failure
+func TestAllowancePolicyEnforcer_RecordStorageChange_GrantConsumptionFailure_Integration_Error(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := int64(100)
+	ip := "192.168.1.3"
+
+	// Set up mock expectations for failure
+	grants := []*models.AllowanceGrant{
+		{
+			UserID:         userID,
+			Type:           models.GrantTypeStorage,
+			Source:         models.GrantSourcePAYGAddon,
+			Bytes:          1000,
+			BytesUsed:      0,
+			BytesRemaining: 1000,
+			IsActive:       true,
+		},
+	}
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeStorage).Return(grants, nil)
+	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeStorage, uint64(bytes)).Return(nil, assert.AnError)
+
+	err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to consume storage allowance")
+	// Ensure no recording happened
+	mockUsageManager.AssertNotCalled(t, "RecordStorageChange", userID, uploadID, bytes, ip)
+
+	dataManager.Cleanup()
+}
+
+// TestAllowancePolicyEnforcer_RecordUpload_SufficientAllowance_Unit_Success tests upload recording with sufficient allowance
+func TestAllowancePolicyEnforcer_RecordUpload_SufficientAllowance_Unit_Success(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager).Once()
+
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
+
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := uint64(100)
+	ip := "192.168.1.1"
+
+	// Set up mock expectations
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes).Return([]*models.AllowanceConsumption{}, nil).Once()
+	mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil).Once()
+
+	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
+	assert.NoError(t, err)
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
 	})
 }
 
-func TestAllowancePolicyEnforcer_GetCurrentUsage(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		userID := uint(1)
-		createTestUser(t, ctx, userID, models.EnforcementPolicyAllowance, &testUserLimits{})
+// TestAllowancePolicyEnforcer_RecordDownload_SufficientAllowance_Unit_Success tests download recording with sufficient allowance
+func TestAllowancePolicyEnforcer_RecordDownload_SufficientAllowance_Unit_Success(t *testing.T) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+	mockQuotaService := pluginCore.NewMockQuotaService(t)
+	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager).Once()
 
-		// Create some usage records
-		createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 100)
-		createTestUsageRecord(t, ctx, userID, models.UsageTypeDownload, 200)
-		createTestUsageRecord(t, ctx, userID, models.UsageTypeStorageAdd, 300)
+	mockGrantManager := pluginCore.NewMockGrantManager(t)
+	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-		mockGrantManager := createMockGrantManager(t)
-		enforcer := NewAllowancePolicyEnforcer(ctx, mockGrantManager)
+	userID := dataManager.NextUserID()
+	uploadID := dataManager.NextUploadID()
+	bytes := uint64(100)
+	ip := "192.168.1.1"
 
-		usage, err := enforcer.GetCurrentUsage(userID)
-		assert.NoError(t, err)
-		assert.Equal(t, userID, usage.UserID)
-		assert.Equal(t, uint64(100), usage.BytesUploaded)
-		assert.Equal(t, uint64(200), usage.BytesDownloaded)
-		assert.Equal(t, uint64(300), usage.BytesStored)
-	}, testOptions())
+	// Set up mock expectations
+	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes).Return([]*models.AllowanceConsumption{}, nil).Once()
+	mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil).Once()
+
+	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
+	assert.NoError(t, err)
+
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
 }

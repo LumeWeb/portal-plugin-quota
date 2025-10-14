@@ -1,28 +1,33 @@
 package models
 
 import (
+	"github.com/samber/lo"
 	"gorm.io/gorm"
 )
 
 // QuotaPlan - Reusable quota configuration templates (for subscription-style models)
 type QuotaPlan struct {
 	gorm.Model
-	Name                   string    `gorm:"uniqueIndex"`
-	Description            string
-	StorageLimit           int64
-	UploadDailyLimit       int64
-	DownloadDailyLimit     int64
-	UploadTotalLimit       int64
-	DownloadTotalLimit     int64
-	StorageThreshold       *int64
-	UploadThreshold        *int64
-	DownloadThreshold      *int64
-	IsDefault              bool
-	IsActive               bool
+	Name               string `gorm:"uniqueIndex"`
+	Description        string
+	StorageLimit       int64
+	UploadDailyLimit   int64
+	DownloadDailyLimit int64
+	UploadTotalLimit   int64
+	DownloadTotalLimit int64
+	StorageThreshold   *int64
+	UploadThreshold    *int64
+	DownloadThreshold  *int64
+	IsDefault          bool
+	IsActive           *bool
 }
 
 // BeforeCreate validates the QuotaPlan model before creation
 func (q *QuotaPlan) BeforeCreate(_ *gorm.DB) error {
+	// Default active unless explicitly set
+	if q.IsActive == nil {
+		q.IsActive = lo.ToPtr(true)
+	}
 	return q.validate()
 }
 
@@ -79,7 +84,34 @@ func (q *QuotaPlan) validate() error {
 	if q.DownloadTotalLimit < -1 {
 		return ErrInvalidDownloadTotalLimit
 	}
-	
+
+	// Validate thresholds
+	if q.StorageThreshold != nil {
+		if *q.StorageThreshold < 0 {
+			return ErrInvalidStorageThreshold
+		}
+		if q.StorageLimit > 0 && *q.StorageThreshold > q.StorageLimit {
+			return ErrThresholdExceedsLimit
+		}
+	}
+
+	if q.UploadThreshold != nil {
+		if *q.UploadThreshold < 0 {
+			return ErrInvalidUploadThreshold
+		}
+		if q.UploadDailyLimit > 0 && *q.UploadThreshold > q.UploadDailyLimit {
+			return ErrThresholdExceedsLimit
+		}
+	}
+
+	if q.DownloadThreshold != nil {
+		if *q.DownloadThreshold < 0 {
+			return ErrInvalidDownloadThreshold
+		}
+		if q.DownloadDailyLimit > 0 && *q.DownloadThreshold > q.DownloadDailyLimit {
+			return ErrThresholdExceedsLimit
+		}
+	}
 
 	return nil
 }

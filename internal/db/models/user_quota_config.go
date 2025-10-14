@@ -29,17 +29,7 @@ func (UserQuotaConfig) TableName() string {
 }
 
 // BeforeCreate validates the UserQuotaConfig model before creation
-func (u *UserQuotaConfig) BeforeCreate(_ *gorm.DB) error {
-	return u.validate()
-}
-
-// BeforeUpdate validates the UserQuotaConfig model before update
-func (u *UserQuotaConfig) BeforeUpdate(_ *gorm.DB) error {
-	return u.validate()
-}
-
-// validate performs validation checks on the UserQuotaConfig fields
-func (u *UserQuotaConfig) validate() error {
+func (u *UserQuotaConfig) BeforeCreate(tx *gorm.DB) error {
 	if u.UserID <= 0 {
 		return ErrInvalidUserID
 	}
@@ -48,7 +38,18 @@ func (u *UserQuotaConfig) validate() error {
 		return ErrInvalidEnforcementPolicy
 	}
 
+	return nil
+}
 
+// BeforeUpdate validates the UserQuotaConfig model before update
+func (u *UserQuotaConfig) BeforeUpdate(tx *gorm.DB) error {
+	if u.UserID <= 0 {
+		return ErrInvalidUserID
+	}
+
+	if !u.EnforcementPolicy.IsValid() {
+		return ErrInvalidEnforcementPolicy
+	}
 
 	return nil
 }

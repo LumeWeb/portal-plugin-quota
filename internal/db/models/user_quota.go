@@ -22,17 +22,20 @@ func (UserQuota) TableName() string {
 }
 
 // BeforeCreate validates the UserQuota model before creation
-func (u *UserQuota) BeforeCreate(_ *gorm.DB) error {
-	return u.validate()
+func (u *UserQuota) BeforeCreate(tx *gorm.DB) error {
+	if u.UserID <= 0 {
+		return ErrInvalidUserID
+	}
+
+	if u.Date.IsZero() {
+		return ErrInvalidDate
+	}
+
+	return nil
 }
 
 // BeforeUpdate validates the UserQuota model before update
-func (u *UserQuota) BeforeUpdate(_ *gorm.DB) error {
-	return u.validate()
-}
-
-// validate performs validation checks on the UserQuota fields
-func (u *UserQuota) validate() error {
+func (u *UserQuota) BeforeUpdate(tx *gorm.DB) error {
 	if u.UserID <= 0 {
 		return ErrInvalidUserID
 	}

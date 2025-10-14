@@ -146,7 +146,7 @@ func (cm *ConfigManager) GetUserAllowanceGrants(userID uint) ([]*pluginModels.Al
 
 	var grants []*pluginModels.AllowanceGrant
 	err := cm.db.Where("user_id = ? AND is_active = true AND (expiry_date IS NULL OR expiry_date > ?)",
-		userID, time.Now()).Find(&grants).Error
+		userID, time.Now().UTC()).Find(&grants).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve user allowance grants: %w", err)
 	}
@@ -165,7 +165,7 @@ func (cm *ConfigManager) GetUserAllowanceGrantsByType(userID uint, grantType plu
 
 	var grants []*pluginModels.AllowanceGrant
 	err := cm.db.Where("user_id = ? AND type = ? AND is_active = true AND (expiry_date IS NULL OR expiry_date > ?)",
-		userID, grantType, time.Now()).Find(&grants).Error
+		userID, grantType, time.Now().UTC()).Find(&grants).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve user allowance grants by type: %w", err)
 	}

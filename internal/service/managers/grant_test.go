@@ -77,7 +77,7 @@ func TestGrantManager_CreateAllowanceGrant_WithExpiryDate_Success(t *testing.T) 
 		grantManager := NewGrantManager(ctx)
 		userID := uint(1)
 
-		expiryDate := time.Now().Add(30 * 24 * time.Hour) // 30 days from now
+		expiryDate := time.Now().UTC().Add(30 * 24 * time.Hour) // 30 days from now
 		grant := &pluginModels.AllowanceGrant{
 			Type:       pluginModels.GrantTypeStorage,
 			Source:     pluginModels.GrantSourcePAYGAddon,

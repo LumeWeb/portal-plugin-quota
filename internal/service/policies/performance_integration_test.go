@@ -249,7 +249,7 @@ func TestPerformance_TimezoneBoundaries(t *testing.T) {
 
 			// Create usage at end of day
 			endOfDay := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
-			createTestUsageRecord(t, ctx, dataManager, userID, models.UsageTypeUpload, 100)
+			createTestUsageRecord(t, ctx, userID, models.UsageTypeUpload, 100)
 
 			// Update the timestamp to be at end of day
 			var detail models.UserUsageDetail

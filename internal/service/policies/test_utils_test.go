@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"gorm.io/gorm"
 )
@@ -129,7 +128,7 @@ func createTestQuotaPlan(t *testing.T, ctx coreTesting.TestContext, name string,
 }
 
 // createTestUsageRecord creates a test usage record in the database using TestDataManager
-func createTestUsageRecord(t *testing.T, ctx coreTesting.TestContext, dataManager *testdata.TestDataManager, userID uint, usageType models.UsageType, bytes uint64) {
+func createTestUsageRecord(t *testing.T, ctx coreTesting.TestContext, userID uint, usageType models.UsageType, bytes uint64) {
 	detail := &models.UserUsageDetail{
 		UserID:    userID,
 		UploadID:  1,

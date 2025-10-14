@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/docker/go-units"
 	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -362,19 +361,4 @@ func (h *HardLimitsPolicyEnforcer) GetCurrentUsage(userID uint) (*pluginCore.Usa
 // GetUsageHistory delegates to base enforcer
 func (h *HardLimitsPolicyEnforcer) GetUsageHistory(userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
 	return h.quotaService.GetUsageManager().GetUsageHistory(userID, period, usageType)
-}
-
-// validateLimitValue validates that a limit value is reasonable
-func (h *HardLimitsPolicyEnforcer) validateLimitValue(value int64) error {
-	// Allow -1 (unlimited), 0 (disabled), and positive values
-	if value < -1 {
-		return fmt.Errorf("invalid limit value: %d (must be -1, 0, or positive)", value)
-	}
-
-	// Check if the value is unreasonably large (1 PiB should be enough for most use cases)
-	if value > 0 && value > int64(units.PiB) {
-		return fmt.Errorf("limit value %d is unreasonably large", value)
-	}
-
-	return nil
 }

@@ -3,7 +3,6 @@ package policies
 import (
 	"testing"
 
-	"github.com/docker/go-units"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,73 +12,6 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
-
-// TestHardLimitsPolicyEnforcer_ValidateLimitValue_ValidLimits_Integration_Success tests the validateLimitValue function
-func TestHardLimitsPolicyEnforcer_ValidateLimitValue_ValidLimits_Integration_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	ctx, _ := coreTesting.NewTestContext(t)
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
-
-	validValues := []int64{
-		1,
-		100,
-		1000,
-		int64(units.GiB),
-		int64(units.TiB),
-		int64(units.PiB),
-	}
-
-	for _, value := range validValues {
-		err := enforcer.validateLimitValue(value)
-		assert.NoError(t, err, "Value %d should be valid", value)
-	}
-}
-
-func TestHardLimitsPolicyEnforcer_ValidateLimitValue_ZeroLimit_Integration_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	ctx, _ := coreTesting.NewTestContext(t)
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
-
-	// 0 means disabled - should be valid
-	err := enforcer.validateLimitValue(0)
-	assert.NoError(t, err, "Zero should be a valid limit value (disabled)")
-}
-
-func TestHardLimitsPolicyEnforcer_ValidateLimitValue_NegativeOneLimit_Integration_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	ctx, _ := coreTesting.NewTestContext(t)
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
-
-	// -1 means unlimited - should be valid
-	err := enforcer.validateLimitValue(-1)
-	assert.NoError(t, err, "Negative one should be a valid limit value (unlimited)")
-}
-
-func TestHardLimitsPolicyEnforcer_ValidateLimitValue_UnreasonablyLarge_Integration_Error(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	ctx, _ := coreTesting.NewTestContext(t)
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
-
-	// Values larger than 1 PiB should be rejected
-	unreasonableValues := []int64{
-		int64(units.PiB) + 1,
-		int64(units.PiB) * 10,
-		int64(units.PiB) * 1000,
-	}
-
-	for _, value := range unreasonableValues {
-		err := enforcer.validateLimitValue(value)
-		assert.Error(t, err, "Value %d should be unreasonably large and invalid", value)
-	}
-}
 
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_Allowed(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)

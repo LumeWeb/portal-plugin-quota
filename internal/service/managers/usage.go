@@ -11,18 +11,16 @@ import (
 	portalCore "go.lumeweb.com/portal/core"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // UsageManager handles centralized usage recording and shared usage calculations
 // Implements core.UsageManager interface
 type UsageManager struct {
-	ctx           portalCore.Context
-	db            *gorm.DB
-	logger        *portalCore.Logger
-	config        *config.QuotaConfig
-	pinService    portalCore.PinService
-	uploadService portalCore.UploadService
+	ctx        portalCore.Context
+	db         *gorm.DB
+	logger     *portalCore.Logger
+	config     *config.QuotaConfig
+	pinService portalCore.PinService
 }
 
 // UsageAggregator aggregates usage data across time periods
@@ -35,12 +33,11 @@ func NewUsageManager(ctx portalCore.Context) *UsageManager {
 	quotaConfig := portalCore.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
 
 	return &UsageManager{
-		ctx:           ctx,
-		db:            ctx.DB(),
-		logger:        ctx.NamedLogger("quota.UsageManager"),
-		config:        quotaConfig,
-		pinService:    portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
-		uploadService: portalCore.GetService[portalCore.UploadService](ctx, portalCore.UPLOAD_SERVICE),
+		ctx:        ctx,
+		db:         ctx.DB(),
+		logger:     ctx.NamedLogger("quota.UsageManager"),
+		config:     quotaConfig,
+		pinService: portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
 	}
 }
 
@@ -395,6 +392,7 @@ func (um *UsageManager) RecordUserUsageDetail(detail *pluginModels.UserUsageDeta
 }
 
 // UpdateDailyUsage updates the daily aggregated usage for a user
+// UpdateDailyUsage updates the daily aggregated usage for a user
 func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.UsageType, bytes int64) error {
 	if err := um.validateUserID(userID); err != nil {
 		return err
@@ -402,39 +400,36 @@ func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.Usa
 
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
-	// Create a new record with initial values
-	dailyQuota := pluginModels.UserQuota{
+	// Create or update the user quota record using GORM's upsert functionality
+	quota := &pluginModels.UserQuota{
 		UserID: userID,
 		Date:   today,
 	}
 
-	// Set initial values based on usage type
-	switch usageType {
-	case pluginModels.UsageTypeUpload:
-		dailyQuota.BytesUploaded = uint64(bytes)
-	case pluginModels.UsageTypeDownload:
-		dailyQuota.BytesDownloaded = uint64(bytes)
-	case pluginModels.UsageTypeStorageAdd:
-		dailyQuota.BytesStored = uint64(bytes)
-	case pluginModels.UsageTypeStorageRemove:
-		if bytes < 0 {
-			dailyQuota.BytesStored = 0
+	// First, try to find an existing record that hasn't been soft deleted
+	result := um.db.Where("user_id = ? AND date = ?", userID, today).First(quota)
+
+	// If no record exists, create a new one with zero values
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			quota.BytesUploaded = 0
+			quota.BytesDownloaded = 0
+			quota.BytesStored = 0
+			if err := um.db.Create(quota).Error; err != nil {
+				return fmt.Errorf("failed to create daily usage record: %w", err)
+			}
 		} else {
-			dailyQuota.BytesStored = uint64(bytes)
+			return fmt.Errorf("failed to find daily usage record: %w", result.Error)
 		}
 	}
 
-	// Determine the update assignments based on usage type
+	// Update the appropriate field based on usage type
 	assignments := um.getUpdateAssignments(usageType, bytes)
+	if err := um.db.Model(quota).Updates(assignments).Error; err != nil {
+		return fmt.Errorf("failed to update daily usage: %w", err)
+	}
 
-	// Use GORM upsert with OnConflict
-	return um.db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{
-			{Name: "user_id"},
-			{Name: "date"},
-		},
-		DoUpdates: clause.Assignments(assignments),
-	}).Create(&dailyQuota).Error
+	return nil
 }
 
 // getUpdateAssignments returns the assignments for updating quota values atomically
@@ -464,6 +459,35 @@ func (um *UsageManager) validateUserID(userID uint) error {
 		return pluginModels.ErrInvalidUserID
 	}
 	return nil
+}
+
+// isUniqueConstraintViolation checks if the error is a unique constraint violation
+func (um *UsageManager) isUniqueConstraintViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for SQLite unique constraint error
+	if sqliteErr, ok := err.(interface{ SQLiteError() error }); ok {
+		if sqliteErr.SQLiteError() != nil {
+			// SQLite unique constraint error code is 2067
+			// This is a simplified check - in practice you might need to check the specific error code
+			return true
+		}
+	}
+
+	// Check for generic database unique constraint errors
+	// This varies by database driver but common patterns include:
+	errStr := err.Error()
+	isDBConstraint := (errStr == "UNIQUE constraint failed") ||
+		(errStr == "duplicate key value violates unique constraint") ||
+		(errStr == "PRIMARY KEY must be unique")
+
+	// Check for GORM model validation errors
+	isModelValidation := (errStr == "user_id must be greater than 0") ||
+		(errStr == "date must be greater than 0")
+
+	return isDBConstraint || isModelValidation
 }
 
 // GetCurrentUsage retrieves the current daily usage for a user

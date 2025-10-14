@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS user_usage_details (
 
 CREATE TABLE IF NOT EXISTS quota_plans (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
     storage_limit BIGINT DEFAULT 0,
     upload_daily_limit BIGINT DEFAULT 0,
@@ -54,7 +54,10 @@ CREATE TABLE IF NOT EXISTS quota_plans (
     default_active_one TINYINT GENERATED ALWAYS AS (
       CASE WHEN is_default AND is_active THEN 1 ELSE NULL END
     ) STORED,
+    -- Soft-delete aware unique constraint for name
+    name_live VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN name ELSE NULL END) STORED,
     UNIQUE KEY uniq_default_active_one (default_active_one),
+    UNIQUE KEY uniq_quota_plans_name_live (name_live),
     INDEX idx_quota_plans_default_active (is_default, is_active)
 );
 
@@ -74,7 +77,9 @@ CREATE TABLE IF NOT EXISTS user_quota_configs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
-    UNIQUE KEY idx_user_id (user_id),
+    -- Soft-delete aware unique constraint for user_id
+    user_id_live BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN user_id ELSE NULL END) STORED,
+    UNIQUE KEY uniq_user_quota_configs_user_live (user_id_live),
     INDEX idx_quota_plan_id (quota_plan_id),
     INDEX idx_enforcement_policy (enforcement_policy)
 );

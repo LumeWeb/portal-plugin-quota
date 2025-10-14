@@ -9,8 +9,7 @@ CREATE TABLE IF NOT EXISTS user_quotas (
     bytes_stored INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at DATETIME DEFAULT NULL,
-    UNIQUE(user_id, date)
+    deleted_at DATETIME DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS user_usage_details (
@@ -29,7 +28,7 @@ CREATE TABLE IF NOT EXISTS user_usage_details (
 
 CREATE TABLE IF NOT EXISTS quota_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     description TEXT,
     storage_limit INTEGER DEFAULT 0,
     upload_daily_limit INTEGER DEFAULT 0,
@@ -49,7 +48,7 @@ CREATE TABLE IF NOT EXISTS quota_plans (
 
 CREATE TABLE IF NOT EXISTS user_quota_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
     enforcement_policy TEXT NOT NULL,
     quota_plan_id INTEGER,
     storage_limit INTEGER,
@@ -111,10 +110,20 @@ CREATE INDEX IF NOT EXISTS idx_quota_plans_default_active ON quota_plans(is_defa
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_quota_plans_default_active
   ON quota_plans(is_default, is_active)
   WHERE is_default = 1 AND is_active = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_quotas_user_date_live
+  ON user_quotas(user_id, date) WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_quota_configs_user_live
+  ON user_quota_configs(user_id) WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_quota_plans_name_live
+  ON quota_plans(name) WHERE deleted_at IS NULL;
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
+DROP INDEX IF EXISTS uniq_user_quotas_user_date_live;
 DROP INDEX IF EXISTS uniq_quota_plans_default_active;
 DROP INDEX IF EXISTS idx_quota_plans_default_active;
 DROP INDEX IF EXISTS idx_user_quota_configs_enforcement_policy;

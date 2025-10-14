@@ -77,7 +77,7 @@ func TestGrantManager_CreateAllowanceGrant_WithExpiryDate_Success(t *testing.T) 
 		grantManager := NewGrantManager(ctx)
 		userID := uint(1)
 
-		expiryDate := time.Now().Add(30 * 24 * time.Hour) // 30 days from now
+		expiryDate := time.Now().UTC().Add(30 * 24 * time.Hour) // 30 days from now
 		grant := &pluginModels.AllowanceGrant{
 			Type:       pluginModels.GrantTypeStorage,
 			Source:     pluginModels.GrantSourcePAYGAddon,
@@ -588,9 +588,9 @@ func TestGrantManager_GetExpiringGrants_WithExpiringGrants_ReturnsGrants(t *test
 
 		// Create grants expiring at different times
 		now := time.Now().UTC()
-		expiry1 := now.Add(24 * time.Hour) // 1 day from now
-		expiry2 := now.Add(48 * time.Hour) // 2 days from now
-		expiry3 := now.Add(72 * time.Hour) // 3 days from now
+		expiry1 := now.Add(24 * time.Hour).UTC() // 1 day from now
+		expiry2 := now.Add(48 * time.Hour).UTC() // 2 days from now
+		expiry3 := now.Add(72 * time.Hour).UTC() // 3 days from now
 
 		grant1 := &pluginModels.AllowanceGrant{
 			UserID:     1,
@@ -646,8 +646,8 @@ func TestGrantManager_GetExpiringGrantsForUser_WithUserGrants_ReturnsGrants(t *t
 
 		// Create grants for the user, some expiring soon
 		now := time.Now().UTC()
-		expiry1 := now.Add(24 * time.Hour) // 1 day from now
-		expiry2 := now.Add(48 * time.Hour) // 2 days from now
+		expiry1 := now.Add(24 * time.Hour).UTC() // 1 day from now
+		expiry2 := now.Add(48 * time.Hour).UTC() // 2 days from now
 
 		grant1 := &pluginModels.AllowanceGrant{
 			UserID:     userID,

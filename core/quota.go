@@ -61,7 +61,11 @@ type QuotaService interface {
 	// Usage Aggregator getter
 	GetUsageAggregator() UsageAggregator
 
+	// Quota Plan Manager getter
 	GetQuotaPlanManager() QuotaPlanManager
+
+	// Config Manager getter
+	GetConfigManager() ConfigManager
 }
 
 // QuotaPlanManager abstracts database operations related to quota plans

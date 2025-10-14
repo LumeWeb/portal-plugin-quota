@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/samber/lo"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // GrantManager handles grant operations
@@ -65,7 +67,7 @@ func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModel
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority
-	query := gm.db.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+	query := gm.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
 
 	// Filter out expired grants in SQL
 	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
@@ -91,7 +93,7 @@ func (gm *GrantManager) GetActiveGrants(userID uint) ([]*pluginModels.AllowanceG
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority
-	query := gm.db.Where("user_id = ? AND is_active = true", userID)
+	query := gm.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND is_active = true", userID)
 
 	// Filter out expired grants in SQL
 	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
@@ -109,11 +111,9 @@ func (gm *GrantManager) GetActiveGrants(userID uint) ([]*pluginModels.AllowanceG
 
 // CalculateAvailableBytes calculates total available bytes across all active grants of a type
 func (gm *GrantManager) CalculateAvailableBytes(grants []*pluginModels.AllowanceGrant) uint64 {
-	var total uint64
-	for _, grant := range grants {
-		total += grant.BytesRemaining
-	}
-	return total
+	return lo.SumBy(grants, func(grant *pluginModels.AllowanceGrant) uint64 {
+		return grant.BytesRemaining
+	})
 }
 
 // ConsumeFromGrants consumes bytes from grants based on prioritization rules
@@ -127,20 +127,20 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 	}
 
 	if bytes == 0 {
-		return nil, pluginModels.ErrInvalidBytes
+		return []*pluginModels.AllowanceConsumption{}, nil
 	}
 
 	var consumptions []*pluginModels.AllowanceConsumption
 
 	// Start a transaction
 	err := gm.db.Transaction(func(tx *gorm.DB) error {
-		// Get active grants for user and type
+		// Get active grants for user and type with row-level locks
 		now := time.Now().UTC()
 		var grants []*pluginModels.AllowanceGrant
 
-		query := tx.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+		query := tx.Clauses(clause.Locking{Strength: "UPDATE"})
+		query = query.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
 		query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
-
 		// Order by source priority using CASE statement
 		query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
 
@@ -168,6 +168,11 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 				consumeAmount = grant.BytesRemaining
 			}
 
+			// Skip creating consumption records for 0 byte consumption
+			if consumeAmount == 0 {
+				continue
+			}
+
 			// Create consumption record
 			consumption := &pluginModels.AllowanceConsumption{
 				GrantID:         grant.ID,
@@ -177,13 +182,19 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 			}
 			consumptions = append(consumptions, consumption)
 
-			// Update grant
-			grant.BytesUsed += consumeAmount
-			grant.BytesRemaining = grant.Bytes - grant.BytesUsed
+			// Update grant atomically using SQL expressions
+			// Using UpdateColumn to bypass validation hooks since we only need to update specific fields
+			result := tx.Model(&pluginModels.AllowanceGrant{}).
+				Where("id = ?", grant.ID).
+				UpdateColumn("bytes_used", gorm.Expr("bytes_used + ?", consumeAmount)).
+				UpdateColumn("bytes_remaining", gorm.Expr("bytes_remaining - ?", consumeAmount))
 
-			// Save updated grant
-			if err := tx.Save(grant).Error; err != nil {
-				return fmt.Errorf("failed to update grant: %w", err)
+			if result.Error != nil {
+				return fmt.Errorf("failed to update grant: %w", result.Error)
+			}
+
+			if result.RowsAffected == 0 {
+				return fmt.Errorf("grant %d was concurrently modified", grant.ID)
 			}
 
 			// Save consumption record

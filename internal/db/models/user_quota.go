@@ -1,9 +1,11 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // UserQuota - Aggregated daily quota usage
@@ -71,10 +73,29 @@ func UpsertDailyUsage(db *gorm.DB, userID uint, usageType UsageType, bytes int64
 
 // upsertMySQL handles MySQL-specific upsert
 func upsertMySQL(db *gorm.DB, quota *UserQuota, usageType UsageType, bytes int64) error {
+	now := time.Now().UTC()
+	
+	// Set initial values for insert
+	switch usageType {
+	case UsageTypeUpload:
+		quota.BytesUploaded = uint64(bytes)
+	case UsageTypeDownload:
+		quota.BytesDownloaded = uint64(bytes)
+	case UsageTypeStorageAdd:
+		quota.BytesStored = uint64(bytes)
+	case UsageTypeStorageRemove:
+		if bytes < 0 {
+			quota.BytesStored = 0
+		} else {
+			quota.BytesStored = uint64(bytes)
+		}
+	}
+
 	query := `
 		INSERT INTO user_quotas (user_id, date, bytes_uploaded, bytes_downloaded, bytes_stored, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
+		updated_at = ?,
 	`
 
 	var updates string
@@ -86,16 +107,16 @@ func upsertMySQL(db *gorm.DB, quota *UserQuota, usageType UsageType, bytes int64
 	case UsageTypeStorageAdd:
 		updates = "bytes_stored = bytes_stored + ?"
 	case UsageTypeStorageRemove:
-		updates = "bytes_stored = CASE WHEN bytes_stored + ? < 0 THEN 0 ELSE bytes_stored + ? END"
+		// Safely clamp storage removal to prevent underflow
+		updates = "bytes_stored = CASE WHEN CAST(bytes_stored AS SIGNED) + ? < 0 THEN 0 ELSE bytes_stored + ? END"
 	default:
-		return nil
+		return fmt.Errorf("unsupported usage type: %s", usageType)
 	}
 
 	query += updates
 
-	now := time.Now().UTC()
 	args := []interface{}{
-		quota.UserID, quota.Date, quota.BytesUploaded, quota.BytesDownloaded, quota.BytesStored, now, now,
+		quota.UserID, quota.Date, quota.BytesUploaded, quota.BytesDownloaded, quota.BytesStored, now, now, now,
 	}
 
 	if usageType == UsageTypeStorageRemove {
@@ -150,15 +171,35 @@ func upsertSQLite(db *gorm.DB, quota *UserQuota, usageType UsageType, bytes int6
 
 // upsertGeneric handles upsert for databases without specific upsert syntax
 func upsertGeneric(db *gorm.DB, quota *UserQuota, usageType UsageType, bytes int64) error {
-	// Try to create the record first
-	result := db.Where("user_id = ? AND date = ?", quota.UserID, quota.Date).FirstOrCreate(quota)
-	if result.Error != nil {
-		return result.Error
+	// Set initial values for insert
+	now := time.Now().UTC()
+	quota.CreatedAt = now
+	quota.UpdatedAt = now
+	
+	switch usageType {
+	case UsageTypeUpload:
+		quota.BytesUploaded = uint64(bytes)
+	case UsageTypeDownload:
+		quota.BytesDownloaded = uint64(bytes)
+	case UsageTypeStorageAdd:
+		quota.BytesStored = uint64(bytes)
+	case UsageTypeStorageRemove:
+		if bytes < 0 {
+			quota.BytesStored = 0
+		} else {
+			quota.BytesStored = uint64(bytes)
+		}
 	}
 
-	// Update the appropriate field based on usage type
+	// Try to create the record, ignoring conflicts
+	if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(quota).Error; err != nil {
+		return err
+	}
+
+	// Perform atomic update
 	assignments := getUpdateAssignments(usageType, bytes)
-	return db.Model(quota).Updates(assignments).Error
+	assignments["updated_at"] = time.Now().UTC()
+	return db.Model(&UserQuota{}).Where("user_id = ? AND date = ?", quota.UserID, quota.Date).Updates(assignments).Error
 }
 
 // getUpdateAssignments returns the assignments for updating quota values atomically

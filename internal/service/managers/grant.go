@@ -67,6 +67,36 @@ func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModel
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority
+	query := gm.db.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+
+	// Filter out expired grants in SQL
+	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
+
+	// Order by source priority using CASE statement
+	query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
+
+	err := query.Find(&grants).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active grants by type: %w", err)
+	}
+
+	return grants, nil
+}
+
+// GetActiveGrantsByTypeLocked gets all active grants for a user of a specific type with row-level locking
+func (gm *GrantManager) GetActiveGrantsByTypeLocked(userID uint, grantType pluginModels.GrantType) ([]*pluginModels.AllowanceGrant, error) {
+	if userID == 0 {
+		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	if !grantType.IsValid() {
+		return nil, pluginModels.ErrInvalidGrantType
+	}
+
+	var grants []*pluginModels.AllowanceGrant
+	now := time.Now().UTC()
+
+	// Build query with SQL ordering by grant source priority and row-level locking
 	query := gm.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
 
 	// Filter out expired grants in SQL
@@ -93,6 +123,32 @@ func (gm *GrantManager) GetActiveGrants(userID uint) ([]*pluginModels.AllowanceG
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority
+	query := gm.db.Where("user_id = ? AND is_active = true", userID)
+
+	// Filter out expired grants in SQL
+	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
+
+	// Order by source priority using CASE statement
+	query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
+
+	err := query.Find(&grants).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active grants: %w", err)
+	}
+
+	return grants, nil
+}
+
+// GetActiveGrantsLocked gets all active grants for a user (all types) with row-level locking
+func (gm *GrantManager) GetActiveGrantsLocked(userID uint) ([]*pluginModels.AllowanceGrant, error) {
+	if userID == 0 {
+		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	var grants []*pluginModels.AllowanceGrant
+	now := time.Now().UTC()
+
+	// Build query with SQL ordering by grant source priority and row-level locking
 	query := gm.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND is_active = true", userID)
 
 	// Filter out expired grants in SQL
@@ -135,16 +191,9 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 	// Start a transaction
 	err := gm.db.Transaction(func(tx *gorm.DB) error {
 		// Get active grants for user and type with row-level locks
-		now := time.Now().UTC()
 		var grants []*pluginModels.AllowanceGrant
 
-		query := tx.Clauses(clause.Locking{Strength: "UPDATE"})
-		query = query.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
-		query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
-		// Order by source priority using CASE statement
-		query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
-
-		err := query.Find(&grants).Error
+		grants, err := gm.GetActiveGrantsByTypeLocked(userID, grantType)
 		if err != nil {
 			return fmt.Errorf("failed to get active grants: %w", err)
 		}
@@ -240,7 +289,7 @@ func (gm *GrantManager) DeactivateGrant(grantID uint) error {
 	// Update the grant directly using raw SQL to bypass model validation
 	result := gm.db.Model(&pluginModels.AllowanceGrant{}).
 		Where("id = ?", grantID).
-		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now().UTC()})
+		UpdateColumns(map[string]interface{}{"is_active": false, "updated_at": time.Now().UTC()})
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to deactivate grant: %w", result.Error)

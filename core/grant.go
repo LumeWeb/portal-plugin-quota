@@ -12,6 +12,12 @@ type GrantManager interface {
 	// GetActiveGrantsByType gets all active grants for a user of a specific type
 	GetActiveGrantsByType(userID uint, grantType GrantType) ([]*AllowanceGrant, error)
 
+	// GetActiveGrantsByTypeLocked gets all active grants for a user of a specific type with row-level locking
+	GetActiveGrantsByTypeLocked(userID uint, grantType GrantType) ([]*AllowanceGrant, error)
+
+	// GetActiveGrantsLocked gets all active grants for a user (all types) with row-level locking
+	GetActiveGrantsLocked(userID uint) ([]*AllowanceGrant, error)
+
 	// GetActiveGrants gets all active grants for a user (all types)
 	GetActiveGrants(userID uint) ([]*AllowanceGrant, error)
 
@@ -19,7 +25,7 @@ type GrantManager interface {
 	CalculateAvailableBytes(grants []*AllowanceGrant) uint64
 
 	// ConsumeFromGrants consumes bytes from grants based on prioritization rules
-	ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64) ([]*AllowanceConsumption, error)
+	ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error)
 
 	// DeactivateGrant deactivates a grant (doesn't delete, just marks inactive)
 	DeactivateGrant(grantID uint) error

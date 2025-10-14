@@ -2,10 +2,12 @@ package policies
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	coreTesting "go.lumeweb.com/portal/core/testing"
@@ -159,7 +161,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 		{
 			name: "RecordUpload - ConsumeFromGrants returns generic error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("grant manager error"))
+				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint")).Return(nil, errors.New("grant manager error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
 				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
@@ -169,7 +171,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 		{
 			name: "RecordUpload - ConsumeFromGrants wraps as failed to consume upload allowance",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("consumption error"))
+				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint")).Return(nil, errors.New("consumption error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
 				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
@@ -187,6 +189,12 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 
 			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
 			mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
+			
+			// Add mock expectation for RecordUserUsageDetail for RecordUpload tests
+			// We identify RecordUpload tests by checking if the test function name contains "RecordUpload"
+			if test.testFunc != nil && strings.Contains(test.name, "RecordUpload") {
+				mockUsageManager.On("RecordUserUsageDetail", mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
+			}
 
 			test.setupMocks(mockGrantManager)
 

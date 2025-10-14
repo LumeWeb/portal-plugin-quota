@@ -482,8 +482,8 @@ func (_c *MockGrantManager_GetActiveGrantsByTypeLocked_Call) RunAndReturn(run fu
 }
 
 // GetActiveGrantsLocked provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) GetActiveGrantsLocked(userID uint) ([]*AllowanceGrant, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockGrantManager) GetActiveGrantsLocked(userID uint, tx *gorm.DB) ([]*AllowanceGrant, error) {
+	ret := _mock.Called(userID, tx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveGrantsLocked")
@@ -491,18 +491,18 @@ func (_mock *MockGrantManager) GetActiveGrantsLocked(userID uint) ([]*AllowanceG
 
 	var r0 []*AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) ([]*AllowanceGrant, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(uint, *gorm.DB) ([]*AllowanceGrant, error)); ok {
+		return returnFunc(userID, tx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) []*AllowanceGrant); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(uint, *gorm.DB) []*AllowanceGrant); ok {
+		r0 = returnFunc(userID, tx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*AllowanceGrant)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(uint, *gorm.DB) error); ok {
+		r1 = returnFunc(userID, tx)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -516,18 +516,24 @@ type MockGrantManager_GetActiveGrantsLocked_Call struct {
 
 // GetActiveGrantsLocked is a helper method to define mock.On call
 //   - userID uint
-func (_e *MockGrantManager_Expecter) GetActiveGrantsLocked(userID interface{}) *MockGrantManager_GetActiveGrantsLocked_Call {
-	return &MockGrantManager_GetActiveGrantsLocked_Call{Call: _e.mock.On("GetActiveGrantsLocked", userID)}
+//   - tx *gorm.DB
+func (_e *MockGrantManager_Expecter) GetActiveGrantsLocked(userID interface{}, tx interface{}) *MockGrantManager_GetActiveGrantsLocked_Call {
+	return &MockGrantManager_GetActiveGrantsLocked_Call{Call: _e.mock.On("GetActiveGrantsLocked", userID, tx)}
 }
 
-func (_c *MockGrantManager_GetActiveGrantsLocked_Call) Run(run func(userID uint)) *MockGrantManager_GetActiveGrantsLocked_Call {
+func (_c *MockGrantManager_GetActiveGrantsLocked_Call) Run(run func(userID uint, tx *gorm.DB)) *MockGrantManager_GetActiveGrantsLocked_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 uint
 		if args[0] != nil {
 			arg0 = args[0].(uint)
 		}
+		var arg1 *gorm.DB
+		if args[1] != nil {
+			arg1 = args[1].(*gorm.DB)
+		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -538,7 +544,7 @@ func (_c *MockGrantManager_GetActiveGrantsLocked_Call) Return(vs []*AllowanceGra
 	return _c
 }
 
-func (_c *MockGrantManager_GetActiveGrantsLocked_Call) RunAndReturn(run func(userID uint) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsLocked_Call {
+func (_c *MockGrantManager_GetActiveGrantsLocked_Call) RunAndReturn(run func(userID uint, tx *gorm.DB) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsLocked_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -646,6 +646,52 @@ func (_c *MockQuotaService_GetAllowanceBalance_Call) RunAndReturn(run func(userI
 	return _c
 }
 
+// GetConfigManager provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetConfigManager() ConfigManager {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetConfigManager")
+	}
+
+	var r0 ConfigManager
+	if returnFunc, ok := ret.Get(0).(func() ConfigManager); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(ConfigManager)
+		}
+	}
+	return r0
+}
+
+// MockQuotaService_GetConfigManager_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetConfigManager'
+type MockQuotaService_GetConfigManager_Call struct {
+	*mock.Call
+}
+
+// GetConfigManager is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) GetConfigManager() *MockQuotaService_GetConfigManager_Call {
+	return &MockQuotaService_GetConfigManager_Call{Call: _e.mock.On("GetConfigManager")}
+}
+
+func (_c *MockQuotaService_GetConfigManager_Call) Run(run func()) *MockQuotaService_GetConfigManager_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetConfigManager_Call) Return(configManager ConfigManager) *MockQuotaService_GetConfigManager_Call {
+	_c.Call.Return(configManager)
+	return _c
+}
+
+func (_c *MockQuotaService_GetConfigManager_Call) RunAndReturn(run func() ConfigManager) *MockQuotaService_GetConfigManager_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetCurrentUsage provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetCurrentUsage(userID uint) (*Usage, error) {
 	ret := _mock.Called(userID)

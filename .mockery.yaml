@@ -11,3 +11,4 @@ packages:
       UsageManager: {}
       UsageAggregator: {}
       QuotaPlanManager: {}
+      LimitResolver: {}

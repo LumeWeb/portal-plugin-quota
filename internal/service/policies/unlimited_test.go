@@ -62,7 +62,7 @@ func TestUnlimitedPolicyEnforcer_CheckQuotaMethods_AllAllowed(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyUnlimited), result.Details.Policy)
+		assert.Equal(t, models.EnforcementPolicyUnlimited, result.Details.Policy)
 	})
 
 	t.Run("CheckDownloadQuota", func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestUnlimitedPolicyEnforcer_CheckQuotaMethods_AllAllowed(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyUnlimited), result.Details.Policy)
+		assert.Equal(t, models.EnforcementPolicyUnlimited, result.Details.Policy)
 	})
 
 	t.Run("CheckStorageQuota", func(t *testing.T) {
@@ -78,12 +78,9 @@ func TestUnlimitedPolicyEnforcer_CheckQuotaMethods_AllAllowed(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyUnlimited), result.Details.Policy)
+		assert.Equal(t, models.EnforcementPolicyUnlimited, result.Details.Policy)
 	})
 
-	// Verify mock expectations
-	setup.mockQuotaService.AssertExpectations(t)
-	setup.mockUsageManager.AssertExpectations(t)
 }
 
 // TestUnlimitedPolicyEnforcer_RecordUpload tests the RecordUpload method
@@ -100,10 +97,6 @@ func TestUnlimitedPolicyEnforcer_RecordUpload_Success(t *testing.T) {
 	err := setup.enforcer.RecordUpload(userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
 	setup.mockUsageManager.AssertCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
-
-	// Verify mock expectations
-	setup.mockQuotaService.AssertExpectations(t)
-	setup.mockUsageManager.AssertExpectations(t)
 }
 
 // TestUnlimitedPolicyEnforcer_RecordDownload tests the RecordDownload method
@@ -120,10 +113,6 @@ func TestUnlimitedPolicyEnforcer_RecordDownload_Success(t *testing.T) {
 	err := setup.enforcer.RecordDownload(userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
 	setup.mockUsageManager.AssertCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
-
-	// Verify mock expectations
-	setup.mockQuotaService.AssertExpectations(t)
-	setup.mockUsageManager.AssertExpectations(t)
 }
 
 // TestUnlimitedPolicyEnforcer_RecordStorageChange tests the RecordStorageChange method
@@ -140,10 +129,6 @@ func TestUnlimitedPolicyEnforcer_RecordStorageChange_Success(t *testing.T) {
 	err := setup.enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
 	setup.mockUsageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, bytes, ip)
-
-	// Verify mock expectations
-	setup.mockQuotaService.AssertExpectations(t)
-	setup.mockUsageManager.AssertExpectations(t)
 }
 
 // TestUnlimitedPolicyEnforcer_UsageMethods tests usage-related methods
@@ -233,7 +218,4 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 		assert.Len(t, history, 2)
 	})
 
-	// Verify mock expectations
-	setup.mockQuotaService.AssertExpectations(t)
-	setup.mockUsageManager.AssertExpectations(t)
 }

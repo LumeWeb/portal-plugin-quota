@@ -7,7 +7,6 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -260,10 +259,10 @@ func CreateTestUser(t *testing.T, ctx coreTesting.TestContext, dataManager *test
 
 	err := ctx.DB().Create(config).Error
 	require.NoError(t, err, "Failed to create user quota config")
-	
+
 	// Track the created user for cleanup
 	dataManager.TrackCreatedUser(userID)
-	
+
 	return config
 }
 
@@ -286,10 +285,10 @@ func CreateTestQuotaPlanDB(t *testing.T, ctx coreTesting.TestContext, dataManage
 
 	err := ctx.DB().Create(plan).Error
 	require.NoError(t, err, "Failed to create quota plan")
-	
+
 	// Track the created plan for cleanup
 	dataManager.TrackCreatedPlan(plan.ID)
-	
+
 	return plan
 }
 
@@ -307,10 +306,10 @@ func CreateTestAllowanceGrantDB(t *testing.T, ctx coreTesting.TestContext, dataM
 
 	err := ctx.DB().Create(grant).Error
 	require.NoError(t, err, "Failed to create allowance grant")
-	
+
 	// Track the created grant for cleanup
 	dataManager.TrackCreatedGrant(grant.ID)
-	
+
 	return grant
 }
 
@@ -329,7 +328,7 @@ func createTestUsageRecord(t *testing.T, ctx coreTesting.TestContext, dataManage
 	require.NoError(t, err, "Failed to create usage record")
 
 	// Also create/update the daily quota record so getCurrentUsage can find aggregated data
-	today := time.Now().Truncate(24 * time.Hour)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
 	var dailyQuota models.UserQuota
 	err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 
@@ -348,6 +347,13 @@ func createTestUsageRecord(t *testing.T, ctx coreTesting.TestContext, dataManage
 			dailyQuota.BytesDownloaded = bytes
 		case models.UsageTypeStorageAdd:
 			dailyQuota.BytesStored = bytes
+		case models.UsageTypeStorageRemove:
+			// For storage removal, we subtract bytes from the stored amount
+			if bytes <= dailyQuota.BytesStored {
+				dailyQuota.BytesStored -= bytes
+			} else {
+				dailyQuota.BytesStored = 0
+			}
 		}
 
 		err = ctx.DB().Create(&dailyQuota).Error
@@ -363,6 +369,13 @@ func createTestUsageRecord(t *testing.T, ctx coreTesting.TestContext, dataManage
 			dailyQuota.BytesDownloaded += bytes
 		case models.UsageTypeStorageAdd:
 			dailyQuota.BytesStored += bytes
+		case models.UsageTypeStorageRemove:
+			// For storage removal, we subtract bytes from the stored amount
+			if bytes <= dailyQuota.BytesStored {
+				dailyQuota.BytesStored -= bytes
+			} else {
+				dailyQuota.BytesStored = 0
+			}
 		}
 
 		err = ctx.DB().Save(&dailyQuota).Error
@@ -415,9 +428,6 @@ func CreateTestUsagePoint(date time.Time, bytes uint64, usageType models.UsageTy
 	}
 }
 
-
-
-
 // AssertQuotaCheckResult asserts that a quota check result matches expected values
 func AssertQuotaCheckResult(t *testing.T, result *pluginCore.QuotaCheckResult, allowed bool, reason models.QuotaCheckReason, policy models.EnforcementPolicy) {
 	assert.Equal(t, allowed, result.Allowed)
@@ -459,8 +469,10 @@ func AssertUsageRecorded(t *testing.T, usageManager *pluginCore.MockUsageManager
 		usageManager.AssertCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
 	case models.UsageTypeDownload:
 		usageManager.AssertCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
-	case models.UsageTypeStorageAdd, models.UsageTypeStorageRemove:
-		usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, mock.AnythingOfType("int64"), ip)
+	case models.UsageTypeStorageAdd:
+		usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, int64(bytes), ip)
+	case models.UsageTypeStorageRemove:
+		usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, -int64(bytes), ip)
 	}
 }
 
@@ -634,6 +646,16 @@ func RunUsageRecordingTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, us
 			},
 			assertFunc: func() {
 				usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, int64(bytes), ip)
+			},
+			expectedErr: false,
+		},
+		{
+			name: "RecordStorageRemove",
+			testFunc: func() error {
+				return enforcer.RecordStorageChange(userID, uploadID, -int64(bytes), ip)
+			},
+			assertFunc: func() {
+				usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, -int64(bytes), ip)
 			},
 			expectedErr: false,
 		},

@@ -66,23 +66,32 @@ func (b *BasePolicyEnforcer) validateStorageRecordParams(userID, uploadID uint, 
 		return models.ErrInvalidUploadID
 	}
 	if bytes == 0 {
-		return models.ErrInvalidBytes
+		return models.ErrZeroBytes
 	}
 	return nil
 }
 
 // delegateRecordUpload delegates to usageManager.RecordUpload after validation
 func (b *BasePolicyEnforcer) delegateRecordUpload(userID, uploadID uint, bytes uint64, ip string) error {
+	if err := b.validateRecordParams(userID, uploadID, bytes); err != nil {
+		return err
+	}
 	return b.usageManager.RecordUpload(userID, uploadID, bytes, ip)
 }
 
 // delegateRecordDownload delegates to usageManager.RecordDownload after validation
 func (b *BasePolicyEnforcer) delegateRecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
+	if err := b.validateRecordParams(userID, uploadID, bytes); err != nil {
+		return err
+	}
 	return b.usageManager.RecordDownload(userID, uploadID, bytes, ip)
 }
 
 // delegateRecordStorageChange delegates to usageManager.RecordStorageChange after validation
 func (b *BasePolicyEnforcer) delegateRecordStorageChange(userID, uploadID uint, bytes int64, ip string) error {
+	if err := b.validateStorageRecordParams(userID, uploadID, bytes); err != nil {
+		return err
+	}
 	return b.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
 }
 
@@ -92,19 +101,6 @@ func (b *BasePolicyEnforcer) validateBytes(bytes uint64) error {
 		return models.ErrInvalidBytes
 	}
 	return nil
-}
-
-// convertLimitValue converts database int64 limit values to core *uint64 values
-// -1 (database unlimited) → nil (core unlimited)
-// 0 (database disabled) → 0 (core disabled)
-// positive values → same positive values
-func (b *BasePolicyEnforcer) convertLimitValue(value int64) *uint64 {
-	if value == -1 {
-		return nil // unlimited
-	}
-
-	converted := uint64(value)
-	return &converted
 }
 
 // QuotaResultBuilder helps build quota check results with a fluent interface

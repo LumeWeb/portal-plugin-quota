@@ -144,7 +144,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 		{
 			name: "CheckUploadQuota - GetActiveGrants error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantType("UPLOAD")).Return(nil, errors.New("grant manager error"))
+				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantTypeUpload).Return(nil, errors.New("grant manager error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
 				config := &models.UserQuotaConfig{
@@ -157,9 +157,9 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - GetActiveGrants error",
+			name: "RecordUpload - ConsumeFromGrants error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantType("UPLOAD")).Return(nil, errors.New("grant manager error"))
+				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("grant manager error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
 				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
@@ -169,28 +169,6 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 		{
 			name: "RecordUpload - ConsumeFromGrants error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantTypeUpload).Return([]*models.AllowanceGrant{
-					{
-						UserID:         1,
-						Type:           models.GrantTypeUpload,
-						Source:         models.GrantSourcePAYGAddon,
-						Bytes:          1000,
-						BytesUsed:      0,
-						BytesRemaining: 1000,
-						IsActive:       true,
-					},
-				}, nil)
-				mockGrantManager.On("CalculateAvailableBytes", []*models.AllowanceGrant{
-					{
-						UserID:         1,
-						Type:           models.GrantTypeUpload,
-						Source:         models.GrantSourcePAYGAddon,
-						Bytes:          1000,
-						BytesUsed:      0,
-						BytesRemaining: 1000,
-						IsActive:       true,
-					},
-				}).Return(uint64(1000))
 				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100)).Return(nil, errors.New("consumption error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {

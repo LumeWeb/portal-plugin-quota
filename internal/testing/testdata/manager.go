@@ -158,8 +158,7 @@ func (tdm *TestDataManager) CreateAllowanceGrant(userID uint, grantType pluginMo
 	require.NoError(tdm.ctx.T(), err, "Failed to create allowance grant")
 
 	// Track for cleanup
-	grantID := tdm.GenerateGrantID()
-	tdm.createdGrants.Store(grantID, grant)
+	tdm.createdGrants.Store(grant.ID, grant)
 
 	return grant
 }
@@ -179,8 +178,7 @@ func (tdm *TestDataManager) CreateUsageDetail(userID uint, uploadID uint, usageT
 	require.NoError(tdm.ctx.T(), err, "Failed to create usage detail")
 
 	// Track for cleanup
-	usageID := tdm.GenerateGrantID()
-	tdm.createdUsageDetails.Store(usageID, detail)
+	tdm.createdUsageDetails.Store(detail.ID, detail)
 
 	return detail
 }
@@ -200,8 +198,7 @@ func (tdm *TestDataManager) CreateUsageDetailWithTimestamp(userID uint, uploadID
 	require.NoError(tdm.ctx.T(), err, "Failed to create usage detail")
 
 	// Track for cleanup
-	usageID := tdm.GenerateGrantID()
-	tdm.createdUsageDetails.Store(usageID, detail)
+	tdm.createdUsageDetails.Store(detail.ID, detail)
 
 	return detail
 }

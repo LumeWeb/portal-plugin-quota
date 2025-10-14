@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
+	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"gorm.io/gorm"
 )
 
 func TestQuotaPlanManagerDefault_GetQuotaPlanByID_ValidID(t *testing.T) {
@@ -44,7 +44,7 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByID_NonExistentID(t *testing.T) {
 		result, err := manager.GetQuotaPlanByID(999999)
 		assert.Error(t, err)
 		assert.Nil(t, result)
-		assert.Equal(t, gorm.ErrRecordNotFound, err)
+		assert.ErrorIs(t, err, models.ErrQuotaPlanNotFound)
 	}, pluginTesting.TestOptions())
 }
 
@@ -86,7 +86,7 @@ func TestQuotaPlanManagerDefault_GetDefaultQuotaPlan_NotExists(t *testing.T) {
 
 		result, err := manager.GetDefaultQuotaPlan()
 		assert.Error(t, err)
-		assert.Equal(t, gorm.ErrRecordNotFound, err)
+		assert.ErrorIs(t, err, models.ErrQuotaPlanNotFound)
 		assert.Nil(t, result)
 	}, pluginTesting.TestOptions())
 }
@@ -112,7 +112,7 @@ func TestQuotaPlanManagerDefault_GetDefaultQuotaPlan_Inactive(t *testing.T) {
 
 		result, err := manager.GetDefaultQuotaPlan()
 		assert.Error(t, err)
-		assert.Equal(t, gorm.ErrRecordNotFound, err)
+		assert.ErrorIs(t, err, models.ErrQuotaPlanNotFound)
 		assert.Nil(t, result)
 	}, pluginTesting.TestOptions())
 }

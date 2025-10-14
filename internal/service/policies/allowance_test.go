@@ -293,20 +293,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_SuccessfulRecording_Integration_Su
 	ip := "192.168.1.1"
 
 	// Set up mock expectations
-	grants := []*models.AllowanceGrant{
-		{
-			UserID:         userID,
-			Type:           models.GrantTypeUpload,
-			Source:         models.GrantSourcePAYGAddon,
-			Bytes:          1000,
-			BytesUsed:      0,
-			BytesRemaining: 1000,
-			IsActive:       true,
-		},
-	}
 	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
-	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeUpload).Return(grants, nil)
-	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes).Return([]*models.AllowanceConsumption{}, nil)
 	mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil)
 
@@ -336,20 +323,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_GrantConsumptionFailure_Integratio
 	ip := "192.168.1.2"
 
 	// Set up mock expectations for failure
-	grants := []*models.AllowanceGrant{
-		{
-			UserID:         userID,
-			Type:           models.GrantTypeUpload,
-			Source:         models.GrantSourcePAYGAddon,
-			Bytes:          1000,
-			BytesUsed:      0,
-			BytesRemaining: 1000,
-			IsActive:       true,
-		},
-	}
 	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
-	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeUpload).Return(grants, nil)
-	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000))
 	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes).Return(nil, assert.AnError)
 
 	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
@@ -569,31 +543,13 @@ func TestAllowancePolicyEnforcer_RecordUpload_SufficientAllowance_Unit_Success(t
 	ip := "192.168.1.1"
 
 	// Set up mock expectations
-	grants := []*models.AllowanceGrant{
-		{
-			Model:          gorm.Model{},
-			UserID:         userID,
-			Type:           models.GrantTypeUpload,
-			Source:         models.GrantSourcePAYGAddon,
-			Bytes:          1000,
-			BytesUsed:      0,
-			BytesRemaining: 1000,
-			ExpiryDate:     nil,
-			IsActive:       true,
-		},
-	}
 	mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
 	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockGrantManager.On("GetActiveGrantsByType", userID, models.GrantTypeUpload).Return(grants, nil).Once()
-	mockGrantManager.On("CalculateAvailableBytes", grants).Return(uint64(1000)).Once()
 	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes).Return([]*models.AllowanceConsumption{}, nil).Once()
 	mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil).Once()
 
 	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
-	mockGrantManager.AssertExpectations(t)
-	mockQuotaService.AssertExpectations(t)
-	mockUsageManager.AssertExpectations(t)
 
 	t.Cleanup(func() {
 		dataManager.Cleanup()
@@ -639,9 +595,6 @@ func TestAllowancePolicyEnforcer_RecordDownload_SufficientAllowance_Unit_Success
 
 	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
-	mockGrantManager.AssertExpectations(t)
-	mockQuotaService.AssertExpectations(t)
-	mockUsageManager.AssertExpectations(t)
 
 	t.Cleanup(func() {
 		dataManager.Cleanup()

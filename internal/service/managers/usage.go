@@ -151,8 +151,10 @@ func (um *UsageManager) GetUsageHistory(userID uint, period int, usageType plugi
 	var usagePoints []*pluginCore.UsagePoint
 	for _, detail := range usageDetails {
 		usagePoints = append(usagePoints, &pluginCore.UsagePoint{
-			Date:  detail.Timestamp,
-			Bytes: detail.Bytes,
+			Date:   detail.Timestamp,
+			Bytes:  detail.Bytes,
+			Type:   pluginCore.UsageType(usageType),
+			UserID: userID,
 		})
 	}
 
@@ -411,39 +413,40 @@ func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.Usa
 		return err
 	}
 
-	today := time.Now().Truncate(24 * time.Hour)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
 
-	// Create the daily quota record with initial values
+	// Create a new record with initial values
 	dailyQuota := pluginModels.UserQuota{
 		UserID: userID,
 		Date:   today,
 	}
 
-	// Set the appropriate field based on usage type
+	// Set initial values based on usage type
 	switch usageType {
 	case pluginModels.UsageTypeUpload:
-		if bytes > 0 {
-			dailyQuota.BytesUploaded = uint64(bytes)
-		}
+		dailyQuota.BytesUploaded = uint64(bytes)
 	case pluginModels.UsageTypeDownload:
-		if bytes > 0 {
-			dailyQuota.BytesDownloaded = uint64(bytes)
-		}
+		dailyQuota.BytesDownloaded = uint64(bytes)
 	case pluginModels.UsageTypeStorageAdd:
-		if bytes > 0 {
-			dailyQuota.BytesStored = uint64(bytes)
-		}
+		dailyQuota.BytesStored = uint64(bytes)
 	case pluginModels.UsageTypeStorageRemove:
-		// For storage removal, we start with 0 and apply negative delta
 		if bytes < 0 {
 			dailyQuota.BytesStored = 0
+		} else {
+			dailyQuota.BytesStored = uint64(bytes)
 		}
 	}
 
-	// Use upsert to handle concurrent access atomically
+	// Determine the update assignments based on usage type
+	assignments := um.getUpdateAssignments(usageType, bytes)
+
+	// Use GORM upsert with OnConflict
 	return um.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "date"}},
-		DoUpdates: clause.Assignments(um.getUpdateAssignments(usageType, bytes)),
+		Columns: []clause.Column{
+			{Name: "user_id"},
+			{Name: "date"},
+		},
+		DoUpdates: clause.Assignments(assignments),
 	}).Create(&dailyQuota).Error
 }
 
@@ -453,22 +456,14 @@ func (um *UsageManager) getUpdateAssignments(usageType pluginModels.UsageType, b
 
 	switch usageType {
 	case pluginModels.UsageTypeUpload:
-		if bytes > 0 {
-			assignments["bytes_uploaded"] = gorm.Expr("bytes_uploaded + ?", bytes)
-		}
+		assignments["bytes_uploaded"] = gorm.Expr("bytes_uploaded + ?", bytes)
 	case pluginModels.UsageTypeDownload:
-		if bytes > 0 {
-			assignments["bytes_downloaded"] = gorm.Expr("bytes_downloaded + ?", bytes)
-		}
+		assignments["bytes_downloaded"] = gorm.Expr("bytes_downloaded + ?", bytes)
 	case pluginModels.UsageTypeStorageAdd:
-		if bytes > 0 {
-			assignments["bytes_stored"] = gorm.Expr("bytes_stored + ?", bytes)
-		}
+		assignments["bytes_stored"] = gorm.Expr("bytes_stored + ?", bytes)
 	case pluginModels.UsageTypeStorageRemove:
-		if bytes < 0 {
-			// Apply signed delta and clamp to 0 minimum
-			assignments["bytes_stored"] = gorm.Expr("CASE WHEN bytes_stored + ? < 0 THEN 0 ELSE bytes_stored + ? END", bytes, bytes)
-		}
+		// Apply signed delta and clamp to 0 minimum
+		assignments["bytes_stored"] = gorm.Expr("CASE WHEN bytes_stored + ? < 0 THEN 0 ELSE bytes_stored + ? END", bytes, bytes)
 	}
 
 	return assignments

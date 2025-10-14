@@ -15,8 +15,6 @@ import (
 func TestErrorHandling_ZeroValues(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		userID := dataManager.NextUserID()
-		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{})
 
 		t.Run("Zero user ID in quota check", func(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
@@ -30,10 +28,13 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 
 			_, err := enforcer.CheckUploadQuota(config, 100)
 			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidUserID, err)
+			assert.ErrorIs(t, err, models.ErrInvalidUserID)
 		})
 
 		t.Run("Zero bytes in quota check", func(t *testing.T) {
+			userID := dataManager.NextUserID()
+			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{})
+			
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
@@ -46,7 +47,7 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 
 			_, err := enforcer.CheckUploadQuota(config, 0)
 			assert.Error(t, err)
-			assert.Equal(t, models.ErrInvalidBytes, err)
+			assert.ErrorIs(t, err, models.ErrInvalidBytes)
 		})
 
 		dataManager.Cleanup()
@@ -60,6 +61,9 @@ func TestErrorHandling_DatabaseFailures(t *testing.T) {
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{})
 
 		t.Run("Database connection closed", func(t *testing.T) {
+			// Cleanup test data before closing the database
+			dataManager.Cleanup()
+
 			// Close the database connection to simulate failure
 			db, err := ctx.DB().DB()
 			require.NoError(t, err)
@@ -74,7 +78,5 @@ func TestErrorHandling_DatabaseFailures(t *testing.T) {
 			_, err = enforcer.GetCurrentUsage(userID)
 			assert.Error(t, err)
 		})
-
-		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
 }

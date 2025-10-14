@@ -15,15 +15,26 @@ import (
 	"gorm.io/gorm"
 )
 
+// newHardLimitsTest creates a test harness with all required mocks for hard limits policy tests
+func newHardLimitsTest(t *testing.T) (coreTesting.TestContext, *pluginCore.MockQuotaService, *pluginCore.MockUsageManager, *pluginCore.MockQuotaPlanManager, *pluginCore.MockUsageAggregator, *HardLimitsPolicyEnforcer) {
+	ctx, _ := coreTesting.NewTestContext(t)
+	qs := pluginCore.NewMockQuotaService(t)
+	um := pluginCore.NewMockUsageManager(t)
+	qpm := pluginCore.NewMockQuotaPlanManager(t)
+	ua := pluginCore.NewMockUsageAggregator(t)
+
+	qs.On("GetUsageManager").Return(um).Maybe()
+	qs.On("GetQuotaPlanManager").Return(qpm).Maybe()
+	qs.On("GetUsageAggregator").Return(ua).Maybe()
+
+	enforcer := NewHardLimitsPolicyEnforcer(ctx, qs)
+	return ctx, qs, um, qpm, ua, enforcer
+}
+
 // TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error tests upload with nil config
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	_, _, um, _, _, enforcer := newHardLimitsTest(t)
+	um.On("RecordUpload", uint(0), uint(0), uint64(0), "").Return(nil).Maybe()
 
 	result, err := enforcer.CheckUploadQuota(nil, uint64(500))
 	assert.Error(t, err)
@@ -32,20 +43,8 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error(t *testi
 
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allowed tests the CheckDownloadQuota method with mocks - within daily limit case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allowed(t *testing.T) {
-	var (
-		mockQuotaService     = pluginCore.NewMockQuotaService(t)
-		mockUsageManager     = pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager = pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageAggregator  = pluginCore.NewMockUsageAggregator(t)
-	)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, qs, _, qpm, ua, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	// Use fixed test user ID
 	userID := dataManager.NextUserID()
@@ -56,14 +55,14 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allow
 		DownloadTotalLimit: lo.ToPtr(int64(10000)),
 	}
 
-	mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+	qs.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
 		UserID:          userID,
 		BytesDownloaded: 500,
 	}, nil)
 
 	// Mock quota plan manager calls
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
-	mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeDownload).Return(uint64(500), nil)
+	qpm.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+	ua.On("GetAggregatedUsageByType", userID, models.UsageTypeDownload).Return(uint64(500), nil)
 
 	result, err := enforcer.CheckDownloadQuota(config, uint64(1000))
 	require.NoError(t, err)
@@ -76,10 +75,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allow
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Blocked tests the CheckDownloadQuota method with mocks - exceeding daily limit case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Blocked(t *testing.T) {
 	// Setup all mocks
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, qs, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	// Generate unique user ID per test
@@ -91,20 +87,14 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Bl
 		DownloadTotalLimit: lo.ToPtr(int64(10000)),
 	}
 
-	// Setup all required mocks
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-
 	// Mock service calls
-	mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+	qs.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
 		UserID:          userID,
 		BytesDownloaded: 1800,
 	}, nil)
 
 	// Mock default quota plan lookup to return not found
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	qpm.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
 
 	result, err := enforcer.CheckDownloadQuota(config, uint64(300))
 	require.NoError(t, err)
@@ -116,14 +106,8 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Bl
 
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error tests the CheckDownloadQuota method with mocks - invalid bytes case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	config := &models.UserQuotaConfig{
 		UserID:             dataManager.NextUserID(),
@@ -142,14 +126,8 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *
 
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error tests the CheckDownloadQuota method with mocks - nil config case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	result, err := enforcer.CheckDownloadQuota(nil, uint64(500))
 	assert.Error(t, err)
@@ -160,16 +138,8 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *tes
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_Unit_Success tests the getEffectiveLimits method with quota plan that has nil limits
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
@@ -189,7 +159,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_
 		DownloadTotalLimit: 0, // zero means disabled
 	}
 
-	mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	qpm.On("GetQuotaPlanByID", planID).Return(plan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
@@ -204,16 +174,8 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Success tests the getEffectiveLimits method with quota plan limits
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
@@ -233,7 +195,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Su
 		IsActive:           lo.ToPtr(true),
 	}
 
-	mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	qpm.On("GetQuotaPlanByID", planID).Return(plan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
@@ -248,16 +210,8 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Su
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Unit_Success tests the getEffectiveLimits method with custom limits overriding plan limits
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
@@ -278,7 +232,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Uni
 		DownloadTotalLimit: 20000,
 	}
 
-	mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	qpm.On("GetQuotaPlanByID", planID).Return(plan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
@@ -293,17 +247,8 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Uni
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Success tests the getEffectiveLimits method with default plan when no custom plan
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	// Setup all required mocks
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
@@ -321,7 +266,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Succes
 	}
 
 	// Mock default quota plan lookup
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(plan, nil)
+	qpm.On("GetDefaultQuotaPlan").Return(plan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
@@ -336,16 +281,8 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Succes
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Unit_Error tests the getEffectiveLimits method with inactive default plan
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Unit_Error(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
@@ -360,7 +297,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Uni
 		IsActive:  lo.ToPtr(false),
 	}
 
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(inactivePlan, nil)
+	qpm.On("GetDefaultQuotaPlan").Return(inactivePlan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
 	assert.Error(t, err)
@@ -372,16 +309,8 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Uni
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit_Error tests the getEffectiveLimits method when no limits are configured
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit_Error(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
@@ -389,7 +318,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 	}
 
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, errors.New("not found"))
+	qpm.On("GetDefaultQuotaPlan").Return(nil, errors.New("not found"))
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
 	assert.Error(t, err)
@@ -399,16 +328,57 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit
 	dataManager.Cleanup()
 }
 
-// TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success tests the GetDetailedUsage method with mocks
-func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+// TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error tests the getEffectiveLimits method when quota plan is not found
+func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error(t *testing.T) {
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	userID := dataManager.NextUserID()
+	planID := uint64(999) // Non-existent plan ID
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyHardLimits,
+		QuotaPlanID:       &planID,
+	}
 
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	qpm.On("GetQuotaPlanByID", planID).Return(nil, gorm.ErrRecordNotFound)
+
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	assert.Error(t, err)
+	assert.Nil(t, limits)
+	assert.Contains(t, err.Error(), "failed to retrieve quota plan")
+
+	dataManager.Cleanup()
+}
+
+// TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error tests upload quota check when plan is not found
+func TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error(t *testing.T) {
+	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	dataManager := testdata.NewTestDataManager(ctx)
+
+	userID := dataManager.NextUserID()
+	planID := uint64(999) // Non-existent plan ID
+	config := &models.UserQuotaConfig{
+		UserID:            userID,
+		EnforcementPolicy: models.EnforcementPolicyHardLimits,
+		QuotaPlanID:       &planID,
+	}
+
+	// Mock quota plan manager to return not found
+	qpm.On("GetQuotaPlanByID", planID).Return(nil, gorm.ErrRecordNotFound)
+
+	result, err := enforcer.CheckUploadQuota(config, uint64(500))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to retrieve quota plan")
+	assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
+
+	dataManager.Cleanup()
+}
+
+// TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success tests the GetDetailedUsage method with mocks
+func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
+	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
+	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
 	start := time.Now().Add(-time.Hour)
@@ -433,7 +403,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 		},
 	}
 
-	mockUsageManager.On("GetDetailedUsage", userID, start, end).Return(expectedDetails, nil)
+	um.On("GetDetailedUsage", userID, start, end).Return(expectedDetails, nil)
 
 	details, err := enforcer.GetDetailedUsage(userID, start, end)
 	assert.NoError(t, err)
@@ -447,14 +417,8 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 
 // TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success tests the GetCurrentUsage method with mocks
 func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 
@@ -466,7 +430,7 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
 		LastUpdated:     time.Now(),
 	}
 
-	mockUsageManager.On("GetCurrentUsage", userID).Return(expectedUsage, nil)
+	um.On("GetCurrentUsage", userID).Return(expectedUsage, nil)
 
 	usage, err := enforcer.GetCurrentUsage(userID)
 	assert.NoError(t, err)
@@ -480,14 +444,8 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
 
 // TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success tests the GetUsageHistory method with mocks
 func TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	ctx, _ := coreTesting.NewTestContext(t)
+	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-
-	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
 	period := 7
@@ -506,7 +464,7 @@ func TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success(t *testing.T) {
 		},
 	}
 
-	mockUsageManager.On("GetUsageHistory", userID, period, usageType).Return(expectedHistory, nil)
+	um.On("GetUsageHistory", userID, period, usageType).Return(expectedHistory, nil)
 
 	history, err := enforcer.GetUsageHistory(userID, period, usageType)
 	assert.NoError(t, err)

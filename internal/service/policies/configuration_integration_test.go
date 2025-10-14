@@ -45,7 +45,7 @@ func TestConfiguration_Updates(t *testing.T) {
 
 		quotaService := core.GetService[*pluginCore.MockQuotaService](ctx, pluginCore.QUOTA_SERVICE)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		quotaService.On("GetUsageManager").Return(mockUsageManager)
+		quotaService.On("GetUsageManager").Return(mockUsageManager).Maybe()
 
 		// Get the actual config from database
 		var config models.UserQuotaConfig
@@ -53,7 +53,7 @@ func TestConfiguration_Updates(t *testing.T) {
 		require.NoError(t, err)
 
 		// Mock the GetUserQuotaConfig to return the actual config
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(&config, nil)
+		mockUsageManager.On("GetUserQuotaConfig", userID).Return(&config, nil).Maybe()
 
 		// Get initial config
 		retrievedConfig, err := quotaService.GetUsageManager().GetUserQuotaConfig(userID)
@@ -68,8 +68,7 @@ func TestConfiguration_Updates(t *testing.T) {
 		require.NoError(t, err)
 
 		// Update the mock to return the updated config
-		mockUsageManager.ExpectedCalls = nil // Clear previous expectations
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(&config, nil)
+		mockUsageManager.On("GetUserQuotaConfig", userID).Return(&config, nil).Maybe()
 
 		updatedConfig, err := quotaService.GetUsageManager().GetUserQuotaConfig(userID)
 		require.NoError(t, err)
@@ -81,8 +80,7 @@ func TestConfiguration_Updates(t *testing.T) {
 		require.NoError(t, err)
 
 		// Update the mock to return the updated config
-		mockUsageManager.ExpectedCalls = nil // Clear previous expectations
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(&config, nil)
+		mockUsageManager.On("GetUserQuotaConfig", userID).Return(&config, nil).Maybe()
 
 		updatedConfig, err = quotaService.GetUsageManager().GetUserQuotaConfig(userID)
 		require.NoError(t, err)

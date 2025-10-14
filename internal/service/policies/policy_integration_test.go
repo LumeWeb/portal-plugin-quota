@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
+	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"gorm.io/gorm"
 )
@@ -23,7 +23,7 @@ func TestPolicyIntegration_PolicySwitching_HardLimitsToUnlimited(t *testing.T) {
 		quotaService := pluginCore.NewMockQuotaService(t)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		
+
 		quotaService.On("GetUsageManager").Return(mockUsageManager)
 		quotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
@@ -59,10 +59,6 @@ func TestPolicyIntegration_PolicySwitching_HardLimitsToUnlimited(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "unlimited policy should allow the operation")
 
-		// Verify all mock expectations were met
-		quotaService.AssertExpectations(t)
-		mockQuotaPlanManager.AssertExpectations(t)
-		
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
 }
@@ -78,7 +74,7 @@ func TestPolicyIntegration_PolicySwitching_UnlimitedToThreshold(t *testing.T) {
 		quotaService := pluginCore.NewMockQuotaService(t)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		
+
 		quotaService.On("GetUsageManager").Return(mockUsageManager)
 		quotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
@@ -114,10 +110,6 @@ func TestPolicyIntegration_PolicySwitching_UnlimitedToThreshold(t *testing.T) {
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 
-		// Verify mock expectations
-		quotaService.AssertExpectations(t)
-		mockQuotaPlanManager.AssertExpectations(t)
-		
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
 }
@@ -239,7 +231,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		result3, err := thresholdEnforcer.CheckUploadQuota(config3, uint64(1500))
 		require.NoError(t, err)
 		assert.False(t, result3.Allowed)
-		
+
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
 }
@@ -262,11 +254,11 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-			
+
 			quotaService.On("GetUsageManager").Return(mockUsageManager).Maybe()
 			quotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager).Maybe()
 			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
-			
+
 			return quotaService
 		}
 
@@ -274,7 +266,7 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 		hardLimitsEnforcer := NewHardLimitsPolicyEnforcer(ctx, createMockService(t))
 		unlimitedEnforcer := NewUnlimitedPolicyEnforcer(ctx, createMockService(t))
 		thresholdEnforcer := NewThresholdPolicyEnforcer(ctx, createMockService(t))
-		
+
 		// For allowance enforcer, we need to mock grant manager too
 		quotaService := pluginCore.NewMockQuotaService(t)
 		quotaService.On("GetUsageManager").Return(pluginCore.NewMockUsageManager(t)).Maybe()
@@ -302,7 +294,7 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), expectedError)
 		}
-		
+
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
 }

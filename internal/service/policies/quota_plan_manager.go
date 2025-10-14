@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"errors"
 	"fmt"
 
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -30,9 +31,9 @@ func (q *QuotaPlanManagerDefault) GetQuotaPlanByID(id uint64) (*models.QuotaPlan
 	var plan models.QuotaPlan
 	err := q.db.Where("id = ?", id).First(&plan).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			q.logger.Debug("GetQuotaPlanByID: quota plan not found", zap.Uint64("id", id))
-			return nil, err
+			return nil, fmt.Errorf("%w: %d", models.ErrQuotaPlanNotFound, id)
 		}
 		q.logger.Error("GetQuotaPlanByID: failed to retrieve quota plan",
 			zap.Uint64("id", id),
@@ -54,9 +55,9 @@ func (q *QuotaPlanManagerDefault) GetDefaultQuotaPlan() (*models.QuotaPlan, erro
 	var plan models.QuotaPlan
 	err := q.db.Where("is_default = true AND is_active = true").First(&plan).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			q.logger.Debug("GetDefaultQuotaPlan: default active quota plan not found")
-			return nil, err
+			return nil, models.ErrQuotaPlanNotFound
 		}
 		q.logger.Error("GetDefaultQuotaPlan: failed to retrieve default active quota plan", zap.Error(err))
 		return nil, fmt.Errorf("failed to retrieve default quota plan: %w", err)

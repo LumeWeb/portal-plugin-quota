@@ -80,5 +80,33 @@ func (q *QuotaPlan) validate() error {
 		return ErrInvalidDownloadTotalLimit
 	}
 
+	// Validate thresholds
+	if q.StorageThreshold != nil {
+		if *q.StorageThreshold < 0 {
+			return ErrInvalidStorageThreshold
+		}
+		if q.StorageLimit >= 0 && *q.StorageThreshold > q.StorageLimit {
+			return ErrThresholdExceedsLimit
+		}
+	}
+
+	if q.UploadThreshold != nil {
+		if *q.UploadThreshold < 0 {
+			return ErrInvalidUploadThreshold
+		}
+		if q.UploadDailyLimit >= 0 && *q.UploadThreshold > q.UploadDailyLimit {
+			return ErrThresholdExceedsLimit
+		}
+	}
+
+	if q.DownloadThreshold != nil {
+		if *q.DownloadThreshold < 0 {
+			return ErrInvalidDownloadThreshold
+		}
+		if q.DownloadDailyLimit >= 0 && *q.DownloadThreshold > q.DownloadDailyLimit {
+			return ErrThresholdExceedsLimit
+		}
+	}
+
 	return nil
 }

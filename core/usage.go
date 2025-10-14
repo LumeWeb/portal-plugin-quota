@@ -15,6 +15,9 @@ type UsageManager interface {
 	RecordDownload(userID, uploadID uint, bytes uint64, ip string) error
 
 	// RecordStorageChange records storage usage changes for a user
+	// bytes represents the change in storage:
+	//   positive values indicate storage added (file uploaded)
+	//   negative values indicate storage removed (file deleted)
 	RecordStorageChange(userID, uploadID uint, bytes int64, ip string) error
 
 	// RecordUserUsageDetail records a detailed usage record
@@ -27,6 +30,7 @@ type UsageManager interface {
 	GetCurrentUsage(userID uint) (*Usage, error)
 
 	// GetUsageHistory returns usage history for a user
+	// period is in days (24-hour periods from now)
 	GetUsageHistory(userID uint, period int, usageType UsageType) ([]*UsagePoint, error)
 
 	// GetDetailedUsage returns detailed usage records for a user within a time range

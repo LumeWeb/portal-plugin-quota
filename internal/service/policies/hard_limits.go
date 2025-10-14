@@ -64,6 +64,7 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 				pluginCore.QuotaCheckDetails{
 					CurrentUsage: usage.BytesUploaded,
 					Limit:        lo.ToPtr(uint64(0)),
+					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
 		} else if usage.BytesUploaded+requestedBytes > limitValue {
@@ -76,7 +77,6 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 					Limit:        &limitValue,
 				},
 			), nil
-		} else if usage.BytesUploaded+requestedBytes == limitValue {
 		}
 	}
 
@@ -111,7 +111,6 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
-		} else if aggregatedUsage+requestedBytes == limitValue {
 		}
 	}
 

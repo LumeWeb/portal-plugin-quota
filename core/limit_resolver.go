@@ -1,6 +1,9 @@
 package core
 
-import "go.lumeweb.com/portal-plugin-quota/internal/db/models"
+import (
+	"math"
+	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+)
 
 // LimitResolver provides unified limit resolution functionality across all quota policies
 type LimitResolver interface {
@@ -24,7 +27,6 @@ type LimitOption func(*LimitConfig)
 // LimitConfig holds configuration for limit resolution
 type LimitConfig struct {
 	TreatZeroAsNil bool
-	AllowUnlimited bool
 }
 
 // WithTreatZeroAsNil treats 0 values as nil (unlimited/disabled)
@@ -34,10 +36,10 @@ func WithTreatZeroAsNil() LimitOption {
 	}
 }
 
-// WithAllowUnlimited allows -1 values to be treated as unlimited
+// WithAllowUnlimited is a no-op since -1 values are already treated as unlimited by ApplyLimit
 func WithAllowUnlimited() LimitOption {
 	return func(c *LimitConfig) {
-		c.AllowUnlimited = true
+		// This option is a no-op as -1 values are already treated as unlimited
 	}
 }
 
@@ -56,9 +58,17 @@ type ThresholdCheckResult struct {
 func EvaluateThreshold(currentUsage, requestedBytes, threshold, limit uint64) ThresholdCheckResult {
 	if threshold == 0 {
 		// Threshold is 0, which means always warn
+		// Check for overflow before calculating new usage
+		withinLimit := true
+		if currentUsage > math.MaxUint64-requestedBytes {
+			withinLimit = false
+		} else {
+			withinLimit = currentUsage+requestedBytes <= limit
+		}
+
 		return ThresholdCheckResult{
 			ShouldWarn:     true,
-			WithinLimit:    requestedBytes <= limit,
+			WithinLimit:    withinLimit,
 			CurrentUsage:   currentUsage,
 			Threshold:      &threshold,
 			Limit:          &limit,

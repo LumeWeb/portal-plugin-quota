@@ -102,7 +102,7 @@ func (a *AllowancePolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaCon
 	}
 
 	if requestedBytes > availableBytes {
-		return a.createQuotaCheckResult(false, models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
+		return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
 	}
 
 	return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
@@ -143,7 +143,7 @@ func (a *AllowancePolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConf
 	}
 
 	if requestedBytes > availableBytes {
-		return a.createQuotaCheckResult(false, models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
+		return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
 	}
 
 	return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
@@ -155,23 +155,12 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		return err
 	}
 
-	// Get active grants for upload
-	grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(userID, models.GrantTypeUpload)
-	if err != nil {
-		return fmt.Errorf("failed to get active upload grants: %w", err)
-	}
-
-	// Calculate available bytes from grants
-	availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
-
-	// Check if we have enough allowance
-	if bytes > availableBytes {
-		return fmt.Errorf("insufficient upload allowance: requested %d, available %d", bytes, availableBytes)
-	}
-
 	// Consume allowance from grants
-	_, err = a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes)
+	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes)
 	if err != nil {
+		if errors.Is(err, models.ErrInsufficientAllowance) {
+			return fmt.Errorf("upload blocked: insufficient upload allowance")
+		}
 		return fmt.Errorf("failed to consume upload allowance: %w", err)
 	}
 
@@ -180,10 +169,7 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 
 // RecordDownload records a download operation and consumes allowance
 func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
-	if err := a.validateUserID(userID); err != nil {
-		return err
-	}
-	if err := a.validateBytes(bytes); err != nil {
+	if err := a.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
 

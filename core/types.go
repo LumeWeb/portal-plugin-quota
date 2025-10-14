@@ -67,7 +67,7 @@ type EffectiveLimits struct {
 
 // HasAnyLimits returns true if any limits are configured for this user
 // This includes both finite limits and unlimited limits (represented as nil)
-func (e *EffectiveLimits) HasAnyLimits() bool {
+func (e EffectiveLimits) HasAnyLimits() bool {
 	return e.HasStorageLimitConfig ||
 		e.HasUploadDailyLimitConfig ||
 		e.HasDownloadDailyLimitConfig ||

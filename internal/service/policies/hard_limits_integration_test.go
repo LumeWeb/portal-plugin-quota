@@ -26,9 +26,9 @@ func TestHardLimitsPolicyEnforcer_ValidateLimitValue_ValidLimits_Integration_Suc
 		1,
 		100,
 		1000,
-		int64(units.GB),
-		int64(units.TB),
-		int64(units.PB),
+		int64(units.GiB),
+		int64(units.TiB),
+		int64(units.PiB),
 		int64(units.PiB), // Maximum reasonable value
 	}
 
@@ -208,7 +208,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integratio
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-	assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits), result.Details.Policy)
+	assert.Equal(t, models.EnforcementPolicyHardLimits, result.Details.Policy)
 }
 
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integration_Blocked(t *testing.T) {

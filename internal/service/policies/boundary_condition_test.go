@@ -74,7 +74,7 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			dailyLimit:      -1, // Unlimited
 			totalLimit:      -1, // Unlimited
 			currentUsage:    100,
-			requestBytes:    ^uint64(0), // Maximum uint64
+			requestBytes:    math.MaxUint64, // Maximum uint64
 			expectedAllowed: true,
 			expectedReason:  models.QuotaCheckReasonOK,
 		},
@@ -116,8 +116,8 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
 			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
 
-			// For tests that need usage aggregator - only set it up when daily limit check would pass
-			if test.dailyLimit != 0 && test.dailyLimit != -1 && (test.currentUsage+test.requestBytes <= uint64(test.dailyLimit) || test.dailyLimit == -1) {
+			// Setup aggregator only when daily limit check would pass
+			if test.dailyLimit > 0 && test.currentUsage+test.requestBytes <= uint64(test.dailyLimit) {
 				mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
 				mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
 				mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeUpload).Return(uint64(0), nil)
@@ -329,9 +329,9 @@ func TestAllowancePolicyEnforcer_BoundaryConditions(t *testing.T) {
 					UserID:         4,
 					Type:           models.GrantTypeUpload,
 					Source:         models.GrantSourcePAYGAddon,
-					Bytes:          ^uint64(0), // Maximum uint64
+					Bytes:          math.MaxUint64, // Maximum uint64
 					BytesUsed:      0,
-					BytesRemaining: ^uint64(0),
+					BytesRemaining: math.MaxUint64,
 					IsActive:       true,
 				},
 			},

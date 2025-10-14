@@ -9,14 +9,12 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // DefaultLimitResolver implements the LimitResolver interface
 type DefaultLimitResolver struct {
 	ctx          core.Context
-	db           *gorm.DB
 	logger       *core.Logger
 	quotaService pluginCore.QuotaService
 }
@@ -25,7 +23,6 @@ type DefaultLimitResolver struct {
 func NewLimitResolver(ctx core.Context, quotaService pluginCore.QuotaService) *DefaultLimitResolver {
 	return &DefaultLimitResolver{
 		ctx:          ctx,
-		db:           ctx.DB(),
 		logger:       ctx.NamedLogger("quota.LimitResolver"),
 		quotaService: quotaService,
 	}
@@ -152,7 +149,7 @@ func (r *DefaultLimitResolver) ApplyLimit(dest **uint64, source int64, limitName
 
 	var convertedValue *uint64
 	if source == -1 || (config.TreatZeroAsNil && source == 0) {
-		convertedValue = nil // unlimited or disabled (treated as nil)
+		convertedValue = nil // -1 and 0 (when TreatZeroAsNil is true) are treated as unlimited (nil)
 	} else {
 		converted := uint64(source)
 		convertedValue = &converted
@@ -309,19 +306,4 @@ func (r *DefaultLimitResolver) convertLimitValue(value int64) *uint64 {
 	}
 	converted := uint64(value)
 	return &converted
-}
-
-// applyLimit is a helper method that uses the ApplyLimit method with default options
-func (r *DefaultLimitResolver) applyLimit(dest **uint64, source int64, limitName string, options ...pluginCore.LimitOption) {
-	// Default options for limit resolution
-	defaultOptions := []pluginCore.LimitOption{pluginCore.WithAllowUnlimited()}
-	allOptions := append(defaultOptions, options...)
-
-	if err := r.ApplyLimit(dest, source, limitName, allOptions...); err != nil {
-		// Log error but don't fail - this should be caught during validation
-		r.logger.Warn("Failed to apply limit",
-			zap.String("limitName", limitName),
-			zap.Int64("value", source),
-			zap.Error(err))
-	}
 }

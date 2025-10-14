@@ -21,12 +21,12 @@ import (
 
 // Test constants for byte values
 const (
-	testBytesSmall     = 100
-	testBytesMedium    = 200
-	testBytesLarge     = 300
+	testBytesSmall      = 100
+	testBytesMedium     = 200
+	testBytesLarge      = 300
 	testBytesExtraLarge = 500
-	testBytesHuge      = 600
-	testBytesMassive   = 1000
+	testBytesHuge       = 600
+	testBytesMassive    = 1000
 )
 
 // Test constants for user counts
@@ -126,7 +126,7 @@ func TestUsageManager_RecordUpload_ValidInput_Success(t *testing.T) {
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Uploads are not shared
 
 		// Verify the daily quota was updated
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		var dailyQuota pluginModels.UserQuota
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
@@ -322,9 +322,9 @@ func TestUsageManager_GetUsageHistory_AllUsageHistory_Success(t *testing.T) {
 
 		history, err := usageManager.GetUsageHistory(userID, 3, pluginModels.UsageTypeUpload)
 		require.NoError(t, err)
-		assert.Len(t, history, 2)                      // Both records
+		assert.Len(t, history, 2)                                  // Both records
 		assert.Equal(t, uint64(testBytesMedium), history[0].Bytes) // Older record first
-		assert.Equal(t, uint64(testBytesSmall), history[1].Bytes) // Newer record second
+		assert.Equal(t, uint64(testBytesSmall), history[1].Bytes)  // Newer record second
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -437,12 +437,12 @@ func TestUsageManager_UpdateDailyUsage_CreateNewRecord_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, testBytesSmall)
+		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall))
 		require.NoError(t, err)
 
 		// Verify the record was created
 		var dailyQuota pluginModels.UserQuota
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
 		assert.Equal(t, userID, dailyQuota.UserID)
@@ -472,16 +472,16 @@ func TestUsageManager_UpdateDailyUsage_UpdateExistingRecord_Success(t *testing.T
 		usageManager := NewUsageManager(ctx)
 
 		// First create a record
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, testBytesSmall)
+		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall))
 		require.NoError(t, err)
 
 		// Then update it
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, testBytesSmall/2)
+		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall/2))
 		require.NoError(t, err)
 
 		// Verify the record was updated
 		var dailyQuota pluginModels.UserQuota
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
 		assert.Equal(t, uint64(testBytesSmall+testBytesSmall/2), dailyQuota.BytesUploaded) // testBytesSmall + testBytesSmall/2
@@ -508,16 +508,16 @@ func TestUsageManager_UpdateDailyUsage_DifferentUsageTypes_Success(t *testing.T)
 		usageManager := NewUsageManager(ctx)
 
 		// Add different types of usage
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, testBytesSmall)
+		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall))
 		require.NoError(t, err)
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, testBytesMedium)
+		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(testBytesMedium))
 		require.NoError(t, err)
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeStorageAdd, testBytesLarge)
+		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeStorageAdd, int64(testBytesLarge))
 		require.NoError(t, err)
 
 		// Verify all types were recorded correctly
 		var dailyQuota pluginModels.UserQuota
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
 		assert.Equal(t, uint64(testBytesSmall), dailyQuota.BytesUploaded)
@@ -563,7 +563,7 @@ func TestUsageManager_RecordDownload_ValidInput_Success(t *testing.T) {
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Not shared when disabled
 
 		// Verify the daily quota was updated
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		var dailyQuota pluginModels.UserQuota
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
@@ -619,7 +619,7 @@ func TestUsageManager_RecordDownload_WithSharedUsage_Success(t *testing.T) {
 		assert.Equal(t, uint(testUserCountSmall), usageDetails[0].SharedWith)
 
 		// Verify the daily quota was updated
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		var dailyQuota pluginModels.UserQuota
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
@@ -666,7 +666,7 @@ func TestUsageManager_RecordStorageChange_ValidInput_Success(t *testing.T) {
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Not shared when disabled
 
 		// Verify the daily quota was updated
-		today := time.Now().Truncate(24 * time.Hour)
+		today := time.Now().UTC().Truncate(24 * time.Hour)
 		var dailyQuota pluginModels.UserQuota
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
@@ -821,7 +821,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 
 		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
 		require.NoError(t, err)
-		assert.Equal(t, uint(testUserCountSmall), sharedWith)      // Unique users only
+		assert.Equal(t, uint(testUserCountSmall), sharedWith)                  // Unique users only
 		assert.Equal(t, uint64(testBytesHuge/testUserCountSmall), sharedBytes) // testBytesHuge/testUserCountSmall = testBytesMedium
 
 		dataManager.Cleanup()
@@ -847,7 +847,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(1)           // 1 byte total
+		totalBytes := uint64(1)               // 1 byte total
 		userCount := uint(testUserCountLarge) // Shared among 10 users
 
 		usageManager := NewUsageManager(ctx)
@@ -861,8 +861,8 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive)    // 1000 bytes
-		userCount := uint(testUserCountSmall)     // Shared among 3 users
+		totalBytes := uint64(testBytesMassive) // 1000 bytes
+		userCount := uint(testUserCountSmall)  // Shared among 3 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -871,6 +871,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		// 1000 bytes / 3 users = 333.333... bytes per user
 		// With 2 decimal places precision: 333.33, rounded up to 333.34
 		// Actual bytes charged per user: 334 bytes (333.34 rounded up)
+		// Rounding mode: ceil to precision, then ceil to whole bytes
 		assert.Equal(t, uint64(334), sharedBytes)
 
 		dataManager.Cleanup()
@@ -878,8 +879,8 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive)    // 1000 bytes
-		userCount := uint(testUserCountSmall)     // Shared among 3 users
+		totalBytes := uint64(testBytesMassive) // 1000 bytes
+		userCount := uint(testUserCountSmall)  // Shared among 3 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -888,6 +889,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		// 1000 bytes / 3 users = 333.333... bytes per user
 		// With 10 decimal places precision: 333.3333333333, rounded up to 333.3333333334
 		// Actual bytes charged per user: 334 bytes (333.3333333334 rounded up)
+		// Rounding mode: ceil to precision, then ceil to whole bytes
 		assert.Equal(t, uint64(334), sharedBytes)
 
 		dataManager.Cleanup()
@@ -895,8 +897,8 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive)    // 1000 bytes
-		userCount := uint(testUserCountSmall)     // Shared among 3 users
+		totalBytes := uint64(testBytesMassive) // 1000 bytes
+		userCount := uint(testUserCountSmall)  // Shared among 3 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -905,6 +907,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		// 1000 bytes / 3 users = 333.333... bytes per user
 		// With 1 decimal place precision: 333.3, rounded up to 333.4
 		// Actual bytes charged per user: 334 bytes (333.4 rounded up)
+		// Rounding mode: ceil to precision, then ceil to whole bytes
 		assert.Equal(t, uint64(334), sharedBytes)
 
 		dataManager.Cleanup()
@@ -958,6 +961,12 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		usage, err := usageManager.GetCurrentUsage(userID)
 		require.NoError(t, err)
 		assert.Equal(t, bytesPerGoroutine*uint64(numGoroutines), usage.BytesUploaded)
+
+		// Optional: verify number of details
+		var detailsCount int64
+		err = ctx.DB().Model(&pluginModels.UserUsageDetail{}).Where("user_id = ? AND type = ?", userID, pluginModels.UsageTypeUpload).Count(&detailsCount).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(numGoroutines), detailsCount)
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())

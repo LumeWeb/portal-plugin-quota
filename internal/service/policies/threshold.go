@@ -297,7 +297,7 @@ func (t *ThresholdPolicyEnforcer) checkThresholdWithLimit(
 	if threshold != nil {
 		thresholdResult := pluginCore.EvaluateThreshold(currentUsage, requestedBytes, *threshold, limit)
 		if thresholdResult.ShouldWarn {
-			result := t.createWarningResult(policy, currentUsage, *threshold, limit)
+			result := t.createWarningResult(policy, thresholdResult.CurrentUsage, *threshold, limit)
 			return &result
 		}
 	}
@@ -333,8 +333,8 @@ func (t *ThresholdPolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		return models.ErrInvalidBytes
 	}
 
-	// Delegate to UsageManager for actual recording
-	return t.quotaService.GetUsageManager().RecordStorageChange(userID, uploadID, bytes, ip)
+	// Delegate to BasePolicyEnforcer for validation and recording
+	return t.delegateRecordStorageChange(userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage returns detailed usage records for a user

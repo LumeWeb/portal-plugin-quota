@@ -11,7 +11,6 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
-	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"gorm.io/gorm"
 )
@@ -25,19 +24,6 @@ type MockSetup struct {
 	QuotaPlanManager *pluginCore.MockQuotaPlanManager
 }
 
-// TestUserLimits represents test user quota limits
-type TestUserLimits struct {
-	StorageLimit       *int64
-	UploadDailyLimit   *int64
-	UploadTotalLimit   *int64
-	DownloadDailyLimit *int64
-	DownloadTotalLimit *int64
-	StorageThreshold   *int64
-	UploadThreshold    *int64
-	DownloadThreshold  *int64
-	QuotaPlanID        *uint64
-}
-
 // testUserLimits represents test user quota limits (lowercase version)
 type testUserLimits struct {
 	storageLimit       *int64
@@ -49,18 +35,6 @@ type testUserLimits struct {
 	uploadThreshold    *int64
 	downloadThreshold  *int64
 	quotaPlanID        *uint64
-}
-
-// TestPlanLimits represents quota limits for a test quota plan
-type TestPlanLimits struct {
-	StorageLimit       int64
-	UploadDailyLimit   int64
-	DownloadDailyLimit int64
-	UploadTotalLimit   int64
-	DownloadTotalLimit int64
-	StorageThreshold   *int64
-	UploadThreshold    *int64
-	DownloadThreshold  *int64
 }
 
 // testPlanLimits represents quota limits for a test quota plan (lowercase version)
@@ -93,89 +67,6 @@ func SetupMocks(t *testing.T) *MockSetup {
 		QuotaPlanManager: mockQuotaPlanManager,
 		UsageAggregator:  mockUsageAggregator,
 	}
-}
-
-// SetupHardLimitsMocks configures mocks specifically for hard limits policy tests
-func SetupHardLimitsMocks(t *testing.T) *MockSetup {
-	setup := SetupMocks(t)
-	setup.QuotaService.On("GetQuotaPlanManager").Return(setup.QuotaPlanManager).Maybe()
-	setup.QuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
-	return setup
-}
-
-// SetupAllowanceMocks configures mocks specifically for allowance policy tests
-func SetupAllowanceMocks(t *testing.T) *MockSetup {
-	setup := SetupMocks(t)
-	setup.QuotaService.On("GetGrantManager").Return(setup.GrantManager).Maybe()
-	return setup
-}
-
-// SetupThresholdMocks configures mocks specifically for threshold policy tests
-func SetupThresholdMocks(t *testing.T) *MockSetup {
-	setup := SetupMocks(t)
-	setup.QuotaService.On("GetQuotaPlanManager").Return(setup.QuotaPlanManager).Maybe()
-	setup.QuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
-	return setup
-}
-
-// SetupTestWithMocks creates a new test setup with mocked dependencies
-func SetupTestWithMocks(t *testing.T) (core.Context, *pluginCore.MockQuotaService, *pluginCore.MockUsageManager, *pluginCore.MockQuotaPlanManager, *pluginCore.MockUsageAggregator, *pluginCore.MockGrantManager) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-
-	return ctx, mockQuotaService, mockUsageManager, mockQuotaPlanManager, mockUsageAggregator, mockGrantManager
-}
-
-// CreateTestUserConfig creates a test user quota configuration
-func CreateTestUserConfig(userID uint, policy models.EnforcementPolicy) *models.UserQuotaConfig {
-	return &models.UserQuotaConfig{
-		UserID:            userID,
-		EnforcementPolicy: policy,
-	}
-}
-
-// CreateTestUserConfigWithLimits creates a test user quota configuration with custom limits
-func CreateTestUserConfigWithLimits(userID uint, policy models.EnforcementPolicy, limits *TestUserLimits) *models.UserQuotaConfig {
-	config := &models.UserQuotaConfig{
-		UserID:            userID,
-		EnforcementPolicy: policy,
-	}
-
-	if limits != nil {
-		if limits.StorageLimit != nil {
-			config.StorageLimit = limits.StorageLimit
-		}
-		if limits.UploadDailyLimit != nil {
-			config.UploadDailyLimit = limits.UploadDailyLimit
-		}
-		if limits.DownloadDailyLimit != nil {
-			config.DownloadDailyLimit = limits.DownloadDailyLimit
-		}
-		if limits.UploadTotalLimit != nil {
-			config.UploadTotalLimit = limits.UploadTotalLimit
-		}
-		if limits.DownloadTotalLimit != nil {
-			config.DownloadTotalLimit = limits.DownloadTotalLimit
-		}
-		if limits.StorageThreshold != nil {
-			config.StorageThreshold = limits.StorageThreshold
-		}
-		if limits.UploadThreshold != nil {
-			config.UploadThreshold = limits.UploadThreshold
-		}
-		if limits.DownloadThreshold != nil {
-			config.DownloadThreshold = limits.DownloadThreshold
-		}
-		if limits.QuotaPlanID != nil {
-			config.QuotaPlanID = limits.QuotaPlanID
-		}
-	}
-
-	return config
 }
 
 // createTestUser creates a test user in the database (lowercase version)
@@ -235,82 +126,6 @@ func createTestQuotaPlan(t *testing.T, ctx coreTesting.TestContext, name string,
 	err := ctx.DB().Create(plan).Error
 	require.NoError(t, err, "Failed to create quota plan")
 	return plan
-}
-
-// CreateTestUser creates a test user in the database using TestDataManager
-func CreateTestUser(t *testing.T, ctx coreTesting.TestContext, dataManager *testdata.TestDataManager, userID uint, policy models.EnforcementPolicy, limits *TestUserLimits) *models.UserQuotaConfig {
-	// Create user quota config
-	config := &models.UserQuotaConfig{
-		UserID:            userID,
-		EnforcementPolicy: policy,
-	}
-
-	if limits != nil {
-		config.StorageLimit = limits.StorageLimit
-		config.UploadDailyLimit = limits.UploadDailyLimit
-		config.DownloadDailyLimit = limits.DownloadDailyLimit
-		config.UploadTotalLimit = limits.UploadTotalLimit
-		config.DownloadTotalLimit = limits.DownloadTotalLimit
-		config.StorageThreshold = limits.StorageThreshold
-		config.UploadThreshold = limits.UploadThreshold
-		config.DownloadThreshold = limits.DownloadThreshold
-		config.QuotaPlanID = limits.QuotaPlanID
-	}
-
-	err := ctx.DB().Create(config).Error
-	require.NoError(t, err, "Failed to create user quota config")
-
-	// Track the created user for cleanup
-	dataManager.TrackCreatedUser(userID)
-
-	return config
-}
-
-// CreateTestQuotaPlanDB creates a test quota plan in the database using TestDataManager
-func CreateTestQuotaPlanDB(t *testing.T, ctx coreTesting.TestContext, dataManager *testdata.TestDataManager, name string, isDefault bool, limits *TestPlanLimits) *models.QuotaPlan {
-	plan := &models.QuotaPlan{
-		Name:               name,
-		Description:        "Test plan",
-		StorageLimit:       limits.StorageLimit,
-		UploadDailyLimit:   limits.UploadDailyLimit,
-		DownloadDailyLimit: limits.DownloadDailyLimit,
-		UploadTotalLimit:   limits.UploadTotalLimit,
-		DownloadTotalLimit: limits.DownloadTotalLimit,
-		StorageThreshold:   limits.StorageThreshold,
-		UploadThreshold:    limits.UploadThreshold,
-		DownloadThreshold:  limits.DownloadThreshold,
-		IsDefault:          isDefault,
-		IsActive:           lo.ToPtr(true),
-	}
-
-	err := ctx.DB().Create(plan).Error
-	require.NoError(t, err, "Failed to create quota plan")
-
-	// Track the created plan for cleanup
-	dataManager.TrackCreatedPlan(plan.ID)
-
-	return plan
-}
-
-// CreateTestAllowanceGrantDB creates a test allowance grant in the database using TestDataManager
-func CreateTestAllowanceGrantDB(t *testing.T, ctx coreTesting.TestContext, dataManager *testdata.TestDataManager, userID uint, grantType models.GrantType, bytes uint64) *models.AllowanceGrant {
-	grant := &models.AllowanceGrant{
-		UserID:         userID,
-		Type:           grantType,
-		Source:         models.GrantSourcePAYGAddon,
-		Bytes:          bytes,
-		BytesUsed:      0,
-		BytesRemaining: bytes,
-		IsActive:       true,
-	}
-
-	err := ctx.DB().Create(grant).Error
-	require.NoError(t, err, "Failed to create allowance grant")
-
-	// Track the created grant for cleanup
-	dataManager.TrackCreatedGrant(grant.ID)
-
-	return grant
 }
 
 // createTestUsageRecord creates a test usage record in the database using TestDataManager

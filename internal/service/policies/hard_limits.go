@@ -75,6 +75,7 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConf
 				pluginCore.QuotaCheckDetails{
 					CurrentUsage: usage.BytesUploaded,
 					Limit:        &limitValue,
+					Policy:       models.EnforcementPolicyHardLimits,
 				},
 			), nil
 		}

@@ -127,7 +127,7 @@ func (um *UsageManager) GetUsageHistory(userID uint, period int, usageType plugi
 		return nil, fmt.Errorf("period must be positive")
 	}
 
-	endDate := time.Now()
+	endDate := time.Now().UTC()
 	startDate := endDate.AddDate(0, 0, -period)
 
 	var usageDetails []pluginModels.UserUsageDetail

@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS quota_plans (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
+    -- Enforce at most one row where is_default=1 AND is_active=1
+    default_active_one TINYINT GENERATED ALWAYS AS (
+      CASE WHEN is_default AND is_active THEN 1 ELSE NULL END
+    ) STORED,
+    UNIQUE KEY uniq_default_active_one (default_active_one),
     INDEX idx_quota_plans_default_active (is_default, is_active)
 );
 

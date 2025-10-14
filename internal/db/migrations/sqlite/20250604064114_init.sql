@@ -108,16 +108,35 @@ CREATE INDEX IF NOT EXISTS idx_allowance_consumptions_usage_detail_id ON allowan
 CREATE INDEX IF NOT EXISTS idx_allowance_consumptions_consumption_date ON allowance_consumptions(consumption_date);
 CREATE INDEX IF NOT EXISTS idx_user_quota_configs_enforcement_policy ON user_quota_configs(enforcement_policy);
 CREATE INDEX IF NOT EXISTS idx_quota_plans_default_active ON quota_plans(is_default, is_active);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_quota_plans_default_active
+  ON quota_plans(is_default, is_active)
+  WHERE is_default = 1 AND is_active = 1;
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
+DROP INDEX IF EXISTS uniq_quota_plans_default_active;
+DROP INDEX IF EXISTS idx_quota_plans_default_active;
+DROP INDEX IF EXISTS idx_user_quota_configs_enforcement_policy;
+DROP INDEX IF EXISTS idx_allowance_consumptions_consumption_date;
+DROP INDEX IF EXISTS idx_allowance_consumptions_usage_detail_id;
+DROP INDEX IF EXISTS idx_allowance_consumptions_grant_id;
+DROP INDEX IF EXISTS idx_allowance_grants_is_active;
+DROP INDEX IF EXISTS idx_allowance_grants_expiry_date;
+DROP INDEX IF EXISTS idx_allowance_grants_source;
+DROP INDEX IF EXISTS idx_allowance_grants_type;
+DROP INDEX IF EXISTS idx_allowance_grants_user_id;
+DROP INDEX IF EXISTS idx_user_quota_configs_quota_plan_id;
+DROP INDEX IF EXISTS idx_user_usage_details_timestamp;
+DROP INDEX IF EXISTS idx_user_usage_details_ip;
+DROP INDEX IF EXISTS idx_user_usage_details_type;
+DROP INDEX IF EXISTS idx_user_usage_details_upload_id;
+DROP INDEX IF EXISTS idx_user_usage_details_user_id;
+DROP INDEX IF EXISTS idx_user_quotas_date;
 DROP TABLE allowance_consumptions;
 DROP TABLE allowance_grants;
 DROP TABLE user_quota_configs;
 DROP TABLE quota_plans;
-DROP INDEX IF EXISTS idx_quota_plans_default_active;
-DROP INDEX IF EXISTS idx_user_quota_configs_enforcement_policy;
 DROP TABLE user_usage_details;
 DROP TABLE user_quotas;
 -- +goose StatementEnd

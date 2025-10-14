@@ -90,7 +90,7 @@ func (q *QuotaPlan) validate() error {
 		if *q.StorageThreshold < 0 {
 			return ErrInvalidStorageThreshold
 		}
-		if q.StorageLimit >= 0 && *q.StorageThreshold > q.StorageLimit {
+		if q.StorageLimit > 0 && *q.StorageThreshold > q.StorageLimit {
 			return ErrThresholdExceedsLimit
 		}
 	}
@@ -99,7 +99,7 @@ func (q *QuotaPlan) validate() error {
 		if *q.UploadThreshold < 0 {
 			return ErrInvalidUploadThreshold
 		}
-		if q.UploadDailyLimit >= 0 && *q.UploadThreshold > q.UploadDailyLimit {
+		if q.UploadDailyLimit > 0 && *q.UploadThreshold > q.UploadDailyLimit {
 			return ErrThresholdExceedsLimit
 		}
 	}
@@ -108,7 +108,7 @@ func (q *QuotaPlan) validate() error {
 		if *q.DownloadThreshold < 0 {
 			return ErrInvalidDownloadThreshold
 		}
-		if q.DownloadDailyLimit >= 0 && *q.DownloadThreshold > q.DownloadDailyLimit {
+		if q.DownloadDailyLimit > 0 && *q.DownloadThreshold > q.DownloadDailyLimit {
 			return ErrThresholdExceedsLimit
 		}
 	}

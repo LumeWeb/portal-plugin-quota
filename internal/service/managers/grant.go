@@ -238,7 +238,9 @@ func (gm *GrantManager) DeactivateGrant(grantID uint) error {
 	}
 
 	// Update the grant directly using raw SQL to bypass model validation
-	result := gm.db.Exec("UPDATE allowance_grants SET is_active = false WHERE id = ?", grantID)
+	result := gm.db.Model(&pluginModels.AllowanceGrant{}).
+		Where("id = ?", grantID).
+		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now().UTC()})
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to deactivate grant: %w", result.Error)

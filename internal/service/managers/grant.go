@@ -236,7 +236,8 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 			result := tx.Model(&pluginModels.AllowanceGrant{}).
 				Where("id = ?", grant.ID).
 				UpdateColumn("bytes_used", gorm.Expr("bytes_used + ?", consumeAmount)).
-				UpdateColumn("bytes_remaining", gorm.Expr("bytes_remaining - ?", consumeAmount))
+				UpdateColumn("bytes_remaining", gorm.Expr("bytes_remaining - ?", consumeAmount)).
+				UpdateColumn("updated_at", time.Now().UTC())
 
 			if result.Error != nil {
 				return fmt.Errorf("failed to update grant: %w", result.Error)

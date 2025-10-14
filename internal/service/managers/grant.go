@@ -1,0 +1,281 @@
+package managers
+
+import (
+	"fmt"
+	"time"
+
+	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"go.lumeweb.com/portal/core"
+	"gorm.io/gorm"
+)
+
+// GrantManager handles grant operations
+type GrantManager struct {
+	ctx    core.Context
+	db     *gorm.DB
+	logger *core.Logger
+}
+
+// NewGrantManager creates a new grant manager
+func NewGrantManager(ctx core.Context) *GrantManager {
+	return &GrantManager{
+		ctx:    ctx,
+		db:     ctx.DB(),
+		logger: ctx.NamedLogger("quota.GrantManager"),
+	}
+}
+
+// CreateAllowanceGrant creates a new allowance grant for a user
+func (gm *GrantManager) CreateAllowanceGrant(userID uint, grant *pluginModels.AllowanceGrant) error {
+	if userID == 0 {
+		return pluginModels.ErrInvalidUserID
+	}
+
+	if grant == nil {
+		return fmt.Errorf("grant cannot be nil")
+	}
+
+	// Set the user ID on the grant
+	grant.UserID = userID
+
+	// Set IsActive to true by default if not specified
+	if !grant.IsActive {
+		grant.IsActive = true
+	}
+
+	// Create the grant in the database
+	if err := gm.db.Create(grant).Error; err != nil {
+		return fmt.Errorf("failed to create allowance grant: %w", err)
+	}
+
+	return nil
+}
+
+// GetActiveGrantsByType gets all active grants for a user of a specific type
+func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModels.GrantType) ([]*pluginModels.AllowanceGrant, error) {
+	if userID == 0 {
+		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	if !grantType.IsValid() {
+		return nil, pluginModels.ErrInvalidGrantType
+	}
+
+	var grants []*pluginModels.AllowanceGrant
+	now := time.Now().UTC()
+
+	// Build query with SQL ordering by grant source priority
+	query := gm.db.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+
+	// Filter out expired grants in SQL
+	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
+
+	// Order by source priority using CASE statement
+	query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
+
+	err := query.Find(&grants).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active grants by type: %w", err)
+	}
+
+	return grants, nil
+}
+
+// GetActiveGrants gets all active grants for a user (all types)
+func (gm *GrantManager) GetActiveGrants(userID uint) ([]*pluginModels.AllowanceGrant, error) {
+	if userID == 0 {
+		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	var grants []*pluginModels.AllowanceGrant
+	now := time.Now().UTC()
+
+	// Build query with SQL ordering by grant source priority
+	query := gm.db.Where("user_id = ? AND is_active = true", userID)
+
+	// Filter out expired grants in SQL
+	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
+
+	// Order by source priority using CASE statement
+	query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
+
+	err := query.Find(&grants).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active grants: %w", err)
+	}
+
+	return grants, nil
+}
+
+// CalculateAvailableBytes calculates total available bytes across all active grants of a type
+func (gm *GrantManager) CalculateAvailableBytes(grants []*pluginModels.AllowanceGrant) uint64 {
+	var total uint64
+	for _, grant := range grants {
+		total += grant.BytesRemaining
+	}
+	return total
+}
+
+// ConsumeFromGrants consumes bytes from grants based on prioritization rules
+func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.GrantType, bytes uint64, usageDetailID uint) ([]*pluginModels.AllowanceConsumption, error) {
+	if userID == 0 {
+		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	if !grantType.IsValid() {
+		return nil, pluginModels.ErrInvalidGrantType
+	}
+
+	if bytes == 0 {
+		return nil, pluginModels.ErrInvalidBytes
+	}
+
+	var consumptions []*pluginModels.AllowanceConsumption
+
+	// Start a transaction
+	err := gm.db.Transaction(func(tx *gorm.DB) error {
+		// Get active grants for user and type
+		now := time.Now().UTC()
+		var grants []*pluginModels.AllowanceGrant
+
+		query := tx.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+		query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
+
+		// Order by source priority using CASE statement
+		query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
+
+		err := query.Find(&grants).Error
+		if err != nil {
+			return fmt.Errorf("failed to get active grants: %w", err)
+		}
+
+		// Check if we have enough total allowance
+		totalAvailable := gm.CalculateAvailableBytes(grants)
+		if totalAvailable < bytes {
+			return pluginModels.ErrInsufficientAllowance
+		}
+
+		// Consume bytes from grants in priority order
+		remainingBytes := bytes
+		for _, grant := range grants {
+			if remainingBytes <= 0 {
+				break
+			}
+
+			// Calculate how much we can consume from this grant
+			consumeAmount := remainingBytes
+			if consumeAmount > grant.BytesRemaining {
+				consumeAmount = grant.BytesRemaining
+			}
+
+			// Create consumption record
+			consumption := &pluginModels.AllowanceConsumption{
+				GrantID:         grant.ID,
+				UsageDetailID:   usageDetailID,
+				BytesConsumed:   consumeAmount,
+				ConsumptionDate: time.Now().UTC(),
+			}
+			consumptions = append(consumptions, consumption)
+
+			// Update grant
+			grant.BytesUsed += consumeAmount
+			grant.BytesRemaining = grant.Bytes - grant.BytesUsed
+
+			// Save updated grant
+			if err := tx.Save(grant).Error; err != nil {
+				return fmt.Errorf("failed to update grant: %w", err)
+			}
+
+			// Save consumption record
+			if err := tx.Create(consumption).Error; err != nil {
+				return fmt.Errorf("failed to create consumption record: %w", err)
+			}
+
+			// Reduce remaining bytes
+			remainingBytes -= consumeAmount
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return consumptions, nil
+}
+
+// getSourcePriorityOrderClause generates a SQL CASE statement for ordering by source priority
+func (gm *GrantManager) getSourcePriorityOrderClause() string {
+	return fmt.Sprintf(`CASE 
+		WHEN source = '%s' THEN %d
+		WHEN source = '%s' THEN %d
+		WHEN source = '%s' THEN %d
+		WHEN source = '%s' THEN %d
+		ELSE 0
+	END`,
+		pluginModels.GrantSourcePAYGAddon, pluginModels.GrantSourcePAYGAddon.GetGrantPriority(),
+		pluginModels.GrantSourcePromo, pluginModels.GrantSourcePromo.GetGrantPriority(),
+		pluginModels.GrantSourceBonus, pluginModels.GrantSourceBonus.GetGrantPriority(),
+		pluginModels.GrantSourceSubscription, pluginModels.GrantSourceSubscription.GetGrantPriority())
+}
+
+// DeactivateGrant deactivates a grant (doesn't delete, just marks inactive)
+func (gm *GrantManager) DeactivateGrant(grantID uint) error {
+	if grantID == 0 {
+		return pluginModels.ErrInvalidGrantID
+	}
+
+	// Update the grant directly using raw SQL to bypass model validation
+	result := gm.db.Exec("UPDATE allowance_grants SET is_active = false WHERE id = ?", grantID)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to deactivate grant: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("grant not found: %d", grantID)
+	}
+
+	return nil
+}
+
+// GetExpiringGrants gets grants expiring within a time window
+func (gm *GrantManager) GetExpiringGrants(expiryWindow time.Duration) ([]*pluginModels.AllowanceGrant, error) {
+	now := time.Now().UTC()
+	cutoff := now.Add(expiryWindow)
+
+	var grants []*pluginModels.AllowanceGrant
+	err := gm.db.Where("is_active = true AND expiry_date IS NOT NULL AND expiry_date <= ? AND expiry_date > ?",
+		cutoff, now).
+		Order("expiry_date ASC").
+		Find(&grants).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get expiring grants: %w", err)
+	}
+
+	return grants, nil
+}
+
+// GetExpiringGrantsForUser gets grants expiring within a time window for a specific user
+func (gm *GrantManager) GetExpiringGrantsForUser(userID uint, window time.Duration) ([]*pluginModels.AllowanceGrant, error) {
+	if userID == 0 {
+		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	now := time.Now().UTC()
+	cutoff := now.Add(window)
+
+	var grants []*pluginModels.AllowanceGrant
+	err := gm.db.Where("user_id = ? AND is_active = true AND expiry_date IS NOT NULL AND expiry_date <= ? AND expiry_date > ?",
+		userID, cutoff, now).
+		Order("expiry_date ASC").
+		Find(&grants).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get expiring grants for user: %w", err)
+	}
+
+	return grants, nil
+}

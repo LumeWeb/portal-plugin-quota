@@ -22,19 +22,18 @@ import (
 
 // Test constants for byte values
 const (
-	testBytesSmall      = 100
-	testBytesMedium     = 200
-	testBytesLarge      = 300
-	testBytesExtraLarge = 500
-	testBytesHuge       = 600
-	testBytesMassive    = 1000
+	testUsageBytesSmall      = 100
+	testUsageBytesMedium     = 200
+	testUsageBytesLarge      = 300
+	testUsageBytesExtraLarge = 500
+	testUsageBytesHuge       = 600
+	testUsageBytesMassive    = 1000
 )
 
 // Test constants for user counts
 const (
-	testUserCountSmall  = 3
-	testUserCountMedium = 4
-	testUserCountLarge  = 10
+	testUserCountSmall = 3
+	testUserCountLarge = 10
 )
 
 // Test constants for goroutine counts
@@ -48,15 +47,6 @@ const (
 	testInvalidUserID = 0
 	testValidBytes    = 100
 )
-
-// testUserLimits represents test user quota limits
-type testUserLimits struct {
-	storageLimit       *int64
-	uploadDailyLimit   *int64
-	downloadDailyLimit *int64
-	uploadTotalLimit   *int64
-	downloadTotalLimit *int64
-}
 
 // Test options for different configurations
 func testOptionsWithSharedUsageDisabled() coreTesting.TestContextBuilderOption {
@@ -98,7 +88,7 @@ func TestUsageManager_RecordUpload_ValidInput_Success(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		bytes := uint64(testBytesExtraLarge)
+		bytes := uint64(testUsageBytesExtraLarge)
 		ip := "192.168.1.1"
 
 		// Create test user
@@ -228,9 +218,9 @@ func TestUsageManager_GetCurrentUsage_WithUsageRecords_Success(t *testing.T) {
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
 		// Create usage records
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testBytesSmall, "192.168.1.1")
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeDownload, testBytesMedium, "192.168.1.1")
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeStorageAdd, testBytesLarge, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testUsageBytesSmall, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeDownload, testUsageBytesMedium, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeStorageAdd, testUsageBytesLarge, "192.168.1.1")
 
 		usageManager := NewUsageManager(ctx)
 
@@ -238,9 +228,9 @@ func TestUsageManager_GetCurrentUsage_WithUsageRecords_Success(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, usage)
 		assert.Equal(t, userID, usage.UserID)
-		assert.Equal(t, uint64(testBytesSmall), usage.BytesUploaded)
-		assert.Equal(t, uint64(testBytesMedium), usage.BytesDownloaded)
-		assert.Equal(t, uint64(testBytesLarge), usage.BytesStored)
+		assert.Equal(t, uint64(testUsageBytesSmall), usage.BytesUploaded)
+		assert.Equal(t, uint64(testUsageBytesMedium), usage.BytesDownloaded)
+		assert.Equal(t, uint64(testUsageBytesLarge), usage.BytesStored)
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -263,14 +253,14 @@ func TestUsageManager_GetUsageHistory_RecentUsageHistory_Success(t *testing.T) {
 
 		// Create usage records with different timestamps
 		now := time.Now()
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testBytesSmall, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testUsageBytesSmall, "192.168.1.1")
 
 		// Create a record in the past
 		oldDetail := &pluginModels.UserUsageDetail{
 			UserID:    userID,
 			UploadID:  dataManager.NextUploadID(),
 			Type:      pluginModels.UsageTypeUpload,
-			Bytes:     testBytesMedium,
+			Bytes:     testUsageBytesMedium,
 			IP:        "192.168.1.1",
 			Timestamp: now.Add(-48 * time.Hour), // 2 days ago
 		}
@@ -282,7 +272,7 @@ func TestUsageManager_GetUsageHistory_RecentUsageHistory_Success(t *testing.T) {
 		history, err := usageManager.GetUsageHistory(userID, 1, pluginModels.UsageTypeUpload)
 		require.NoError(t, err)
 		assert.Len(t, history, 1) // Only the recent record
-		assert.Equal(t, uint64(testBytesSmall), history[0].Bytes)
+		assert.Equal(t, uint64(testUsageBytesSmall), history[0].Bytes)
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -305,14 +295,14 @@ func TestUsageManager_GetUsageHistory_AllUsageHistory_Success(t *testing.T) {
 
 		// Create usage records with different timestamps
 		now := time.Now()
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testBytesSmall, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testUsageBytesSmall, "192.168.1.1")
 
 		// Create a record in the past
 		oldDetail := &pluginModels.UserUsageDetail{
 			UserID:    userID,
 			UploadID:  dataManager.NextUploadID(),
 			Type:      pluginModels.UsageTypeUpload,
-			Bytes:     testBytesMedium,
+			Bytes:     testUsageBytesMedium,
 			IP:        "192.168.1.1",
 			Timestamp: now.Add(-48 * time.Hour), // 2 days ago
 		}
@@ -323,9 +313,9 @@ func TestUsageManager_GetUsageHistory_AllUsageHistory_Success(t *testing.T) {
 
 		history, err := usageManager.GetUsageHistory(userID, 3, pluginModels.UsageTypeUpload)
 		require.NoError(t, err)
-		assert.Len(t, history, 2)                                  // Both records
-		assert.Equal(t, uint64(testBytesMedium), history[0].Bytes) // Older record first
-		assert.Equal(t, uint64(testBytesSmall), history[1].Bytes)  // Newer record second
+		assert.Len(t, history, 2)                                       // Both records
+		assert.Equal(t, uint64(testUsageBytesMedium), history[0].Bytes) // Older record first
+		assert.Equal(t, uint64(testUsageBytesSmall), history[1].Bytes)  // Newer record second
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -348,15 +338,15 @@ func TestUsageManager_GetDetailedUsage_WithinTimeRange_Success(t *testing.T) {
 
 		// Create usage records
 		now := time.Now()
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testBytesSmall, "192.168.1.1")
-		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeDownload, testBytesMedium, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeUpload, testUsageBytesSmall, "192.168.1.1")
+		dataManager.CreateUsageDetail(userID, dataManager.NextUploadID(), pluginModels.UsageTypeDownload, testUsageBytesMedium, "192.168.1.1")
 
 		// Create a record outside the time range
 		oldDetail := &pluginModels.UserUsageDetail{
 			UserID:    userID,
 			UploadID:  dataManager.NextUploadID(),
 			Type:      pluginModels.UsageTypeStorageAdd,
-			Bytes:     testBytesLarge,
+			Bytes:     testUsageBytesLarge,
 			IP:        "192.168.1.1",
 			Timestamp: now.Add(-48 * time.Hour),
 		}
@@ -399,7 +389,7 @@ func TestUsageManager_RecordUserUsageDetail_RecordDetail_Success(t *testing.T) {
 			UserID:    userID,
 			UploadID:  uploadID,
 			Type:      pluginModels.UsageTypeUpload,
-			Bytes:     testBytesSmall,
+			Bytes:     testUsageBytesSmall,
 			IP:        "192.168.1.1",
 			Timestamp: time.Now(),
 		}
@@ -414,7 +404,7 @@ func TestUsageManager_RecordUserUsageDetail_RecordDetail_Success(t *testing.T) {
 		err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).First(&savedDetail).Error
 		require.NoError(t, err)
 		assert.Equal(t, userID, savedDetail.UserID)
-		assert.Equal(t, uint64(testBytesSmall), savedDetail.Bytes)
+		assert.Equal(t, uint64(testUsageBytesSmall), savedDetail.Bytes)
 		assert.Equal(t, pluginModels.UsageTypeUpload, savedDetail.Type)
 
 		dataManager.Cleanup()
@@ -438,7 +428,7 @@ func TestUsageManager_UpdateDailyUsage_CreateNewRecord_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall))
+		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
 		require.NoError(t, err)
 
 		// Verify the record was created
@@ -447,7 +437,7 @@ func TestUsageManager_UpdateDailyUsage_CreateNewRecord_Success(t *testing.T) {
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
 		assert.Equal(t, userID, dailyQuota.UserID)
-		assert.Equal(t, uint64(testBytesSmall), dailyQuota.BytesUploaded)
+		assert.Equal(t, uint64(testUsageBytesSmall), dailyQuota.BytesUploaded)
 		assert.Equal(t, uint64(0), dailyQuota.BytesDownloaded)
 		assert.Equal(t, uint64(0), dailyQuota.BytesStored)
 
@@ -473,11 +463,11 @@ func TestUsageManager_UpdateDailyUsage_UpdateExistingRecord_Success(t *testing.T
 		usageManager := NewUsageManager(ctx)
 
 		// First create a record
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall))
+		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
 		require.NoError(t, err)
 
 		// Then update it
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall/2))
+		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall/2))
 		require.NoError(t, err)
 
 		// Verify the record was updated
@@ -485,7 +475,7 @@ func TestUsageManager_UpdateDailyUsage_UpdateExistingRecord_Success(t *testing.T
 		today := time.Now().UTC().Truncate(24 * time.Hour)
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
-		assert.Equal(t, uint64(testBytesSmall+testBytesSmall/2), dailyQuota.BytesUploaded) // testBytesSmall + testBytesSmall/2
+		assert.Equal(t, uint64(testUsageBytesSmall+testUsageBytesSmall/2), dailyQuota.BytesUploaded) // testUsageBytesSmall + testUsageBytesSmall/2
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -509,11 +499,11 @@ func TestUsageManager_UpdateDailyUsage_DifferentUsageTypes_Success(t *testing.T)
 		usageManager := NewUsageManager(ctx)
 
 		// Add different types of usage
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testBytesSmall))
+		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
 		require.NoError(t, err)
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(testBytesMedium))
+		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(testUsageBytesMedium))
 		require.NoError(t, err)
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeStorageAdd, int64(testBytesLarge))
+		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeStorageAdd, int64(testUsageBytesLarge))
 		require.NoError(t, err)
 
 		// Verify all types were recorded correctly
@@ -521,9 +511,9 @@ func TestUsageManager_UpdateDailyUsage_DifferentUsageTypes_Success(t *testing.T)
 		today := time.Now().UTC().Truncate(24 * time.Hour)
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
-		assert.Equal(t, uint64(testBytesSmall), dailyQuota.BytesUploaded)
-		assert.Equal(t, uint64(testBytesMedium), dailyQuota.BytesDownloaded)
-		assert.Equal(t, uint64(testBytesLarge), dailyQuota.BytesStored)
+		assert.Equal(t, uint64(testUsageBytesSmall), dailyQuota.BytesUploaded)
+		assert.Equal(t, uint64(testUsageBytesMedium), dailyQuota.BytesDownloaded)
+		assert.Equal(t, uint64(testUsageBytesLarge), dailyQuota.BytesStored)
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -535,7 +525,7 @@ func TestUsageManager_RecordDownload_ValidInput_Success(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		bytes := uint64(testBytesExtraLarge)
+		bytes := uint64(testUsageBytesExtraLarge)
 		ip := "192.168.1.1"
 
 		// Create test user
@@ -582,7 +572,7 @@ func TestUsageManager_RecordDownload_WithSharedUsage_Success(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		bytes := uint64(testBytesHuge)
+		bytes := uint64(testUsageBytesHuge)
 		ip := "192.168.1.1"
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
@@ -615,7 +605,7 @@ func TestUsageManager_RecordDownload_WithSharedUsage_Success(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, usageDetails, 1)
 		assert.Equal(t, pluginModels.UsageTypeDownload, usageDetails[0].Type)
-		assert.Equal(t, uint64(testBytesHuge/testUserCountSmall), usageDetails[0].Bytes) // testBytesHuge/testUserCountSmall = testBytesMedium
+		assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), usageDetails[0].Bytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
 		assert.Equal(t, ip, usageDetails[0].IP)
 		assert.Equal(t, uint(testUserCountSmall), usageDetails[0].SharedWith)
 
@@ -625,7 +615,7 @@ func TestUsageManager_RecordDownload_WithSharedUsage_Success(t *testing.T) {
 		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
 		require.NoError(t, err)
 		assert.Equal(t, uint64(0), dailyQuota.BytesUploaded)
-		assert.Equal(t, uint64(testBytesHuge/testUserCountSmall), dailyQuota.BytesDownloaded)
+		assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), dailyQuota.BytesDownloaded)
 		assert.Equal(t, uint64(0), dailyQuota.BytesStored)
 
 		dataManager.Cleanup()
@@ -638,7 +628,7 @@ func TestUsageManager_RecordStorageChange_ValidInput_Success(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		bytes := int64(testBytesExtraLarge)
+		bytes := int64(testUsageBytesExtraLarge)
 		ip := "192.168.1.1"
 
 		// Create test user
@@ -685,7 +675,7 @@ func TestUsageManager_RecordStorageChange_Remove_Success(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		bytes := int64(-testBytesLarge)
+		bytes := int64(-testUsageBytesLarge)
 		ip := "192.168.1.1"
 
 		// Create test user
@@ -723,7 +713,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testBytesHuge)
+		totalBytes := uint64(testUsageBytesHuge)
 
 		var mockPinService = core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
 		pins := []*models.Pin{
@@ -738,7 +728,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
 		require.NoError(t, err)
 		assert.Equal(t, uint(testUserCountSmall), sharedWith)
-		assert.Equal(t, uint64(testBytesMedium), sharedBytes) // testBytesHuge/testUserCountSmall = testBytesMedium
+		assert.Equal(t, uint64(testUsageBytesMedium), sharedBytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
 
 		dataManager.Cleanup()
 	}, testOptionsWithSharedUsageEnabled())
@@ -746,7 +736,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testBytesExtraLarge)
+		totalBytes := uint64(testUsageBytesExtraLarge)
 
 		// Simulate pin service unavailability by getting the service and setting it to nil
 		// This test now checks that the usage manager properly handles nil pin service
@@ -765,7 +755,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testBytesExtraLarge)
+		totalBytes := uint64(testUsageBytesExtraLarge)
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
 		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return([]*models.Pin{}, fmt.Errorf("pin service error"))
@@ -784,7 +774,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testBytesExtraLarge)
+		totalBytes := uint64(testUsageBytesExtraLarge)
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
 		pins := []*models.Pin{}
@@ -804,7 +794,7 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testBytesHuge)
+		totalBytes := uint64(testUsageBytesHuge)
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
 		user2ID := dataManager.NextUserID()
@@ -822,8 +812,8 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 
 		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
 		require.NoError(t, err)
-		assert.Equal(t, uint(testUserCountSmall), sharedWith)                  // Unique users only
-		assert.Equal(t, uint64(testBytesHuge/testUserCountSmall), sharedBytes) // testBytesHuge/testUserCountSmall = testBytesMedium
+		assert.Equal(t, uint(testUserCountSmall), sharedWith)                       // Unique users only
+		assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), sharedBytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
 
 		dataManager.Cleanup()
 	}, testOptionsWithSharedUsageEnabled())
@@ -833,8 +823,8 @@ func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.
 func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive) // 1000 bytes
-		userCount := uint(4)                   // Shared among 4 users
+		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
+		userCount := uint(4)                        // Shared among 4 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -862,8 +852,8 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive) // 1000 bytes
-		userCount := uint(testUserCountSmall)  // Shared among 3 users
+		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
+		userCount := uint(testUserCountSmall)       // Shared among 3 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -880,8 +870,8 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive) // 1000 bytes
-		userCount := uint(testUserCountSmall)  // Shared among 3 users
+		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
+		userCount := uint(testUserCountSmall)       // Shared among 3 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -898,8 +888,8 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		totalBytes := uint64(testBytesMassive) // 1000 bytes
-		userCount := uint(testUserCountSmall)  // Shared among 3 users
+		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
+		userCount := uint(testUserCountSmall)       // Shared among 3 users
 
 		usageManager := NewUsageManager(ctx)
 
@@ -939,7 +929,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		var wg sync.WaitGroup
 
 		numGoroutines := testGoroutineCount
-		bytesPerGoroutine := uint64(testBytesSmall)
+		bytesPerGoroutine := uint64(testUsageBytesSmall)
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(goroutineID int) {
@@ -994,7 +984,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		var wg sync.WaitGroup
 
 		numGoroutines := testGoroutineCount
-		bytesPerGoroutine := uint64(testBytesMedium)
+		bytesPerGoroutine := uint64(testUsageBytesMedium)
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(goroutineID int) {
@@ -1043,7 +1033,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		var wg sync.WaitGroup
 
 		numGoroutines := testGoroutineCount
-		bytesPerGoroutine := int64(testBytesLarge)
+		bytesPerGoroutine := int64(testUsageBytesLarge)
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(goroutineID int) {

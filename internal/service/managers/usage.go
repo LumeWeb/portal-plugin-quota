@@ -392,64 +392,19 @@ func (um *UsageManager) RecordUserUsageDetail(detail *pluginModels.UserUsageDeta
 }
 
 // UpdateDailyUsage updates the daily aggregated usage for a user
-// UpdateDailyUsage updates the daily aggregated usage for a user
 func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.UsageType, bytes int64) error {
 	if err := um.validateUserID(userID); err != nil {
 		return err
 	}
 
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-
-	// Create or update the user quota record using GORM's upsert functionality
-	quota := &pluginModels.UserQuota{
-		UserID: userID,
-		Date:   today,
-	}
-
-	// First, try to find an existing record that hasn't been soft deleted
-	result := um.db.Where("user_id = ? AND date = ?", userID, today).First(quota)
-
-	// If no record exists, create a new one with zero values
-	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			quota.BytesUploaded = 0
-			quota.BytesDownloaded = 0
-			quota.BytesStored = 0
-			if err := um.db.Create(quota).Error; err != nil {
-				return fmt.Errorf("failed to create daily usage record: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to find daily usage record: %w", result.Error)
-		}
-	}
-
-	// Update the appropriate field based on usage type
-	assignments := um.getUpdateAssignments(usageType, bytes)
-	if err := um.db.Model(quota).Updates(assignments).Error; err != nil {
+	// Use the new upsert method that properly handles concurrent access
+	if err := pluginModels.UpsertDailyUsage(um.db, userID, usageType, bytes); err != nil {
 		return fmt.Errorf("failed to update daily usage: %w", err)
 	}
 
 	return nil
 }
 
-// getUpdateAssignments returns the assignments for updating quota values atomically
-func (um *UsageManager) getUpdateAssignments(usageType pluginModels.UsageType, bytes int64) map[string]interface{} {
-	assignments := make(map[string]interface{})
-
-	switch usageType {
-	case pluginModels.UsageTypeUpload:
-		assignments["bytes_uploaded"] = gorm.Expr("bytes_uploaded + ?", bytes)
-	case pluginModels.UsageTypeDownload:
-		assignments["bytes_downloaded"] = gorm.Expr("bytes_downloaded + ?", bytes)
-	case pluginModels.UsageTypeStorageAdd:
-		assignments["bytes_stored"] = gorm.Expr("bytes_stored + ?", bytes)
-	case pluginModels.UsageTypeStorageRemove:
-		// Apply signed delta and clamp to 0 minimum
-		assignments["bytes_stored"] = gorm.Expr("CASE WHEN bytes_stored + ? < 0 THEN 0 ELSE bytes_stored + ? END", bytes, bytes)
-	}
-
-	return assignments
-}
 
 // Validation methods
 

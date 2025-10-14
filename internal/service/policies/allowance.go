@@ -3,6 +3,7 @@ package policies
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
@@ -155,8 +156,23 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		return err
 	}
 
-	// Consume allowance from grants
-	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes)
+	// Create usage detail record first
+	usageDetail := &models.UserUsageDetail{
+		UserID:     userID,
+		UploadID:   uploadID,
+		Type:       models.UsageTypeUpload,
+		Bytes:      bytes,
+		IP:         ip,
+		SharedWith: 1,
+		Timestamp:  time.Now().UTC(),
+	}
+
+	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(usageDetail); err != nil {
+		return fmt.Errorf("failed to record upload usage detail: %w", err)
+	}
+
+	// Consume allowance from grants, passing the usage detail ID
+	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes, usageDetail.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrInsufficientAllowance) {
 			return fmt.Errorf("upload blocked: insufficient upload allowance")
@@ -173,8 +189,23 @@ func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		return err
 	}
 
-	// Consume allowance from grants atomically
-	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes)
+	// Create usage detail record first
+	usageDetail := &models.UserUsageDetail{
+		UserID:     userID,
+		UploadID:   uploadID,
+		Type:       models.UsageTypeDownload,
+		Bytes:      bytes,
+		IP:         ip,
+		SharedWith: 1,
+		Timestamp:  time.Now().UTC(),
+	}
+
+	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(usageDetail); err != nil {
+		return fmt.Errorf("failed to record download usage detail: %w", err)
+	}
+
+	// Consume allowance from grants atomically, passing the usage detail ID
+	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes, usageDetail.ID)
 	if err != nil {
 		// Check if this is an insufficiency error
 		if errors.Is(err, models.ErrInsufficientAllowance) {
@@ -195,24 +226,45 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		return models.ErrInvalidBytes
 	}
 
+	// Determine usage type for recording
+	var usageType models.UsageType
+	var recordBytes uint64
+
+	if bytes < 0 {
+		usageType = models.UsageTypeStorageRemove
+		// Handle math.MinInt64 case to prevent overflow when converting to uint64
+		// math.MinInt64 is -9223372036854775808, which when negated would exceed math.MaxInt64 (9223372036854775807)
+		// Since uint64(-math.MinInt64) would cause overflow, we use 1 << 63 which equals 9223372036854775808
+		// This represents the absolute value of math.MinInt64 without causing overflow
+		if bytes == math.MinInt64 {
+			recordBytes = 1 << 63
+		} else {
+			recordBytes = uint64(-bytes)
+		}
+	} else {
+		usageType = models.UsageTypeStorageAdd
+		recordBytes = uint64(bytes)
+	}
+
+	// Create usage detail record first
+	usageDetail := &models.UserUsageDetail{
+		UserID:     userID,
+		UploadID:   uploadID,
+		Type:       usageType,
+		Bytes:      recordBytes,
+		IP:         ip,
+		SharedWith: 1,
+		Timestamp:  time.Now().UTC(),
+	}
+
+	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(usageDetail); err != nil {
+		return fmt.Errorf("failed to record storage usage detail: %w", err)
+	}
+
 	// For storage changes, we only consume allowance when adding storage (positive bytes)
 	if bytes > 0 {
-		// Get active grants for storage
-		grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(userID, models.GrantTypeStorage)
-		if err != nil {
-			return fmt.Errorf("failed to get active storage grants: %w", err)
-		}
-
-		// Calculate available bytes from grants
-		availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
-
-		// Check if we have enough allowance
-		if uint64(bytes) > availableBytes {
-			return fmt.Errorf("insufficient storage allowance: requested %d, available %d", bytes, availableBytes)
-		}
-
-		// Consume allowance from grants
-		_, err = a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes))
+		// Consume allowance from grants, passing the usage detail ID
+		_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes), usageDetail.ID)
 		if err != nil {
 			return fmt.Errorf("failed to consume storage allowance: %w", err)
 		}

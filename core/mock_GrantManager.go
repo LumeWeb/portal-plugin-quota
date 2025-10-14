@@ -8,6 +8,7 @@ import (
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
+	"gorm.io/gorm"
 )
 
 // NewMockGrantManager creates a new instance of MockGrantManager. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -89,8 +90,8 @@ func (_c *MockGrantManager_CalculateAvailableBytes_Call) RunAndReturn(run func(g
 }
 
 // ConsumeFromGrants provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64) ([]*AllowanceConsumption, error) {
-	ret := _mock.Called(userID, grantType, bytes)
+func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error) {
+	ret := _mock.Called(userID, grantType, bytes, usageDetailID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ConsumeFromGrants")
@@ -98,18 +99,18 @@ func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantTyp
 
 	var r0 []*AllowanceConsumption
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64) ([]*AllowanceConsumption, error)); ok {
-		return returnFunc(userID, grantType, bytes)
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64, uint) ([]*AllowanceConsumption, error)); ok {
+		return returnFunc(userID, grantType, bytes, usageDetailID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64) []*AllowanceConsumption); ok {
-		r0 = returnFunc(userID, grantType, bytes)
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64, uint) []*AllowanceConsumption); ok {
+		r0 = returnFunc(userID, grantType, bytes, usageDetailID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*AllowanceConsumption)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, GrantType, uint64) error); ok {
-		r1 = returnFunc(userID, grantType, bytes)
+	if returnFunc, ok := ret.Get(1).(func(uint, GrantType, uint64, uint) error); ok {
+		r1 = returnFunc(userID, grantType, bytes, usageDetailID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -125,11 +126,12 @@ type MockGrantManager_ConsumeFromGrants_Call struct {
 //   - userID uint
 //   - grantType GrantType
 //   - bytes uint64
-func (_e *MockGrantManager_Expecter) ConsumeFromGrants(userID interface{}, grantType interface{}, bytes interface{}) *MockGrantManager_ConsumeFromGrants_Call {
-	return &MockGrantManager_ConsumeFromGrants_Call{Call: _e.mock.On("ConsumeFromGrants", userID, grantType, bytes)}
+//   - usageDetailID uint
+func (_e *MockGrantManager_Expecter) ConsumeFromGrants(userID interface{}, grantType interface{}, bytes interface{}, usageDetailID interface{}) *MockGrantManager_ConsumeFromGrants_Call {
+	return &MockGrantManager_ConsumeFromGrants_Call{Call: _e.mock.On("ConsumeFromGrants", userID, grantType, bytes, usageDetailID)}
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, grantType GrantType, bytes uint64)) *MockGrantManager_ConsumeFromGrants_Call {
+func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, grantType GrantType, bytes uint64, usageDetailID uint)) *MockGrantManager_ConsumeFromGrants_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 uint
 		if args[0] != nil {
@@ -143,10 +145,15 @@ func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, gra
 		if args[2] != nil {
 			arg2 = args[2].(uint64)
 		}
+		var arg3 uint
+		if args[3] != nil {
+			arg3 = args[3].(uint)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -157,7 +164,7 @@ func (_c *MockGrantManager_ConsumeFromGrants_Call) Return(vs []*AllowanceConsump
 	return _c
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) RunAndReturn(run func(userID uint, grantType GrantType, bytes uint64) ([]*AllowanceConsumption, error)) *MockGrantManager_ConsumeFromGrants_Call {
+func (_c *MockGrantManager_ConsumeFromGrants_Call) RunAndReturn(run func(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error)) *MockGrantManager_ConsumeFromGrants_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -396,6 +403,148 @@ func (_c *MockGrantManager_GetActiveGrantsByType_Call) Return(vs []*AllowanceGra
 }
 
 func (_c *MockGrantManager_GetActiveGrantsByType_Call) RunAndReturn(run func(userID uint, grantType GrantType) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsByType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetActiveGrantsByTypeLocked provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) GetActiveGrantsByTypeLocked(userID uint, grantType GrantType, tx *gorm.DB) ([]*AllowanceGrant, error) {
+	ret := _mock.Called(userID, grantType, tx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetActiveGrantsByTypeLocked")
+	}
+
+	var r0 []*AllowanceGrant
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, *gorm.DB) ([]*AllowanceGrant, error)); ok {
+		return returnFunc(userID, grantType, tx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, *gorm.DB) []*AllowanceGrant); ok {
+		r0 = returnFunc(userID, grantType, tx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*AllowanceGrant)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(uint, GrantType, *gorm.DB) error); ok {
+		r1 = returnFunc(userID, grantType, tx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockGrantManager_GetActiveGrantsByTypeLocked_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActiveGrantsByTypeLocked'
+type MockGrantManager_GetActiveGrantsByTypeLocked_Call struct {
+	*mock.Call
+}
+
+// GetActiveGrantsByTypeLocked is a helper method to define mock.On call
+//   - userID uint
+//   - grantType GrantType
+//   - tx *gorm.DB
+func (_e *MockGrantManager_Expecter) GetActiveGrantsByTypeLocked(userID interface{}, grantType interface{}, tx interface{}) *MockGrantManager_GetActiveGrantsByTypeLocked_Call {
+	return &MockGrantManager_GetActiveGrantsByTypeLocked_Call{Call: _e.mock.On("GetActiveGrantsByTypeLocked", userID, grantType, tx)}
+}
+
+func (_c *MockGrantManager_GetActiveGrantsByTypeLocked_Call) Run(run func(userID uint, grantType GrantType, tx *gorm.DB)) *MockGrantManager_GetActiveGrantsByTypeLocked_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 GrantType
+		if args[1] != nil {
+			arg1 = args[1].(GrantType)
+		}
+		var arg2 *gorm.DB
+		if args[2] != nil {
+			arg2 = args[2].(*gorm.DB)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_GetActiveGrantsByTypeLocked_Call) Return(vs []*AllowanceGrant, err error) *MockGrantManager_GetActiveGrantsByTypeLocked_Call {
+	_c.Call.Return(vs, err)
+	return _c
+}
+
+func (_c *MockGrantManager_GetActiveGrantsByTypeLocked_Call) RunAndReturn(run func(userID uint, grantType GrantType, tx *gorm.DB) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsByTypeLocked_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetActiveGrantsLocked provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) GetActiveGrantsLocked(userID uint, tx *gorm.DB) ([]*AllowanceGrant, error) {
+	ret := _mock.Called(userID, tx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetActiveGrantsLocked")
+	}
+
+	var r0 []*AllowanceGrant
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(uint, *gorm.DB) ([]*AllowanceGrant, error)); ok {
+		return returnFunc(userID, tx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(uint, *gorm.DB) []*AllowanceGrant); ok {
+		r0 = returnFunc(userID, tx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*AllowanceGrant)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(uint, *gorm.DB) error); ok {
+		r1 = returnFunc(userID, tx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockGrantManager_GetActiveGrantsLocked_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActiveGrantsLocked'
+type MockGrantManager_GetActiveGrantsLocked_Call struct {
+	*mock.Call
+}
+
+// GetActiveGrantsLocked is a helper method to define mock.On call
+//   - userID uint
+//   - tx *gorm.DB
+func (_e *MockGrantManager_Expecter) GetActiveGrantsLocked(userID interface{}, tx interface{}) *MockGrantManager_GetActiveGrantsLocked_Call {
+	return &MockGrantManager_GetActiveGrantsLocked_Call{Call: _e.mock.On("GetActiveGrantsLocked", userID, tx)}
+}
+
+func (_c *MockGrantManager_GetActiveGrantsLocked_Call) Run(run func(userID uint, tx *gorm.DB)) *MockGrantManager_GetActiveGrantsLocked_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 *gorm.DB
+		if args[1] != nil {
+			arg1 = args[1].(*gorm.DB)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_GetActiveGrantsLocked_Call) Return(vs []*AllowanceGrant, err error) *MockGrantManager_GetActiveGrantsLocked_Call {
+	_c.Call.Return(vs, err)
+	return _c
+}
+
+func (_c *MockGrantManager_GetActiveGrantsLocked_Call) RunAndReturn(run func(userID uint, tx *gorm.DB) ([]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsLocked_Call {
 	_c.Call.Return(run)
 	return _c
 }

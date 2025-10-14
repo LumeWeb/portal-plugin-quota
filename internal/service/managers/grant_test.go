@@ -177,7 +177,7 @@ func TestGrantManager_GetActiveGrantsByType_NoGrants_ReturnsEmpty(t *testing.T) 
 		grantManager := NewGrantManager(ctx)
 		userID := uint(1)
 
-		grants, err := grantManager.GetActiveGrantsByType(userID, pluginModels.GrantTypeUpload)
+		grants, err := grantManager.GetActiveGrantsByType(userID, pluginModels.GrantTypeUpload, nil)
 		require.NoError(t, err)
 		assert.Empty(t, grants)
 
@@ -222,7 +222,7 @@ func TestGrantManager_GetActiveGrantsByType_WithActiveGrants_ReturnsGrants(t *te
 		require.NoError(t, err)
 
 		// Get upload grants
-		grants, err := grantManager.GetActiveGrantsByType(userID, pluginModels.GrantTypeUpload)
+		grants, err := grantManager.GetActiveGrantsByType(userID, pluginModels.GrantTypeUpload, nil)
 		require.NoError(t, err)
 		assert.Len(t, grants, 2)
 
@@ -261,7 +261,7 @@ func TestGrantManager_GetActiveGrantsByType_WithExpiredGrants_FiltersOutExpired(
 		require.NoError(t, result.Error)
 
 		// Get upload grants - should only return the active one
-		grants, err := grantManager.GetActiveGrantsByType(userID, pluginModels.GrantTypeUpload)
+		grants, err := grantManager.GetActiveGrantsByType(userID, pluginModels.GrantTypeUpload, nil)
 		require.NoError(t, err)
 		assert.Len(t, grants, 1)
 		assert.Equal(t, pluginModels.GrantSourceBonus, grants[0].Source)

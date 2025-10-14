@@ -233,8 +233,11 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 	if bytes < 0 {
 		usageType = models.UsageTypeStorageRemove
 		// Handle math.MinInt64 case to prevent overflow when converting to uint64
+		// math.MinInt64 is -9223372036854775808, which when negated would exceed math.MaxInt64 (9223372036854775807)
+		// Since uint64(-math.MinInt64) would cause overflow, we use 1 << 63 which equals 9223372036854775808
+		// This represents the absolute value of math.MinInt64 without causing overflow
 		if bytes == math.MinInt64 {
-			recordBytes = math.MaxInt64
+			recordBytes = 1 << 63
 		} else {
 			recordBytes = uint64(-bytes)
 		}

@@ -2,6 +2,8 @@ package core
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // GrantManager handles grant operations
@@ -13,7 +15,7 @@ type GrantManager interface {
 	GetActiveGrantsByType(userID uint, grantType GrantType) ([]*AllowanceGrant, error)
 
 	// GetActiveGrantsByTypeLocked gets all active grants for a user of a specific type with row-level locking
-	GetActiveGrantsByTypeLocked(userID uint, grantType GrantType) ([]*AllowanceGrant, error)
+	GetActiveGrantsByTypeLocked(userID uint, grantType GrantType, tx *gorm.DB) ([]*AllowanceGrant, error)
 
 	// GetActiveGrantsLocked gets all active grants for a user (all types) with row-level locking
 	GetActiveGrantsLocked(userID uint) ([]*AllowanceGrant, error)

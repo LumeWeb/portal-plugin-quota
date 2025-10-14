@@ -54,7 +54,7 @@ func (gm *GrantManager) CreateAllowanceGrant(userID uint, grant *pluginModels.Al
 }
 
 // GetActiveGrantsByType gets all active grants for a user of a specific type
-func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModels.GrantType) ([]*pluginModels.AllowanceGrant, error) {
+func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModels.GrantType, tx *gorm.DB) ([]*pluginModels.AllowanceGrant, error) {
 	if userID == 0 {
 		return nil, pluginModels.ErrInvalidUserID
 	}
@@ -63,11 +63,17 @@ func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModel
 		return nil, pluginModels.ErrInvalidGrantType
 	}
 
+	// Use provided transaction if available, otherwise use default database connection
+	db := gm.db
+	if tx != nil {
+		db = tx
+	}
+
 	var grants []*pluginModels.AllowanceGrant
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority
-	query := gm.db.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+	query := db.Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
 
 	// Filter out expired grants in SQL
 	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
@@ -84,7 +90,7 @@ func (gm *GrantManager) GetActiveGrantsByType(userID uint, grantType pluginModel
 }
 
 // GetActiveGrantsByTypeLocked gets all active grants for a user of a specific type with row-level locking
-func (gm *GrantManager) GetActiveGrantsByTypeLocked(userID uint, grantType pluginModels.GrantType) ([]*pluginModels.AllowanceGrant, error) {
+func (gm *GrantManager) GetActiveGrantsByTypeLocked(userID uint, grantType pluginModels.GrantType, tx *gorm.DB) ([]*pluginModels.AllowanceGrant, error) {
 	if userID == 0 {
 		return nil, pluginModels.ErrInvalidUserID
 	}
@@ -93,11 +99,17 @@ func (gm *GrantManager) GetActiveGrantsByTypeLocked(userID uint, grantType plugi
 		return nil, pluginModels.ErrInvalidGrantType
 	}
 
+	// Use provided transaction if available, otherwise use default database connection
+	db := gm.db
+	if tx != nil {
+		db = tx
+	}
+
 	var grants []*pluginModels.AllowanceGrant
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority and row-level locking
-	query := gm.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
+	query := db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
 
 	// Filter out expired grants in SQL
 	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
@@ -140,16 +152,22 @@ func (gm *GrantManager) GetActiveGrants(userID uint) ([]*pluginModels.AllowanceG
 }
 
 // GetActiveGrantsLocked gets all active grants for a user (all types) with row-level locking
-func (gm *GrantManager) GetActiveGrantsLocked(userID uint) ([]*pluginModels.AllowanceGrant, error) {
+func (gm *GrantManager) GetActiveGrantsLocked(userID uint, tx *gorm.DB) ([]*pluginModels.AllowanceGrant, error) {
 	if userID == 0 {
 		return nil, pluginModels.ErrInvalidUserID
+	}
+
+	// Use provided transaction if available, otherwise use default database connection
+	db := gm.db
+	if tx != nil {
+		db = tx
 	}
 
 	var grants []*pluginModels.AllowanceGrant
 	now := time.Now().UTC()
 
 	// Build query with SQL ordering by grant source priority and row-level locking
-	query := gm.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND is_active = true", userID)
+	query := db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND is_active = true", userID)
 
 	// Filter out expired grants in SQL
 	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
@@ -193,7 +211,7 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 		// Get active grants for user and type with row-level locks
 		var grants []*pluginModels.AllowanceGrant
 
-		grants, err := gm.GetActiveGrantsByTypeLocked(userID, grantType)
+		grants, err := gm.GetActiveGrantsByType(userID, grantType, tx)
 		if err != nil {
 			return fmt.Errorf("failed to get active grants: %w", err)
 		}
@@ -231,13 +249,15 @@ func (gm *GrantManager) ConsumeFromGrants(userID uint, grantType pluginModels.Gr
 			}
 			consumptions = append(consumptions, consumption)
 
-			// Update grant atomically using SQL expressions
-			// Using UpdateColumn to bypass validation hooks since we only need to update specific fields
+			// Update grant atomically using a single SQL update with WHERE guard
+			// This prevents negative bytes_remaining values and detects concurrent modifications
 			result := tx.Model(&pluginModels.AllowanceGrant{}).
-				Where("id = ?", grant.ID).
-				UpdateColumn("bytes_used", gorm.Expr("bytes_used + ?", consumeAmount)).
-				UpdateColumn("bytes_remaining", gorm.Expr("bytes_remaining - ?", consumeAmount)).
-				UpdateColumn("updated_at", time.Now().UTC())
+				Where("id = ? AND bytes_remaining >= ?", grant.ID, consumeAmount).
+				UpdateColumns(map[string]interface{}{
+					"bytes_used":       gorm.Expr("bytes_used + ?", consumeAmount),
+					"bytes_remaining":  gorm.Expr("bytes_remaining - ?", consumeAmount),
+					"updated_at":       time.Now().UTC(),
+				})
 
 			if result.Error != nil {
 				return fmt.Errorf("failed to update grant: %w", result.Error)

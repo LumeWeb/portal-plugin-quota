@@ -161,7 +161,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 		{
 			name: "RecordUpload - ConsumeFromGrants returns generic error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint")).Return(nil, errors.New("grant manager error"))
+				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, errors.New("grant manager error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
 				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
@@ -171,7 +171,7 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 		{
 			name: "RecordUpload - ConsumeFromGrants wraps as failed to consume upload allowance",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint")).Return(nil, errors.New("consumption error"))
+				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, errors.New("consumption error"))
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
 				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")

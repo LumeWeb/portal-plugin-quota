@@ -171,7 +171,7 @@ func (tdm *TestDataManager) CreateUsageDetail(userID uint, uploadID uint, usageT
 		Type:      usageType,
 		Bytes:     bytes,
 		IP:        ip,
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 	}
 
 	err := tdm.ctx.DB().Create(detail).Error

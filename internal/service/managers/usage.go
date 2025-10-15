@@ -496,17 +496,19 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 
 	// Get aggregated usage by type
 	usageByType := make(map[pluginCore.UsageType]uint64)
-	for _, usageType := range []pluginModels.UsageType{
+	usageTypes := []pluginModels.UsageType{
 		pluginModels.UsageTypeUpload,
 		pluginModels.UsageTypeDownload,
 		pluginModels.UsageTypeStorageAdd,
 		pluginModels.UsageTypeStorageRemove,
-	} {
-		bytes, err := um.GetAggregatedUsageByType(userID, usageType)
+	}
+	
+	for _, usageType := range usageTypes {
+		bytes, err := um.GetAggregatedUsageByType(userID, pluginCore.UsageType(usageType))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get aggregated usage: %w", err)
 		}
-		usageByType[usageType] = bytes
+		usageByType[pluginCore.UsageType(usageType)] = bytes
 	}
 
 	usage := &pluginCore.Usage{

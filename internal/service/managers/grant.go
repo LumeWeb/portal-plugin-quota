@@ -189,7 +189,7 @@ func (gm *GrantManagerDefault) CalculateAvailableBytes(grants []*pluginModels.Al
 }
 
 // ConsumeFromGrants consumes bytes from grants based on prioritization rules
-func (gm *GrantManagerDefault) ConsumeFromGrants(userID uint, grantType pluginModels.GrantType, bytes uint64, usageDetailID uint) ([]*pluginModels.AllowanceConsumption, error) {
+func (gm *GrantManagerDefault) ConsumeFromGrants(userID uint, grantType pluginModels.GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*pluginModels.AllowanceConsumption, error) {
 	if userID == 0 {
 		return nil, pluginModels.ErrInvalidUserID
 	}
@@ -204,84 +204,99 @@ func (gm *GrantManagerDefault) ConsumeFromGrants(userID uint, grantType pluginMo
 
 	var consumptions []*pluginModels.AllowanceConsumption
 
-	// Start a transaction
-	err := gm.db.Transaction(func(tx *gorm.DB) error {
-		// Get active grants for user and type with row-level locks
-		var grants []*pluginModels.AllowanceGrant
+	// Use provided transaction or create a new one
+	db := gm.db
+	if tx != nil {
+		db = tx
+	}
 
-		grants, err := gm.GetActiveGrantsByTypeLocked(userID, grantType, tx)
+	// Start a transaction if none was provided
+	if tx == nil {
+		err := db.Transaction(func(tx *gorm.DB) error {
+			return gm.consumeFromGrantsInTransaction(tx, userID, grantType, bytes, usageDetailID, &consumptions)
+		})
 		if err != nil {
-			return fmt.Errorf("failed to get active grants: %w", err)
+			return nil, err
 		}
-
-		// Check if we have enough total allowance
-		totalAvailable := gm.CalculateAvailableBytes(grants)
-		if totalAvailable < bytes {
-			return pluginModels.ErrInsufficientAllowance
+	} else {
+		err := gm.consumeFromGrantsInTransaction(tx, userID, grantType, bytes, usageDetailID, &consumptions)
+		if err != nil {
+			return nil, err
 		}
-
-		// Consume bytes from grants in priority order
-		remainingBytes := bytes
-		for _, grant := range grants {
-			if remainingBytes <= 0 {
-				break
-			}
-
-			// Calculate how much we can consume from this grant
-			consumeAmount := remainingBytes
-			if consumeAmount > grant.BytesRemaining {
-				consumeAmount = grant.BytesRemaining
-			}
-
-			// Skip creating consumption records for 0 byte consumption
-			if consumeAmount == 0 {
-				continue
-			}
-
-			// Create consumption record
-			consumption := &pluginModels.AllowanceConsumption{
-				GrantID:         grant.ID,
-				UsageDetailID:   usageDetailID,
-				BytesConsumed:   consumeAmount,
-				ConsumptionDate: time.Now().UTC(),
-			}
-			consumptions = append(consumptions, consumption)
-
-			// Update grant atomically using a single SQL update with WHERE guard
-			// This prevents negative bytes_remaining values and detects concurrent modifications
-			result := tx.Model(&pluginModels.AllowanceGrant{}).
-				Where("id = ? AND bytes_remaining >= ?", grant.ID, consumeAmount).
-				UpdateColumns(map[string]interface{}{
-					"bytes_used":      gorm.Expr("bytes_used + ?", consumeAmount),
-					"bytes_remaining": gorm.Expr("bytes_remaining - ?", consumeAmount),
-					"updated_at":      time.Now().UTC(),
-				})
-
-			if result.Error != nil {
-				return fmt.Errorf("failed to update grant: %w", result.Error)
-			}
-
-			if result.RowsAffected == 0 {
-				return fmt.Errorf("grant %d was concurrently modified", grant.ID)
-			}
-
-			// Save consumption record
-			if err := tx.Create(consumption).Error; err != nil {
-				return fmt.Errorf("failed to create consumption record: %w", err)
-			}
-
-			// Reduce remaining bytes
-			remainingBytes -= consumeAmount
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
 	}
 
 	return consumptions, nil
+}
+
+// consumeFromGrantsInTransaction performs the actual grant consumption within a transaction
+func (gm *GrantManagerDefault) consumeFromGrantsInTransaction(tx *gorm.DB, userID uint, grantType pluginModels.GrantType, bytes uint64, usageDetailID uint, consumptions *[]*pluginModels.AllowanceConsumption) error {
+	// Get active grants for user and type with row-level locks
+	grants, err := gm.GetActiveGrantsByTypeLocked(userID, grantType, tx)
+	if err != nil {
+		return fmt.Errorf("failed to get active grants: %w", err)
+	}
+
+	// Check if we have enough total allowance
+	totalAvailable := gm.CalculateAvailableBytes(grants)
+	if totalAvailable < bytes {
+		return pluginModels.ErrInsufficientAllowance
+	}
+
+	// Consume bytes from grants in priority order
+	remainingBytes := bytes
+	for _, grant := range grants {
+		if remainingBytes <= 0 {
+			break
+		}
+
+		// Calculate how much we can consume from this grant
+		consumeAmount := remainingBytes
+		if consumeAmount > grant.BytesRemaining {
+			consumeAmount = grant.BytesRemaining
+		}
+
+		// Skip creating consumption records for 0 byte consumption
+		if consumeAmount == 0 {
+			continue
+		}
+
+		// Create consumption record
+		consumption := &pluginModels.AllowanceConsumption{
+			GrantID:         grant.ID,
+			UsageDetailID:   usageDetailID,
+			BytesConsumed:   consumeAmount,
+			ConsumptionDate: time.Now().UTC(),
+		}
+		*consumptions = append(*consumptions, consumption)
+
+		// Update grant atomically using a single SQL update with WHERE guard
+		// This prevents negative bytes_remaining values and detects concurrent modifications
+		result := tx.Model(&pluginModels.AllowanceGrant{}).
+			Where("id = ? AND bytes_remaining >= ?", grant.ID, consumeAmount).
+			UpdateColumns(map[string]interface{}{
+				"bytes_used":      gorm.Expr("bytes_used + ?", consumeAmount),
+				"bytes_remaining": gorm.Expr("bytes_remaining - ?", consumeAmount),
+				"updated_at":      time.Now().UTC(),
+			})
+
+		if result.Error != nil {
+			return fmt.Errorf("failed to update grant: %w", result.Error)
+		}
+
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("grant %d was concurrently modified", grant.ID)
+		}
+
+		// Save consumption record
+		if err := tx.Create(consumption).Error; err != nil {
+			return fmt.Errorf("failed to create consumption record: %w", err)
+		}
+
+		// Reduce remaining bytes
+		remainingBytes -= consumeAmount
+	}
+
+	return nil
 }
 
 // getSourcePriorityOrderClause generates a SQL CASE statement for ordering by source priority

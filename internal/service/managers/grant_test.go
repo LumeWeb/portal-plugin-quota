@@ -395,7 +395,7 @@ func TestGrantManager_ConsumeFromGrants_SufficientAllowance_Success(t *testing.T
 		require.NoError(t, err)
 
 		// Consume bytes - should consume from highest priority grant first
-		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, testConsumptionBytes, usageDetail.ID)
+		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, testConsumptionBytes, usageDetail.ID, nil)
 		require.NoError(t, err)
 		require.Len(t, consumptions, 1)
 		assert.Equal(t, grant2.ID, consumptions[0].GrantID)
@@ -449,7 +449,7 @@ func TestGrantManager_ConsumeFromGrants_InsufficientAllowance_Error(t *testing.T
 		require.NoError(t, err)
 
 		// Try to consume more bytes than available
-		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, testGrantBytesHuge, usageDetail.ID)
+		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, testGrantBytesHuge, usageDetail.ID, nil)
 		assert.Error(t, err)
 		assert.Nil(t, consumptions)
 		assert.Equal(t, pluginModels.ErrInsufficientAllowance, err)
@@ -499,7 +499,7 @@ func TestGrantManager_ConsumeFromGrants_MultipleGrants_Success(t *testing.T) {
 		totalConsumption := uint64(testGrantBytesMedium + testConsumptionBytes) // 5000 + 1500 = 6500
 
 		// Consume from grants using the manager method
-		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, totalConsumption, usageDetail.ID)
+		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, totalConsumption, usageDetail.ID, nil)
 		require.NoError(t, err)
 		require.Len(t, consumptions, 2)
 

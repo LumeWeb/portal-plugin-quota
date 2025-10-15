@@ -27,7 +27,7 @@ type GrantManager interface {
 	CalculateAvailableBytes(grants []*AllowanceGrant) uint64
 
 	// ConsumeFromGrants consumes bytes from grants based on prioritization rules
-	ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error)
+	ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*AllowanceConsumption, error)
 
 	// DeactivateGrant deactivates a grant (doesn't delete, just marks inactive)
 	DeactivateGrant(grantID uint) error

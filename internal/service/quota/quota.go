@@ -8,6 +8,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
+	"go.lumeweb.com/portal-plugin-quota/internal/service/policies"
 	portalCore "go.lumeweb.com/portal/core"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -23,7 +24,6 @@ type QuotaServiceDefault struct {
 	planManager     pluginCore.QuotaPlanManager
 	limitResolver   pluginCore.LimitResolver
 	usageAggregator pluginCore.UsageAggregator
-	policyEnforcers map[models.EnforcementPolicy]pluginCore.PolicyEnforcer
 }
 
 var _ pluginCore.QuotaService = (*QuotaServiceDefault)(nil)
@@ -42,11 +42,22 @@ func NewQuotaService() (portalCore.Service, []portalCore.ContextBuilderOption, e
 			// Initialize managers
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
-			service.configManager = managers.NewConfigManager(ctx)
 
-			// Initialize other components (these would be implemented separately)
-			// For now, we'll leave them as nil and handle the nil checks in methods
-			service.policyEnforcers = make(map[models.EnforcementPolicy]pluginCore.PolicyEnforcer)
+			// Initialize limit resolver
+			service.limitResolver = policies.NewLimitResolver(ctx, service)
+
+			// Initialize plan manager
+			service.planManager = policies.NewQuotaPlanManager(ctx.DB(), ctx.Logger())
+
+			// Initialize policy enforcers
+			policyEnforcers := make(map[models.EnforcementPolicy]pluginCore.PolicyEnforcer)
+			policyEnforcers[models.EnforcementPolicyHardLimits] = policies.NewHardLimitsPolicyEnforcer(ctx, service)
+			policyEnforcers[models.EnforcementPolicyThreshold] = policies.NewThresholdPolicyEnforcer(ctx, service)
+			policyEnforcers[models.EnforcementPolicyUnlimited] = policies.NewUnlimitedPolicyEnforcer(ctx, service)
+			policyEnforcers[models.EnforcementPolicyAllowance] = policies.NewAllowancePolicyEnforcer(ctx, service)
+
+			// Initialize config manager with all required dependencies
+			service.configManager = managers.NewConfigManager(ctx, service.limitResolver, service.planManager, policyEnforcers)
 
 			return nil
 		}),
@@ -175,6 +186,9 @@ func (s *QuotaServiceDefault) SetQuotaConfig(userID uint, config *pluginCore.Use
 	if s.ctx == nil || s.ctx.DB() == nil {
 		return fmt.Errorf("service context or database not initialized")
 	}
+
+	// Ensure the config has the correct user ID
+	config.UserID = userID
 
 	// Use upsert to handle both create and update cases
 	result := s.ctx.DB().Where("user_id = ?", userID).Assign(config).FirstOrCreate(config)
@@ -423,7 +437,7 @@ func (s *QuotaServiceDefault) DeductAllowance(userID uint, storage, upload, down
 				return fmt.Errorf("failed to create storage usage detail: %w", err)
 			}
 
-			_, err := s.grantManager.ConsumeFromGrants(userID, models.GrantTypeStorage, storage, detail.ID)
+			_, err := s.grantManager.ConsumeFromGrants(userID, models.GrantTypeStorage, storage, detail.ID, tx)
 			if err != nil {
 				return fmt.Errorf("failed to deduct storage allowance: %w", err)
 			}
@@ -441,7 +455,7 @@ func (s *QuotaServiceDefault) DeductAllowance(userID uint, storage, upload, down
 				return fmt.Errorf("failed to create upload usage detail: %w", err)
 			}
 
-			_, err := s.grantManager.ConsumeFromGrants(userID, models.GrantTypeUpload, upload, detail.ID)
+			_, err := s.grantManager.ConsumeFromGrants(userID, models.GrantTypeUpload, upload, detail.ID, tx)
 			if err != nil {
 				return fmt.Errorf("failed to deduct upload allowance: %w", err)
 			}
@@ -459,7 +473,7 @@ func (s *QuotaServiceDefault) DeductAllowance(userID uint, storage, upload, down
 				return fmt.Errorf("failed to create download usage detail: %w", err)
 			}
 
-			_, err := s.grantManager.ConsumeFromGrants(userID, models.GrantTypeDownload, download, detail.ID)
+			_, err := s.grantManager.ConsumeFromGrants(userID, models.GrantTypeDownload, download, detail.ID, tx)
 			if err != nil {
 				return fmt.Errorf("failed to deduct download allowance: %w", err)
 			}

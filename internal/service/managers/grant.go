@@ -209,7 +209,7 @@ func (gm *GrantManagerDefault) ConsumeFromGrants(userID uint, grantType pluginMo
 		// Get active grants for user and type with row-level locks
 		var grants []*pluginModels.AllowanceGrant
 
-		grants, err := gm.GetActiveGrantsByType(userID, grantType)
+		grants, err := gm.GetActiveGrantsByTypeLocked(userID, grantType, tx)
 		if err != nil {
 			return fmt.Errorf("failed to get active grants: %w", err)
 		}

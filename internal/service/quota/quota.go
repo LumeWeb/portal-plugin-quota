@@ -42,6 +42,7 @@ func NewQuotaService() (portalCore.Service, []portalCore.ContextBuilderOption, e
 			// Initialize managers
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
+			service.configManager = managers.NewConfigManager(ctx)
 
 			// Initialize other components (these would be implemented separately)
 			// For now, we'll leave them as nil and handle the nil checks in methods

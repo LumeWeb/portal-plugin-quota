@@ -127,3 +127,15 @@ type (
 	// QuotaCheckReason represents the reason for a quota check result
 	QuotaCheckReason = models.QuotaCheckReason
 )
+
+const (
+	GrantTypeStorage  = models.GrantTypeStorage
+	GrantTypeUpload   = models.GrantTypeUpload
+	GrantTypeDownload = models.GrantTypeDownload
+)
+const (
+	UsageTypeUpload        = models.UsageTypeUpload
+	UsageTypeDownload      = models.UsageTypeDownload
+	UsageTypeStorageAdd    = models.UsageTypeStorageAdd
+	UsageTypeStorageRemove = models.UsageTypeStorageRemove
+)

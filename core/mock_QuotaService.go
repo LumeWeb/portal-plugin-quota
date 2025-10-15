@@ -107,6 +107,282 @@ func (_c *MockQuotaService_AddAllowance_Call) RunAndReturn(run func(userID uint,
 	return _c
 }
 
+// AddBonusAllowance provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) AddBonusAllowance(userID uint, storage uint64, upload uint64, download uint64) error {
+	ret := _mock.Called(userID, storage, upload, download)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddBonusAllowance")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint, uint64, uint64, uint64) error); ok {
+		r0 = returnFunc(userID, storage, upload, download)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_AddBonusAllowance_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddBonusAllowance'
+type MockQuotaService_AddBonusAllowance_Call struct {
+	*mock.Call
+}
+
+// AddBonusAllowance is a helper method to define mock.On call
+//   - userID uint
+//   - storage uint64
+//   - upload uint64
+//   - download uint64
+func (_e *MockQuotaService_Expecter) AddBonusAllowance(userID interface{}, storage interface{}, upload interface{}, download interface{}) *MockQuotaService_AddBonusAllowance_Call {
+	return &MockQuotaService_AddBonusAllowance_Call{Call: _e.mock.On("AddBonusAllowance", userID, storage, upload, download)}
+}
+
+func (_c *MockQuotaService_AddBonusAllowance_Call) Run(run func(userID uint, storage uint64, upload uint64, download uint64)) *MockQuotaService_AddBonusAllowance_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		var arg3 uint64
+		if args[3] != nil {
+			arg3 = args[3].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_AddBonusAllowance_Call) Return(err error) *MockQuotaService_AddBonusAllowance_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_AddBonusAllowance_Call) RunAndReturn(run func(userID uint, storage uint64, upload uint64, download uint64) error) *MockQuotaService_AddBonusAllowance_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AddPAYGAddonAllowance provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) AddPAYGAddonAllowance(userID uint, storage uint64, upload uint64, download uint64) error {
+	ret := _mock.Called(userID, storage, upload, download)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddPAYGAddonAllowance")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint, uint64, uint64, uint64) error); ok {
+		r0 = returnFunc(userID, storage, upload, download)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_AddPAYGAddonAllowance_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddPAYGAddonAllowance'
+type MockQuotaService_AddPAYGAddonAllowance_Call struct {
+	*mock.Call
+}
+
+// AddPAYGAddonAllowance is a helper method to define mock.On call
+//   - userID uint
+//   - storage uint64
+//   - upload uint64
+//   - download uint64
+func (_e *MockQuotaService_Expecter) AddPAYGAddonAllowance(userID interface{}, storage interface{}, upload interface{}, download interface{}) *MockQuotaService_AddPAYGAddonAllowance_Call {
+	return &MockQuotaService_AddPAYGAddonAllowance_Call{Call: _e.mock.On("AddPAYGAddonAllowance", userID, storage, upload, download)}
+}
+
+func (_c *MockQuotaService_AddPAYGAddonAllowance_Call) Run(run func(userID uint, storage uint64, upload uint64, download uint64)) *MockQuotaService_AddPAYGAddonAllowance_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		var arg3 uint64
+		if args[3] != nil {
+			arg3 = args[3].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_AddPAYGAddonAllowance_Call) Return(err error) *MockQuotaService_AddPAYGAddonAllowance_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_AddPAYGAddonAllowance_Call) RunAndReturn(run func(userID uint, storage uint64, upload uint64, download uint64) error) *MockQuotaService_AddPAYGAddonAllowance_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AddPromoAllowance provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) AddPromoAllowance(userID uint, storage uint64, upload uint64, download uint64) error {
+	ret := _mock.Called(userID, storage, upload, download)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddPromoAllowance")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint, uint64, uint64, uint64) error); ok {
+		r0 = returnFunc(userID, storage, upload, download)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_AddPromoAllowance_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddPromoAllowance'
+type MockQuotaService_AddPromoAllowance_Call struct {
+	*mock.Call
+}
+
+// AddPromoAllowance is a helper method to define mock.On call
+//   - userID uint
+//   - storage uint64
+//   - upload uint64
+//   - download uint64
+func (_e *MockQuotaService_Expecter) AddPromoAllowance(userID interface{}, storage interface{}, upload interface{}, download interface{}) *MockQuotaService_AddPromoAllowance_Call {
+	return &MockQuotaService_AddPromoAllowance_Call{Call: _e.mock.On("AddPromoAllowance", userID, storage, upload, download)}
+}
+
+func (_c *MockQuotaService_AddPromoAllowance_Call) Run(run func(userID uint, storage uint64, upload uint64, download uint64)) *MockQuotaService_AddPromoAllowance_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		var arg3 uint64
+		if args[3] != nil {
+			arg3 = args[3].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_AddPromoAllowance_Call) Return(err error) *MockQuotaService_AddPromoAllowance_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_AddPromoAllowance_Call) RunAndReturn(run func(userID uint, storage uint64, upload uint64, download uint64) error) *MockQuotaService_AddPromoAllowance_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AddSubscriptionAllowance provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) AddSubscriptionAllowance(userID uint, storage uint64, upload uint64, download uint64) error {
+	ret := _mock.Called(userID, storage, upload, download)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddSubscriptionAllowance")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint, uint64, uint64, uint64) error); ok {
+		r0 = returnFunc(userID, storage, upload, download)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_AddSubscriptionAllowance_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddSubscriptionAllowance'
+type MockQuotaService_AddSubscriptionAllowance_Call struct {
+	*mock.Call
+}
+
+// AddSubscriptionAllowance is a helper method to define mock.On call
+//   - userID uint
+//   - storage uint64
+//   - upload uint64
+//   - download uint64
+func (_e *MockQuotaService_Expecter) AddSubscriptionAllowance(userID interface{}, storage interface{}, upload interface{}, download interface{}) *MockQuotaService_AddSubscriptionAllowance_Call {
+	return &MockQuotaService_AddSubscriptionAllowance_Call{Call: _e.mock.On("AddSubscriptionAllowance", userID, storage, upload, download)}
+}
+
+func (_c *MockQuotaService_AddSubscriptionAllowance_Call) Run(run func(userID uint, storage uint64, upload uint64, download uint64)) *MockQuotaService_AddSubscriptionAllowance_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		var arg3 uint64
+		if args[3] != nil {
+			arg3 = args[3].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_AddSubscriptionAllowance_Call) Return(err error) *MockQuotaService_AddSubscriptionAllowance_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_AddSubscriptionAllowance_Call) RunAndReturn(run func(userID uint, storage uint64, upload uint64, download uint64) error) *MockQuotaService_AddSubscriptionAllowance_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // AssignUserToPlan provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) AssignUserToPlan(userID uint, planID uint) error {
 	ret := _mock.Called(userID, planID)
@@ -409,6 +685,61 @@ func (_c *MockQuotaService_CleanupOldRecords_Call) Return(err error) *MockQuotaS
 }
 
 func (_c *MockQuotaService_CleanupOldRecords_Call) RunAndReturn(run func(retentionDays int) error) *MockQuotaService_CleanupOldRecords_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Config provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) Config() (any, error) {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Config")
+	}
+
+	var r0 any
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func() (any, error)); ok {
+		return returnFunc()
+	}
+	if returnFunc, ok := ret.Get(0).(func() any); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(any)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func() error); ok {
+		r1 = returnFunc()
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQuotaService_Config_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Config'
+type MockQuotaService_Config_Call struct {
+	*mock.Call
+}
+
+// Config is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) Config() *MockQuotaService_Config_Call {
+	return &MockQuotaService_Config_Call{Call: _e.mock.On("Config")}
+}
+
+func (_c *MockQuotaService_Config_Call) Run(run func()) *MockQuotaService_Config_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_Config_Call) Return(v any, err error) *MockQuotaService_Config_Call {
+	_c.Call.Return(v, err)
+	return _c
+}
+
+func (_c *MockQuotaService_Config_Call) RunAndReturn(run func() (any, error)) *MockQuotaService_Config_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -12,6 +12,7 @@ const QUOTA_SERVICE = "quota"
 // QuotaService is the interface for quota management functionality
 type QuotaService interface {
 	core.Service
+	core.Configurable
 	// Usage Recording
 	RecordUpload(userID, uploadID uint, bytes uint64, ip string) error
 	RecordDownload(userID, uploadID uint, bytes uint64, ip string) error
@@ -44,6 +45,10 @@ type QuotaService interface {
 
 	// Allowance Management (for ALLOWANCE policy)
 	AddAllowance(userID uint, storage, upload, download uint64) error
+	AddBonusAllowance(userID uint, storage, upload, download uint64) error
+	AddPromoAllowance(userID uint, storage, upload, download uint64) error
+	AddSubscriptionAllowance(userID uint, storage, upload, download uint64) error
+	AddPAYGAddonAllowance(userID uint, storage, upload, download uint64) error
 	DeductAllowance(userID uint, storage, upload, download uint64) error
 	GetAllowanceBalance(userID uint) (*AllowanceBalance, error)
 	ResetAllowance(userID uint) error

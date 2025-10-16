@@ -43,13 +43,13 @@ func (cm *ConfigManager) ResolveEffectiveLimits(userID uint) (*pluginCore.Effect
 	cm.logger.Debug("Resolving effective limits for user", zap.Uint("userID", userID))
 
 	// Get user's quota config
-	config, err := cm.GetUserQuotaConfig(userID)
+	cfg, err := cm.GetUserQuotaConfig(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user quota config: %w", err)
 	}
 
 	// Resolve limits using the limit resolver
-	limits, err := cm.limitResolver.ResolveEffectiveLimits(config, pluginModels.EnforcementPolicy(config.EnforcementPolicy))
+	limits, err := cm.limitResolver.ResolveEffectiveLimits(cfg, pluginModels.EnforcementPolicy(cfg.EnforcementPolicy))
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve effective limits: %w", err)
 	}

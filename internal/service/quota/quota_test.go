@@ -382,6 +382,43 @@ func TestQuotaServiceDefault_GetAllowanceBalance_Success(t *testing.T) {
 	}, testOptions())
 }
 
+// TestQuotaServiceDefault_RemoveUserFromPlan_Success tests successful removal of user from plan
+func TestQuotaServiceDefault_RemoveUserFromPlan_Success(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// First assign user to a plan
+		userID := uint(testUserID)
+
+		// Create a plan first
+		plan := &pluginModels.QuotaPlan{
+			Name:        "test_plan",
+			Description: "Test quota plan",
+		}
+		err := ctx.DB().Create(plan).Error
+		require.NoError(t, err)
+
+		// Assign user to plan
+		err = quotaService.AssignUserToPlan(userID, plan.ID)
+		require.NoError(t, err)
+
+		// Verify user is assigned to plan
+		cfg, err := quotaService.GetQuotaConfig(userID)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.QuotaPlanID)
+		assert.Equal(t, uint64(plan.ID), *cfg.QuotaPlanID)
+
+		// Remove user from plan
+		err = quotaService.RemoveUserFromPlan(userID)
+		require.NoError(t, err)
+
+		// Verify user is no longer assigned to plan
+		cfg, err = quotaService.GetQuotaConfig(userID)
+		require.NoError(t, err)
+		assert.Nil(t, cfg.QuotaPlanID)
+	}, testOptions())
+}
+
 // TestQuotaServiceDefault_ResetAllowance_Success tests successful allowance reset
 func TestQuotaServiceDefault_ResetAllowance_Success(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {

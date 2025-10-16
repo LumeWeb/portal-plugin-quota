@@ -42,6 +42,7 @@ type QuotaService interface {
 	SetDefaultQuotaPlan(planID uint) error
 	GetDefaultQuotaPlan() (*models.QuotaPlan, error)
 	AssignUserToPlan(userID uint, planID uint) error
+	RemoveUserFromPlan(userID uint) error
 
 	// Allowance Management (for ALLOWANCE policy)
 	AddAllowance(userID uint, storage, upload, download uint64) error

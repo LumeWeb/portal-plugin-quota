@@ -367,24 +367,12 @@ func (s *QuotaServiceDefault) RemoveUserFromPlan(userID uint) error {
 
 	db := s.ctx.DB()
 
-	// Perform the operation in a transaction
-	return db.Transaction(func(tx *gorm.DB) error {
-		// First, ensure the user has a quota config
-		result := tx.Where("user_id = ?", userID).FirstOrCreate(&models.UserQuotaConfig{
-			UserID:            userID,
-			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		})
-		if result.Error != nil {
-			return fmt.Errorf("failed to get or create user quota config: %w", result.Error)
-		}
+	// Update the quota config to remove the plan ID (no-op if user doesn't exist)
+	if err := db.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", nil).Error; err != nil {
+		return fmt.Errorf("failed to remove user from plan: %w", err)
+	}
 
-		// Update the user's quota config to remove the plan ID
-		if err := tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", nil).Error; err != nil {
-			return fmt.Errorf("failed to remove user from plan: %w", err)
-		}
-
-		return nil
-	})
+	return nil
 }
 
 // Allowance Management

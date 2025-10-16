@@ -23,11 +23,6 @@ type UsageManager struct {
 	pinService portalCore.PinService
 }
 
-// UsageAggregator aggregates usage data across time periods
-type UsageAggregator interface {
-	GetAggregatedUsageByType(userID uint, usageType pluginModels.UsageType) (uint64, error)
-}
-
 // NewUsageManager creates a new usage manager
 func NewUsageManager(ctx portalCore.Context) *UsageManager {
 	quotaConfig := portalCore.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
@@ -82,21 +77,21 @@ func (um *UsageManager) GetUserQuotaConfig(userID uint) (*pluginModels.UserQuota
 
 	// Use FirstOrCreate to prevent race conditions when multiple goroutines
 	// try to create the same user config simultaneously
-	config := pluginModels.UserQuotaConfig{
+	cfg := pluginModels.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
 	}
 
-	result := um.db.Where("user_id = ?", userID).FirstOrCreate(&config)
+	result := um.db.Where("user_id = ?", userID).FirstOrCreate(&cfg)
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to get or create user quota config: %w", result.Error)
 	}
 
-	return &config, nil
+	return &cfg, nil
 }
 
 // GetAggregatedUsageByType returns the aggregated usage for a specific user and usage type
-func (um *UsageManager) GetAggregatedUsageByType(userID uint, usageType pluginModels.UsageType) (uint64, error) {
+func (um *UsageManager) GetAggregatedUsageByType(userID uint, usageType pluginCore.UsageType) (uint64, error) {
 	if err := um.validateUserID(userID); err != nil {
 		return 0, err
 	}
@@ -405,7 +400,6 @@ func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.Usa
 	return nil
 }
 
-
 // Validation methods
 
 // validateUserID validates that a user ID is valid
@@ -502,13 +496,15 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 
 	// Get aggregated usage by type
 	usageByType := make(map[pluginCore.UsageType]uint64)
-	for _, usageType := range []pluginModels.UsageType{
+	usageTypes := []pluginModels.UsageType{
 		pluginModels.UsageTypeUpload,
 		pluginModels.UsageTypeDownload,
 		pluginModels.UsageTypeStorageAdd,
 		pluginModels.UsageTypeStorageRemove,
-	} {
-		bytes, err := um.GetAggregatedUsageByType(userID, usageType)
+	}
+	
+	for _, usageType := range usageTypes {
+		bytes, err := um.GetAggregatedUsageByType(userID, pluginCore.UsageType(usageType))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get aggregated usage: %w", err)
 		}

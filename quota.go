@@ -5,6 +5,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"go.lumeweb.com/portal-plugin-quota/internal/service/quota"
 	"go.lumeweb.com/portal/core"
 )
 
@@ -20,7 +21,9 @@ func init() {
 			return nil, nil, nil
 		},
 		Services: func() ([]core.ServiceInfo, error) {
-			return []core.ServiceInfo{}, nil
+			return []core.ServiceInfo{
+				{ID: internal.PLUGIN_NAME, Factory: quota.NewQuotaService},
+			}, nil
 		},
 		Models: []any{
 			&models.UserQuota{},

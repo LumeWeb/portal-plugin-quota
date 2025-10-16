@@ -10,6 +10,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
+	"gorm.io/gorm"
 )
 
 // TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed tests the CheckUploadQuota method with sufficient allowance
@@ -298,7 +299,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_SuccessfulRecording_Integration_Su
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil)
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes, uint(1)).Return([]*models.AllowanceConsumption{}, nil)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes, uint(1), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil)
 	mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil)
 
 	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
@@ -333,7 +334,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_GrantConsumptionFailure_Integratio
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil)
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes, uint(1)).Return(nil, assert.AnError)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes, uint(1), (*gorm.DB)(nil)).Return(nil, assert.AnError)
 
 	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
 	assert.Error(t, err)
@@ -367,7 +368,7 @@ func TestAllowancePolicyEnforcer_RecordDownload_SuccessfulRecording_Integration_
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil)
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes, uint(1)).Return([]*models.AllowanceConsumption{}, nil)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes, uint(1), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil)
 	mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil)
 
 	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
@@ -402,7 +403,7 @@ func TestAllowancePolicyEnforcer_RecordDownload_GrantConsumptionFailure_Integrat
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil)
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes, uint(1)).Return(nil, assert.AnError)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes, uint(1), (*gorm.DB)(nil)).Return(nil, assert.AnError)
 
 	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)
 	assert.Error(t, err)
@@ -435,7 +436,7 @@ func TestAllowancePolicyEnforcer_RecordStorageChange_SuccessfulRecording_Integra
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil)
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeStorage, uint64(bytes), uint(1)).Return([]*models.AllowanceConsumption{}, nil)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeStorage, uint64(bytes), uint(1), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil)
 	mockUsageManager.On("RecordStorageChange", userID, uploadID, bytes, ip).Return(nil)
 
 	err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
@@ -498,7 +499,7 @@ func TestAllowancePolicyEnforcer_RecordStorageChange_GrantConsumptionFailure_Int
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil)
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeStorage, uint64(bytes), uint(1)).Return(nil, assert.AnError)
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeStorage, uint64(bytes), uint(1), (*gorm.DB)(nil)).Return(nil, assert.AnError)
 
 	err := enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
 	assert.Error(t, err)
@@ -532,7 +533,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_SufficientAllowance_Unit_Success(t
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil).Once()
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes, uint(1)).Return([]*models.AllowanceConsumption{}, nil).Once()
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeUpload, bytes, uint(1), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil).Once()
 	mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil).Once()
 
 	err := enforcer.RecordUpload(userID, uploadID, bytes, ip)
@@ -566,7 +567,7 @@ func TestAllowancePolicyEnforcer_RecordDownload_SufficientAllowance_Unit_Success
 		detail := args.Get(0).(*models.UserUsageDetail)
 		detail.ID = 1 // Simulate ID being set by database
 	}).Return(nil).Once()
-	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes, uint(1)).Return([]*models.AllowanceConsumption{}, nil).Once()
+	mockGrantManager.On("ConsumeFromGrants", userID, models.GrantTypeDownload, bytes, uint(1), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil).Once()
 	mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil).Once()
 
 	err := enforcer.RecordDownload(userID, uploadID, bytes, ip)

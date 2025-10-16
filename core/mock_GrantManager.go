@@ -90,8 +90,8 @@ func (_c *MockGrantManager_CalculateAvailableBytes_Call) RunAndReturn(run func(g
 }
 
 // ConsumeFromGrants provides a mock function for the type MockGrantManager
-func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error) {
-	ret := _mock.Called(userID, grantType, bytes, usageDetailID)
+func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*AllowanceConsumption, error) {
+	ret := _mock.Called(userID, grantType, bytes, usageDetailID, tx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ConsumeFromGrants")
@@ -99,18 +99,18 @@ func (_mock *MockGrantManager) ConsumeFromGrants(userID uint, grantType GrantTyp
 
 	var r0 []*AllowanceConsumption
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64, uint) ([]*AllowanceConsumption, error)); ok {
-		return returnFunc(userID, grantType, bytes, usageDetailID)
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64, uint, *gorm.DB) ([]*AllowanceConsumption, error)); ok {
+		return returnFunc(userID, grantType, bytes, usageDetailID, tx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64, uint) []*AllowanceConsumption); ok {
-		r0 = returnFunc(userID, grantType, bytes, usageDetailID)
+	if returnFunc, ok := ret.Get(0).(func(uint, GrantType, uint64, uint, *gorm.DB) []*AllowanceConsumption); ok {
+		r0 = returnFunc(userID, grantType, bytes, usageDetailID, tx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*AllowanceConsumption)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, GrantType, uint64, uint) error); ok {
-		r1 = returnFunc(userID, grantType, bytes, usageDetailID)
+	if returnFunc, ok := ret.Get(1).(func(uint, GrantType, uint64, uint, *gorm.DB) error); ok {
+		r1 = returnFunc(userID, grantType, bytes, usageDetailID, tx)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -127,11 +127,12 @@ type MockGrantManager_ConsumeFromGrants_Call struct {
 //   - grantType GrantType
 //   - bytes uint64
 //   - usageDetailID uint
-func (_e *MockGrantManager_Expecter) ConsumeFromGrants(userID interface{}, grantType interface{}, bytes interface{}, usageDetailID interface{}) *MockGrantManager_ConsumeFromGrants_Call {
-	return &MockGrantManager_ConsumeFromGrants_Call{Call: _e.mock.On("ConsumeFromGrants", userID, grantType, bytes, usageDetailID)}
+//   - tx *gorm.DB
+func (_e *MockGrantManager_Expecter) ConsumeFromGrants(userID interface{}, grantType interface{}, bytes interface{}, usageDetailID interface{}, tx interface{}) *MockGrantManager_ConsumeFromGrants_Call {
+	return &MockGrantManager_ConsumeFromGrants_Call{Call: _e.mock.On("ConsumeFromGrants", userID, grantType, bytes, usageDetailID, tx)}
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, grantType GrantType, bytes uint64, usageDetailID uint)) *MockGrantManager_ConsumeFromGrants_Call {
+func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, grantType GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB)) *MockGrantManager_ConsumeFromGrants_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 uint
 		if args[0] != nil {
@@ -149,11 +150,16 @@ func (_c *MockGrantManager_ConsumeFromGrants_Call) Run(run func(userID uint, gra
 		if args[3] != nil {
 			arg3 = args[3].(uint)
 		}
+		var arg4 *gorm.DB
+		if args[4] != nil {
+			arg4 = args[4].(*gorm.DB)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -164,7 +170,7 @@ func (_c *MockGrantManager_ConsumeFromGrants_Call) Return(vs []*AllowanceConsump
 	return _c
 }
 
-func (_c *MockGrantManager_ConsumeFromGrants_Call) RunAndReturn(run func(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error)) *MockGrantManager_ConsumeFromGrants_Call {
+func (_c *MockGrantManager_ConsumeFromGrants_Call) RunAndReturn(run func(userID uint, grantType GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*AllowanceConsumption, error)) *MockGrantManager_ConsumeFromGrants_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -222,6 +228,69 @@ func (_c *MockGrantManager_CreateAllowanceGrant_Call) Return(err error) *MockGra
 }
 
 func (_c *MockGrantManager_CreateAllowanceGrant_Call) RunAndReturn(run func(userID uint, grant *AllowanceGrant) error) *MockGrantManager_CreateAllowanceGrant_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CreateAllowanceGrantLocked provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) CreateAllowanceGrantLocked(userID uint, grant *AllowanceGrant, tx *gorm.DB) error {
+	ret := _mock.Called(userID, grant, tx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateAllowanceGrantLocked")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint, *AllowanceGrant, *gorm.DB) error); ok {
+		r0 = returnFunc(userID, grant, tx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockGrantManager_CreateAllowanceGrantLocked_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAllowanceGrantLocked'
+type MockGrantManager_CreateAllowanceGrantLocked_Call struct {
+	*mock.Call
+}
+
+// CreateAllowanceGrantLocked is a helper method to define mock.On call
+//   - userID uint
+//   - grant *AllowanceGrant
+//   - tx *gorm.DB
+func (_e *MockGrantManager_Expecter) CreateAllowanceGrantLocked(userID interface{}, grant interface{}, tx interface{}) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	return &MockGrantManager_CreateAllowanceGrantLocked_Call{Call: _e.mock.On("CreateAllowanceGrantLocked", userID, grant, tx)}
+}
+
+func (_c *MockGrantManager_CreateAllowanceGrantLocked_Call) Run(run func(userID uint, grant *AllowanceGrant, tx *gorm.DB)) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 *AllowanceGrant
+		if args[1] != nil {
+			arg1 = args[1].(*AllowanceGrant)
+		}
+		var arg2 *gorm.DB
+		if args[2] != nil {
+			arg2 = args[2].(*gorm.DB)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_CreateAllowanceGrantLocked_Call) Return(err error) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockGrantManager_CreateAllowanceGrantLocked_Call) RunAndReturn(run func(userID uint, grant *AllowanceGrant, tx *gorm.DB) error) *MockGrantManager_CreateAllowanceGrantLocked_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -11,6 +11,9 @@ type GrantManager interface {
 	// CreateAllowanceGrant creates a new allowance grant for a user
 	CreateAllowanceGrant(userID uint, grant *AllowanceGrant) error
 
+	// CreateAllowanceGrantLocked creates a new allowance grant for a user within a transaction
+	CreateAllowanceGrantLocked(userID uint, grant *AllowanceGrant, tx *gorm.DB) error
+
 	// GetActiveGrantsByType gets all active grants for a user of a specific type
 	GetActiveGrantsByType(userID uint, grantType GrantType) ([]*AllowanceGrant, error)
 
@@ -27,7 +30,7 @@ type GrantManager interface {
 	CalculateAvailableBytes(grants []*AllowanceGrant) uint64
 
 	// ConsumeFromGrants consumes bytes from grants based on prioritization rules
-	ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint) ([]*AllowanceConsumption, error)
+	ConsumeFromGrants(userID uint, grantType GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*AllowanceConsumption, error)
 
 	// DeactivateGrant deactivates a grant (doesn't delete, just marks inactive)
 	DeactivateGrant(grantID uint) error

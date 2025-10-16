@@ -323,28 +323,56 @@ func (s *QuotaServiceDefault) AssignUserToPlan(userID uint, planID uint) error {
 		return fmt.Errorf("service context or database not initialized")
 	}
 
+	if userID == 0 {
+		return fmt.Errorf("invalid user ID")
+	}
+
+	// Verify that the plan exists
+	_, err := s.planManager.GetQuotaPlanByID(uint64(planID))
+	if err != nil {
+		return fmt.Errorf("failed to verify quota plan existence: %w", err)
+	}
+
 	db := s.ctx.DB()
 
 	// Perform both operations atomically in a transaction
 	return db.Transaction(func(tx *gorm.DB) error {
 		// First, ensure the user has a quota config
-		cfg := &models.UserQuotaConfig{
+		result := tx.Where("user_id = ?", userID).FirstOrCreate(&models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		}
-
-		result := tx.Where("user_id = ?", userID).FirstOrCreate(cfg)
+		})
 		if result.Error != nil {
 			return fmt.Errorf("failed to get or create user quota config: %w", result.Error)
 		}
 
 		// Update the user's quota config with the plan ID
-		if err := tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).Update("quota_plan_id", planID).Error; err != nil {
+		if err := tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", planID).Error; err != nil {
 			return fmt.Errorf("failed to assign user to plan: %w", err)
 		}
 
 		return nil
 	})
+}
+
+// RemoveUserFromPlan removes a user from their assigned quota plan
+func (s *QuotaServiceDefault) RemoveUserFromPlan(userID uint) error {
+	if s.ctx == nil || s.ctx.DB() == nil {
+		return fmt.Errorf("service context or database not initialized")
+	}
+
+	if userID == 0 {
+		return fmt.Errorf("invalid user ID")
+	}
+
+	db := s.ctx.DB()
+
+	// Update the quota config to remove the plan ID (no-op if user doesn't exist)
+	if err := db.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", nil).Error; err != nil {
+		return fmt.Errorf("failed to remove user from plan: %w", err)
+	}
+
+	return nil
 }
 
 // Allowance Management

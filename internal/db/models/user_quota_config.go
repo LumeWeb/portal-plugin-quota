@@ -18,7 +18,7 @@ type UserQuotaConfig struct {
 	StorageThreshold   *int64
 	UploadThreshold    *int64
 	DownloadThreshold  *int64
-	
+
 	// Relationships
 	AllowanceGrants []*AllowanceGrant `gorm:"foreignKey:UserID;references:UserID"`
 }
@@ -29,20 +29,17 @@ func (UserQuotaConfig) TableName() string {
 }
 
 // BeforeCreate validates the UserQuotaConfig model before creation
-func (u *UserQuotaConfig) BeforeCreate(tx *gorm.DB) error {
-	if u.UserID <= 0 {
-		return ErrInvalidUserID
-	}
-
-	if !u.EnforcementPolicy.IsValid() {
-		return ErrInvalidEnforcementPolicy
-	}
-
-	return nil
+func (u *UserQuotaConfig) BeforeCreate(_ *gorm.DB) error {
+	return u.validate()
 }
 
 // BeforeUpdate validates the UserQuotaConfig model before update
-func (u *UserQuotaConfig) BeforeUpdate(tx *gorm.DB) error {
+func (u *UserQuotaConfig) BeforeUpdate(_ *gorm.DB) error {
+	return u.validate()
+}
+
+// validate performs common validation for UserQuotaConfig
+func (u *UserQuotaConfig) validate() error {
 	if u.UserID <= 0 {
 		return ErrInvalidUserID
 	}

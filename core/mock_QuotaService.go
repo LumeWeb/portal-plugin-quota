@@ -2008,6 +2008,57 @@ func (_c *MockQuotaService_RecordUpload_Call) RunAndReturn(run func(userID uint,
 	return _c
 }
 
+// RemoveUserFromPlan provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) RemoveUserFromPlan(userID uint) error {
+	ret := _mock.Called(userID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveUserFromPlan")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint) error); ok {
+		r0 = returnFunc(userID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_RemoveUserFromPlan_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveUserFromPlan'
+type MockQuotaService_RemoveUserFromPlan_Call struct {
+	*mock.Call
+}
+
+// RemoveUserFromPlan is a helper method to define mock.On call
+//   - userID uint
+func (_e *MockQuotaService_Expecter) RemoveUserFromPlan(userID interface{}) *MockQuotaService_RemoveUserFromPlan_Call {
+	return &MockQuotaService_RemoveUserFromPlan_Call{Call: _e.mock.On("RemoveUserFromPlan", userID)}
+}
+
+func (_c *MockQuotaService_RemoveUserFromPlan_Call) Run(run func(userID uint)) *MockQuotaService_RemoveUserFromPlan_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_RemoveUserFromPlan_Call) Return(err error) *MockQuotaService_RemoveUserFromPlan_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_RemoveUserFromPlan_Call) RunAndReturn(run func(userID uint) error) *MockQuotaService_RemoveUserFromPlan_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ResetAllowance provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) ResetAllowance(userID uint) error {
 	ret := _mock.Called(userID)

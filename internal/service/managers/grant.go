@@ -30,6 +30,11 @@ func NewGrantManager(ctx core.Context) pluginCore.GrantManager {
 
 // CreateAllowanceGrant creates a new allowance grant for a user
 func (gm *GrantManagerDefault) CreateAllowanceGrant(userID uint, grant *pluginModels.AllowanceGrant) error {
+	return gm.CreateAllowanceGrantLocked(userID, grant, nil)
+}
+
+// CreateAllowanceGrantLocked creates a new allowance grant for a user within a transaction
+func (gm *GrantManagerDefault) CreateAllowanceGrantLocked(userID uint, grant *pluginModels.AllowanceGrant, tx *gorm.DB) error {
 	if userID == 0 {
 		return pluginModels.ErrInvalidUserID
 	}
@@ -46,8 +51,14 @@ func (gm *GrantManagerDefault) CreateAllowanceGrant(userID uint, grant *pluginMo
 		grant.IsActive = true
 	}
 
+	// Use provided transaction or default database connection
+	db := gm.db
+	if tx != nil {
+		db = tx
+	}
+
 	// Create the grant in the database
-	if err := gm.db.Create(grant).Error; err != nil {
+	if err := db.Create(grant).Error; err != nil {
 		return fmt.Errorf("failed to create allowance grant: %w", err)
 	}
 

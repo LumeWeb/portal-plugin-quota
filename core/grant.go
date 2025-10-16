@@ -11,6 +11,9 @@ type GrantManager interface {
 	// CreateAllowanceGrant creates a new allowance grant for a user
 	CreateAllowanceGrant(userID uint, grant *AllowanceGrant) error
 
+	// CreateAllowanceGrantLocked creates a new allowance grant for a user within a transaction
+	CreateAllowanceGrantLocked(userID uint, grant *AllowanceGrant, tx *gorm.DB) error
+
 	// GetActiveGrantsByType gets all active grants for a user of a specific type
 	GetActiveGrantsByType(userID uint, grantType GrantType) ([]*AllowanceGrant, error)
 

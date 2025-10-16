@@ -232,6 +232,69 @@ func (_c *MockGrantManager_CreateAllowanceGrant_Call) RunAndReturn(run func(user
 	return _c
 }
 
+// CreateAllowanceGrantLocked provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) CreateAllowanceGrantLocked(userID uint, grant *AllowanceGrant, tx *gorm.DB) error {
+	ret := _mock.Called(userID, grant, tx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateAllowanceGrantLocked")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(uint, *AllowanceGrant, *gorm.DB) error); ok {
+		r0 = returnFunc(userID, grant, tx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockGrantManager_CreateAllowanceGrantLocked_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAllowanceGrantLocked'
+type MockGrantManager_CreateAllowanceGrantLocked_Call struct {
+	*mock.Call
+}
+
+// CreateAllowanceGrantLocked is a helper method to define mock.On call
+//   - userID uint
+//   - grant *AllowanceGrant
+//   - tx *gorm.DB
+func (_e *MockGrantManager_Expecter) CreateAllowanceGrantLocked(userID interface{}, grant interface{}, tx interface{}) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	return &MockGrantManager_CreateAllowanceGrantLocked_Call{Call: _e.mock.On("CreateAllowanceGrantLocked", userID, grant, tx)}
+}
+
+func (_c *MockGrantManager_CreateAllowanceGrantLocked_Call) Run(run func(userID uint, grant *AllowanceGrant, tx *gorm.DB)) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 uint
+		if args[0] != nil {
+			arg0 = args[0].(uint)
+		}
+		var arg1 *AllowanceGrant
+		if args[1] != nil {
+			arg1 = args[1].(*AllowanceGrant)
+		}
+		var arg2 *gorm.DB
+		if args[2] != nil {
+			arg2 = args[2].(*gorm.DB)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_CreateAllowanceGrantLocked_Call) Return(err error) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockGrantManager_CreateAllowanceGrantLocked_Call) RunAndReturn(run func(userID uint, grant *AllowanceGrant, tx *gorm.DB) error) *MockGrantManager_CreateAllowanceGrantLocked_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeactivateGrant provides a mock function for the type MockGrantManager
 func (_mock *MockGrantManager) DeactivateGrant(grantID uint) error {
 	ret := _mock.Called(grantID)

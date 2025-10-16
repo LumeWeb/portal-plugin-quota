@@ -285,17 +285,20 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(planID uint) error {
 
 	db := s.ctx.DB()
 
-	// First, unset any existing default plan
-	if err := db.Model(&models.QuotaPlan{}).Where("is_default = ?", true).Update("is_default", false).Error; err != nil {
-		return fmt.Errorf("failed to unset existing default plan: %w", err)
-	}
+	// Perform both updates atomically in a transaction
+	return db.Transaction(func(tx *gorm.DB) error {
+		// First, unset any existing default plan
+		if err := tx.Model(&models.QuotaPlan{}).Where("is_default = ?", true).Update("is_default", false).Error; err != nil {
+			return fmt.Errorf("failed to unset existing default plan: %w", err)
+		}
 
-	// Then set the new default plan
-	if err := db.Model(&models.QuotaPlan{}).Where("id = ?", planID).Update("is_default", true).Error; err != nil {
-		return fmt.Errorf("failed to set default quota plan: %w", err)
-	}
+		// Then set the new default plan
+		if err := tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Update("is_default", true).Error; err != nil {
+			return fmt.Errorf("failed to set default quota plan: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (s *QuotaServiceDefault) GetDefaultQuotaPlan() (*models.QuotaPlan, error) {
@@ -320,24 +323,28 @@ func (s *QuotaServiceDefault) AssignUserToPlan(userID uint, planID uint) error {
 		return fmt.Errorf("service context or database not initialized")
 	}
 
-	// First, ensure the user has a quota config
-	cfg := &models.UserQuotaConfig{
-		UserID:            userID,
-		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-	}
-
 	db := s.ctx.DB()
-	result := db.Where("user_id = ?", userID).FirstOrCreate(cfg)
-	if result.Error != nil {
-		return fmt.Errorf("failed to get or create user quota config: %w", result.Error)
-	}
 
-	// Update the user's quota config with the plan ID
-	if err := db.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).Update("quota_plan_id", planID).Error; err != nil {
-		return fmt.Errorf("failed to assign user to plan: %w", err)
-	}
+	// Perform both operations atomically in a transaction
+	return db.Transaction(func(tx *gorm.DB) error {
+		// First, ensure the user has a quota config
+		cfg := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyHardLimits,
+		}
 
-	return nil
+		result := tx.Where("user_id = ?", userID).FirstOrCreate(cfg)
+		if result.Error != nil {
+			return fmt.Errorf("failed to get or create user quota config: %w", result.Error)
+		}
+
+		// Update the user's quota config with the plan ID
+		if err := tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).Update("quota_plan_id", planID).Error; err != nil {
+			return fmt.Errorf("failed to assign user to plan: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // Allowance Management
@@ -376,46 +383,49 @@ func (s *QuotaServiceDefault) addAllowanceWithSource(userID uint, storage, uploa
 		return fmt.Errorf("invalid grant source: %s", source)
 	}
 
-	// Create storage allowance grant
-	if storage > 0 {
-		storageGrant := &models.AllowanceGrant{
-			UserID: userID,
-			Type:   models.GrantTypeStorage,
-			Source: source,
-			Bytes:  storage,
+	// Perform all grant creations atomically in a transaction
+	return s.ctx.DB().Transaction(func(tx *gorm.DB) error {
+		// Create storage allowance grant
+		if storage > 0 {
+			storageGrant := &models.AllowanceGrant{
+				UserID: userID,
+				Type:   models.GrantTypeStorage,
+				Source: source,
+				Bytes:  storage,
+			}
+			if err := s.grantManager.CreateAllowanceGrantLocked(userID, storageGrant, tx); err != nil {
+				return fmt.Errorf("failed to create storage allowance grant: %w", err)
+			}
 		}
-		if err := s.grantManager.CreateAllowanceGrant(userID, storageGrant); err != nil {
-			return fmt.Errorf("failed to create storage allowance grant: %w", err)
-		}
-	}
 
-	// Create upload allowance grant
-	if upload > 0 {
-		uploadGrant := &models.AllowanceGrant{
-			UserID: userID,
-			Type:   models.GrantTypeUpload,
-			Source: source,
-			Bytes:  upload,
+		// Create upload allowance grant
+		if upload > 0 {
+			uploadGrant := &models.AllowanceGrant{
+				UserID: userID,
+				Type:   models.GrantTypeUpload,
+				Source: source,
+				Bytes:  upload,
+			}
+			if err := s.grantManager.CreateAllowanceGrantLocked(userID, uploadGrant, tx); err != nil {
+				return fmt.Errorf("failed to create upload allowance grant: %w", err)
+			}
 		}
-		if err := s.grantManager.CreateAllowanceGrant(userID, uploadGrant); err != nil {
-			return fmt.Errorf("failed to create upload allowance grant: %w", err)
-		}
-	}
 
-	// Create download allowance grant
-	if download > 0 {
-		downloadGrant := &models.AllowanceGrant{
-			UserID: userID,
-			Type:   models.GrantTypeDownload,
-			Source: source,
-			Bytes:  download,
+		// Create download allowance grant
+		if download > 0 {
+			downloadGrant := &models.AllowanceGrant{
+				UserID: userID,
+				Type:   models.GrantTypeDownload,
+				Source: source,
+				Bytes:  download,
+			}
+			if err := s.grantManager.CreateAllowanceGrantLocked(userID, downloadGrant, tx); err != nil {
+				return fmt.Errorf("failed to create download allowance grant: %w", err)
+			}
 		}
-		if err := s.grantManager.CreateAllowanceGrant(userID, downloadGrant); err != nil {
-			return fmt.Errorf("failed to create download allowance grant: %w", err)
-		}
-	}
 
-	return nil
+		return nil
+	})
 }
 
 func (s *QuotaServiceDefault) DeductAllowance(userID uint, storage, upload, download uint64) error {

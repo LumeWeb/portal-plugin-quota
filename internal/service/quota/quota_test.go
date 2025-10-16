@@ -326,7 +326,7 @@ func TestQuotaServiceDefault_AddBonusAllowance_Success(t *testing.T) {
 		upload := uint64(testBytesMedium)
 		download := uint64(testBytesSmall)
 
-		mockGrantManager.On("CreateAllowanceGrant", userID, mock.AnythingOfType("*models.AllowanceGrant")).Return(nil)
+		mockGrantManager.On("CreateAllowanceGrantLocked", userID, mock.AnythingOfType("*models.AllowanceGrant"), mock.AnythingOfType("*gorm.DB")).Return(nil)
 
 		err := quotaService.AddBonusAllowance(userID, storage, upload, download)
 		require.NoError(t, err)

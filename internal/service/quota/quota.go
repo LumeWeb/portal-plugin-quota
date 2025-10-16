@@ -327,6 +327,12 @@ func (s *QuotaServiceDefault) AssignUserToPlan(userID uint, planID uint) error {
 		return fmt.Errorf("invalid user ID")
 	}
 
+	// Verify that the plan exists
+	_, err := s.planManager.GetQuotaPlanByID(uint64(planID))
+	if err != nil {
+		return fmt.Errorf("failed to verify quota plan existence: %w", err)
+	}
+
 	db := s.ctx.DB()
 
 	// Perform both operations atomically in a transaction

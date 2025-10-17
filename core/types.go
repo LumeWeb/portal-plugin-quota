@@ -139,3 +139,5 @@ const (
 	UsageTypeStorageAdd    = models.UsageTypeStorageAdd
 	UsageTypeStorageRemove = models.UsageTypeStorageRemove
 )
+
+type QuotaPlan = models.QuotaPlan

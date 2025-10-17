@@ -10,7 +10,11 @@ import (
 )
 
 func init() {
-	core.RegisterPlugin(core.PluginInfo{
+	core.RegisterPlugin(GetPluginInfo())
+}
+
+func GetPluginInfo() core.PluginInfo {
+	return core.PluginInfo{
 		ID:      internal.PLUGIN_NAME,
 		Version: build.GetInfo(),
 		Depends: []string{},
@@ -38,5 +42,5 @@ func init() {
 			core.DB_TYPE_MYSQL:  migrations.GetMySQL(),
 			core.DB_TYPE_SQLITE: migrations.GetSQLite(),
 		},
-	})
+	}
 }

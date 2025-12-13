@@ -3,6 +3,7 @@ package core
 import (
 	"time"
 
+	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
@@ -141,3 +142,4 @@ const (
 )
 
 type QuotaPlan = models.QuotaPlan
+type QuotaConfig = config.QuotaConfig

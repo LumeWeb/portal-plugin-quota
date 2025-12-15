@@ -8,7 +8,7 @@ require (
 	github.com/samber/lo v1.51.0
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/portal v0.4.2-0.20251008065049-d7c36fc0769c
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	gorm.io/gorm v1.30.1
 )
 

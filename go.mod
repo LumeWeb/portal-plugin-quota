@@ -5,7 +5,7 @@ go 1.24.3
 require (
 	github.com/Oudwins/zog v0.21.6
 	github.com/docker/go-units v0.5.0
-	github.com/samber/lo v1.51.0
+	github.com/samber/lo v1.52.0
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/portal v0.4.2-0.20251008065049-d7c36fc0769c
 	go.uber.org/zap v1.27.0

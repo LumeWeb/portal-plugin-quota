@@ -262,7 +262,7 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 	// If shared usage is disabled, skip recording (no user to charge)
 	// Anonymous downloads become effectively free from a quota perspective
 	if um.config == nil || !um.config.EnableSharedUsage {
-		um.logger.Info("Anonymous download not recorded (shared usage disabled)",
+		um.logger.Debug("Anonymous download not recorded (shared usage disabled)",
 			zap.Uint("uploadID", uploadID), zap.Uint64("bytes", bytes))
 		return nil
 	}
@@ -390,46 +390,6 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 	}
 
 	return nil
-}
-
-// calculateSharedUsage calculates how many users are sharing an object and the bytes per user
-// This method is only used for download operations
-func (um *UsageManager) calculateSharedUsage(uploadID uint, totalBytes uint64) (uint, uint64, error) {
-	// Check if pin service is available
-	if um.pinService == nil {
-		return 1, totalBytes, fmt.Errorf("pin service not available")
-	}
-
-	// Get all pins for this upload using the PinService
-	pins, err := um.pinService.GetPinsByUploadID(um.ctx, uploadID)
-	if err != nil {
-		return 1, totalBytes, fmt.Errorf("failed to get pins for upload: %w", err)
-	}
-
-	// Count unique users who have pinned this object
-	userCount := uint(0)
-	seenUsers := make(map[uint]bool)
-
-	for _, pin := range pins {
-		if !seenUsers[pin.UserID] {
-			seenUsers[pin.UserID] = true
-			userCount++
-		}
-	}
-
-	// If no users found, default to 1 (shouldn't happen but be safe)
-	if userCount == 0 {
-		userCount = 1
-	}
-
-	// Calculate shared bytes per user using configured precision
-	precision := 0
-	if um.config != nil {
-		precision = um.config.SharedUsagePrecision
-	}
-	sharedBytes := um.calculateSharedBytes(totalBytes, userCount, precision)
-
-	return userCount, sharedBytes, nil
 }
 
 // calculateSharedBytes calculates the bytes per user with configurable precision

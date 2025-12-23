@@ -630,6 +630,130 @@ func TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success(t *testing
 	}, testOptionsWithSharedUsageEnabled())
 }
 
+// TestUsageManager_RecordDownload_AnonymousNoPins_Skips tests anonymous download with no pinned users
+func TestUsageManager_RecordDownload_AnonymousNoPins_Skips(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		dataManager := testdata.NewTestDataManager(ctx)
+		uploadID := dataManager.NextUploadID()
+		bytes := uint64(testUsageBytesHuge)
+		ip := "192.168.1.1"
+
+		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
+		pins := []*models.Pin{}
+		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
+
+		usageManager := NewUsageManager(ctx)
+
+		// Anonymous download with no pinned users - should skip gracefully
+		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		require.NoError(t, err)
+
+		// Verify no usage details were recorded
+		var usageDetails []pluginModels.UserUsageDetail
+		err = ctx.DB().Find(&usageDetails).Error
+		require.NoError(t, err)
+		assert.Empty(t, usageDetails)
+
+		dataManager.Cleanup()
+	}, testOptionsWithSharedUsageEnabled())
+}
+
+// TestUsageManager_RecordDownload_AnonymousDuplicatePins_Deduplicates tests anonymous download with duplicate pins
+func TestUsageManager_RecordDownload_AnonymousDuplicatePins_Deduplicates(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		dataManager := testdata.NewTestDataManager(ctx)
+		uploadID := dataManager.NextUploadID()
+		bytes := uint64(testUsageBytesHuge)
+		ip := "192.168.1.1"
+
+		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
+
+		userID1 := dataManager.NextUserID()
+		userID2 := dataManager.NextUserID()
+		userID3 := dataManager.NextUserID()
+
+		pins := []*models.Pin{
+			{UserID: userID1},
+			{UserID: userID1}, // Duplicate
+			{UserID: userID2},
+			{UserID: userID2}, // Duplicate
+			{UserID: userID3},
+		}
+		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
+
+		limits := &testdata.TestUserLimits{
+			StorageLimit:       nil,
+			UploadDailyLimit:   nil,
+			DownloadDailyLimit: nil,
+			UploadTotalLimit:   nil,
+			DownloadTotalLimit: nil,
+		}
+		dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, limits)
+		dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, limits)
+		dataManager.CreateUser(userID3, pluginModels.EnforcementPolicyHardLimits, limits)
+
+		usageManager := NewUsageManager(ctx)
+
+		// Anonymous download - should deduplicate users correctly
+		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		require.NoError(t, err)
+
+		// Verify each unique user has exactly one usage record with correct shared bytes
+		for _, userID := range []uint{userID1, userID2, userID3} {
+			var usageDetails []pluginModels.UserUsageDetail
+			err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
+			require.NoError(t, err)
+			assert.Len(t, usageDetails, 1)
+			assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), usageDetails[0].Bytes)
+			assert.Equal(t, uint(testUserCountSmall), usageDetails[0].SharedWith)
+		}
+
+		dataManager.Cleanup()
+	}, testOptionsWithSharedUsageEnabled())
+}
+
+// TestUsageManager_RecordDownload_AnonymousPinServiceError_ReturnsError tests anonymous download with pin service error
+func TestUsageManager_RecordDownload_AnonymousPinServiceError_ReturnsError(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		dataManager := testdata.NewTestDataManager(ctx)
+		uploadID := dataManager.NextUploadID()
+		bytes := uint64(testUsageBytesHuge)
+		ip := "192.168.1.1"
+
+		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
+		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return([]*models.Pin{}, fmt.Errorf("pin service error"))
+
+		usageManager := NewUsageManager(ctx)
+
+		// Anonymous download with pin service error - should return error
+		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get pinned users")
+
+		dataManager.Cleanup()
+	}, testOptionsWithSharedUsageEnabled())
+}
+
+// TestUsageManager_RecordDownload_AnonymousPinServiceUnavailable_ReturnsError tests anonymous download with nil pin service
+func TestUsageManager_RecordDownload_AnonymousPinServiceUnavailable_ReturnsError(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		dataManager := testdata.NewTestDataManager(ctx)
+		uploadID := dataManager.NextUploadID()
+		bytes := uint64(testUsageBytesHuge)
+		ip := "192.168.1.1"
+
+		usageManager := NewUsageManager(ctx)
+		usageManager.pinService = nil
+
+		// Anonymous download with nil pin service - should return error
+		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "pin service not available")
+
+		dataManager.Cleanup()
+	}, testOptionsWithSharedUsageEnabled())
+}
+
 // TestUsageManager_RecordStorageChange_ValidInput_Success tests the RecordStorageChange method
 func TestUsageManager_RecordStorageChange_ValidInput_Success(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
@@ -713,118 +837,6 @@ func TestUsageManager_RecordStorageChange_Remove_Success(t *testing.T) {
 
 		dataManager.Cleanup()
 	}, testOptionsWithSharedUsageDisabled())
-}
-
-// TestUsageManager_calculateSharedUsage_MultipleScenarios_Success tests the calculateSharedUsage method
-func TestUsageManager_calculateSharedUsage_MultipleScenarios_Success(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		dataManager := testdata.NewTestDataManager(ctx)
-		userID := dataManager.NextUserID()
-		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testUsageBytesHuge)
-
-		var mockPinService = core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
-		pins := []*models.Pin{
-			{UserID: userID},
-			{UserID: dataManager.NextUserID()},
-			{UserID: dataManager.NextUserID()},
-		}
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
-
-		usageManager := NewUsageManager(ctx)
-
-		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
-		require.NoError(t, err)
-		assert.Equal(t, uint(testUserCountSmall), sharedWith)
-		assert.Equal(t, uint64(testUsageBytesMedium), sharedBytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
-
-		dataManager.Cleanup()
-	}, testOptionsWithSharedUsageEnabled())
-
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		dataManager := testdata.NewTestDataManager(ctx)
-		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testUsageBytesExtraLarge)
-
-		// Simulate pin service unavailability by getting the service and setting it to nil
-		// This test now checks that the usage manager properly handles nil pin service
-		usageManager := NewUsageManager(ctx)
-		usageManager.pinService = nil
-
-		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "pin service not available")
-		assert.Equal(t, uint(1), sharedWith)
-		assert.Equal(t, totalBytes, sharedBytes)
-
-		dataManager.Cleanup()
-	}, testOptionsWithSharedUsageEnabled())
-
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		dataManager := testdata.NewTestDataManager(ctx)
-		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testUsageBytesExtraLarge)
-
-		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return([]*models.Pin{}, fmt.Errorf("pin service error"))
-
-		usageManager := NewUsageManager(ctx)
-
-		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get pins for upload")
-		assert.Equal(t, uint(1), sharedWith)
-		assert.Equal(t, totalBytes, sharedBytes)
-
-		dataManager.Cleanup()
-	}, testOptionsWithSharedUsageEnabled())
-
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		dataManager := testdata.NewTestDataManager(ctx)
-		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testUsageBytesExtraLarge)
-
-		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
-		pins := []*models.Pin{}
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
-
-		usageManager := NewUsageManager(ctx)
-
-		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
-		require.NoError(t, err)
-		assert.Equal(t, uint(1), sharedWith) // Default to 1
-		assert.Equal(t, totalBytes, sharedBytes)
-
-		dataManager.Cleanup()
-	}, testOptionsWithSharedUsageEnabled())
-
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		dataManager := testdata.NewTestDataManager(ctx)
-		userID := dataManager.NextUserID()
-		uploadID := dataManager.NextUploadID()
-		totalBytes := uint64(testUsageBytesHuge)
-
-		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
-		user2ID := dataManager.NextUserID()
-		user3ID := dataManager.NextUserID()
-		pins := []*models.Pin{
-			{UserID: userID},
-			{UserID: userID}, // Duplicate
-			{UserID: user2ID},
-			{UserID: user2ID}, // Duplicate
-			{UserID: user3ID},
-		}
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
-
-		usageManager := NewUsageManager(ctx)
-
-		sharedWith, sharedBytes, err := usageManager.calculateSharedUsage(uploadID, totalBytes)
-		require.NoError(t, err)
-		assert.Equal(t, uint(testUserCountSmall), sharedWith)                       // Unique users only
-		assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), sharedBytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
-
-		dataManager.Cleanup()
-	}, testOptionsWithSharedUsageEnabled())
 }
 
 // TestUsageManager_calculateSharedBytes_MultipleScenarios_Success tests the calculateSharedBytes method

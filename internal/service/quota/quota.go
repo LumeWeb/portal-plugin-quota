@@ -59,6 +59,9 @@ func NewQuotaService() (portalCore.Service, []portalCore.ContextBuilderOption, e
 			// Initialize config manager with all required dependencies
 			service.configManager = managers.NewConfigManager(ctx, service.limitResolver, service.planManager, policyEnforcers)
 
+			// Register event listeners
+			service.registerEventListeners()
+
 			return nil
 		}),
 	), nil

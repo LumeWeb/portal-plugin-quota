@@ -566,25 +566,28 @@ func TestUsageManager_RecordDownload_ValidInput_Success(t *testing.T) {
 	}, testOptionsWithSharedUsageDisabled())
 }
 
-// TestUsageManager_RecordDownload_WithSharedUsage_Success tests download recording with shared usage
-func TestUsageManager_RecordDownload_WithSharedUsage_Success(t *testing.T) {
+// TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success tests anonymous download recording with shared usage
+func TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
-		userID := dataManager.NextUserID()
 		uploadID := dataManager.NextUploadID()
 		bytes := uint64(testUsageBytesHuge)
 		ip := "192.168.1.1"
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
 
+		userID1 := dataManager.NextUserID()
+		userID2 := dataManager.NextUserID()
+		userID3 := dataManager.NextUserID()
+
 		pins := []*models.Pin{
-			{UserID: userID},
-			{UserID: dataManager.NextUserID()},
-			{UserID: dataManager.NextUserID()},
+			{UserID: userID1},
+			{UserID: userID2},
+			{UserID: userID3},
 		}
 		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
 
-		// Create test user
+		// Create test users
 		limits := &testdata.TestUserLimits{
 			StorageLimit:       nil,
 			UploadDailyLimit:   nil,
@@ -592,31 +595,36 @@ func TestUsageManager_RecordDownload_WithSharedUsage_Success(t *testing.T) {
 			UploadTotalLimit:   nil,
 			DownloadTotalLimit: nil,
 		}
-		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
+		dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, limits)
+		dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, limits)
+		dataManager.CreateUser(userID3, pluginModels.EnforcementPolicyHardLimits, limits)
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordDownload(userID, uploadID, bytes, ip)
+		// Anonymous download (userID = 0) - should be shared among all pinned users
+		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
 		require.NoError(t, err)
 
-		// Verify the usage detail was recorded with shared calculation
-		var usageDetails []pluginModels.UserUsageDetail
-		err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
-		require.NoError(t, err)
-		assert.Len(t, usageDetails, 1)
-		assert.Equal(t, pluginModels.UsageTypeDownload, usageDetails[0].Type)
-		assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), usageDetails[0].Bytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
-		assert.Equal(t, ip, usageDetails[0].IP)
-		assert.Equal(t, uint(testUserCountSmall), usageDetails[0].SharedWith)
+		// Verify the usage detail was recorded with shared calculation for each pinned user
+		for _, userID := range []uint{userID1, userID2, userID3} {
+			var usageDetails []pluginModels.UserUsageDetail
+			err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
+			require.NoError(t, err)
+			assert.Len(t, usageDetails, 1)
+			assert.Equal(t, pluginModels.UsageTypeDownload, usageDetails[0].Type)
+			assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), usageDetails[0].Bytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
+			assert.Equal(t, ip, usageDetails[0].IP)
+			assert.Equal(t, uint(testUserCountSmall), usageDetails[0].SharedWith)
 
-		// Verify the daily quota was updated
-		today := time.Now().UTC().Truncate(24 * time.Hour)
-		var dailyQuota pluginModels.UserQuota
-		err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
-		require.NoError(t, err)
-		assert.Equal(t, uint64(0), dailyQuota.BytesUploaded)
-		assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), dailyQuota.BytesDownloaded)
-		assert.Equal(t, uint64(0), dailyQuota.BytesStored)
+			// Verify the daily quota was updated
+			today := time.Now().UTC().Truncate(24 * time.Hour)
+			var dailyQuota pluginModels.UserQuota
+			err = ctx.DB().Where("user_id = ? AND date = ?", userID, today).First(&dailyQuota).Error
+			require.NoError(t, err)
+			assert.Equal(t, uint64(0), dailyQuota.BytesUploaded)
+			assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), dailyQuota.BytesDownloaded)
+			assert.Equal(t, uint64(0), dailyQuota.BytesStored)
+		}
 
 		dataManager.Cleanup()
 	}, testOptionsWithSharedUsageEnabled())

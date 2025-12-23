@@ -5,10 +5,12 @@ import (
 	"math"
 	"time"
 
+	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	portalCore "go.lumeweb.com/portal/core"
+	portalModels "go.lumeweb.com/portal/db/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -16,11 +18,12 @@ import (
 // UsageManager handles centralized usage recording and shared usage calculations
 // Implements core.UsageManager interface
 type UsageManager struct {
-	ctx        portalCore.Context
-	db         *gorm.DB
-	logger     *portalCore.Logger
-	config     *config.QuotaConfig
-	pinService portalCore.PinService
+	ctx           portalCore.Context
+	db            *gorm.DB
+	logger        *portalCore.Logger
+	config        *config.QuotaConfig
+	pinService    portalCore.PinService
+	uploadService portalCore.UploadService
 }
 
 // NewUsageManager creates a new usage manager
@@ -28,11 +31,12 @@ func NewUsageManager(ctx portalCore.Context) *UsageManager {
 	quotaConfig := portalCore.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
 
 	return &UsageManager{
-		ctx:        ctx,
-		db:         ctx.DB(),
-		logger:     ctx.NamedLogger("quota.UsageManager"),
-		config:     quotaConfig,
-		pinService: portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
+		ctx:           ctx,
+		db:            ctx.DB(),
+		logger:        ctx.NamedLogger("quota.UsageManager"),
+		config:        quotaConfig,
+		pinService:    portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
+		uploadService: portalCore.GetService[portalCore.UploadService](ctx, portalCore.UPLOAD_SERVICE),
 	}
 }
 
@@ -204,40 +208,32 @@ func (um *UsageManager) GetTotalBytesByType(userID uint, usageType pluginCore.Us
 
 // RecordDownload records download usage for a user
 // Implements core.UsageManager.RecordDownload
+//
+// If userID == 0, the download is treated as anonymous and bytes are
+// distributed among all users who have pinned the upload (shared usage).
+// If userID > 0, the user pays the full download bytes.
 func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
-	if err := um.validateUserID(userID); err != nil {
-		return err
-	}
 	if err := um.validateBytes(bytes); err != nil {
 		return err
 	}
 
-	// For downloads, usage may be shared if multiple users have pinned the same object
-	sharedWith := uint(1)
-	sharedBytes := bytes
-
-	if um.config != nil && um.config.EnableSharedUsage {
-		// Calculate shared usage
-		calculatedSharedWith, calculatedSharedBytes, err := um.calculateSharedUsage(uploadID, bytes)
-		if err != nil {
-			um.logger.Warn("Failed to calculate shared usage, falling back to individual usage", zap.Uint("uploadID", uploadID), zap.Uint("userID", userID), zap.Error(err))
-		} else {
-			sharedWith = calculatedSharedWith
-			sharedBytes = calculatedSharedBytes
-			// Ensure shared bytes is at least 1 to satisfy model validation
-			if sharedBytes == 0 && bytes > 0 {
-				sharedBytes = 1
-			}
-		}
+	// Anonymous download (userID == 0) - distribute among pinners
+	if userID == 0 {
+		return um.recordAnonymousDownload(uploadID, bytes, ip)
 	}
 
+	if err := um.validateUserID(userID); err != nil {
+		return err
+	}
+
+	// Authenticated user pays full bytes - their download, their responsibility
 	detail := &pluginModels.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
 		Type:       pluginModels.UsageTypeDownload,
-		Bytes:      sharedBytes,
+		Bytes:      bytes,
 		IP:         ip,
-		SharedWith: sharedWith,
+		SharedWith: 1, // Not shared - user pays in full
 		Timestamp:  time.Now().UTC(),
 	}
 
@@ -245,12 +241,94 @@ func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip s
 		return fmt.Errorf("failed to record download usage detail: %w", err)
 	}
 
-	// Update daily usage with the actual bytes consumed by this user
-	if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(sharedBytes)); err != nil {
+	// Update daily usage
+	if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(bytes)); err != nil {
 		return fmt.Errorf("failed to update daily download usage: %w", err)
 	}
 
 	return nil
+}
+
+// recordAnonymousDownload handles anonymous downloads by recording shared usage
+// for all users who have pinned the upload.
+//
+// Shared usage is required for anonymous downloads because:
+// 1. Anonymous users don't exist in the quota system (no quota limits)
+// 2. Users who pin content make it accessible and share the responsibility
+// 3. Fair attribution distributes the cost among those who made content available
+//
+// When EnableSharedUsage = false, anonymous downloads are skipped (no quota tracking).
+func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip string) error {
+	// If shared usage is disabled, skip recording (no user to charge)
+	// Anonymous downloads become effectively free from a quota perspective
+	if um.config == nil || !um.config.EnableSharedUsage {
+		um.logger.Info("Anonymous download not recorded (shared usage disabled)",
+			zap.Uint("uploadID", uploadID), zap.Uint64("bytes", bytes))
+		return nil
+	}
+
+	// Get all users who have pinned this upload
+	pinnedUsers, err := um.getPinnedUsersForUpload(uploadID)
+	if err != nil {
+		return fmt.Errorf("failed to get pinned users: %w", err)
+	}
+
+	if len(pinnedUsers) == 0 {
+		um.logger.Debug("No pinned users for upload, skipping anonymous download recording",
+			zap.Uint("uploadID", uploadID))
+		return nil
+	}
+
+	// Calculate shared bytes per user
+	userCount := uint(len(pinnedUsers))
+	sharedBytes := um.calculateSharedBytes(bytes, userCount, um.config.SharedUsagePrecision)
+
+	// Record usage for each pinned user
+	for _, userID := range pinnedUsers {
+		detail := &pluginModels.UserUsageDetail{
+			UserID:     userID,
+			UploadID:   uploadID,
+			Type:       pluginModels.UsageTypeDownload,
+			Bytes:      sharedBytes,
+			IP:         ip,
+			SharedWith: userCount,
+			Timestamp:  time.Now().UTC(),
+		}
+
+		if err := um.RecordUserUsageDetail(detail); err != nil {
+			um.logger.Warn("Failed to record anonymous download usage for user",
+				zap.Uint("userID", userID),
+				zap.Uint("uploadID", uploadID),
+				zap.Error(err))
+			continue
+		}
+
+		// Update daily usage
+		if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(sharedBytes)); err != nil {
+			um.logger.Warn("Failed to update daily download usage for user",
+				zap.Uint("userID", userID),
+				zap.Uint("uploadID", uploadID),
+				zap.Error(err))
+		}
+	}
+
+	return nil
+}
+
+// getPinnedUsersForUpload returns all user IDs that have pinned the given upload
+func (um *UsageManager) getPinnedUsersForUpload(uploadID uint) ([]uint, error) {
+	if um.pinService == nil {
+		return nil, fmt.Errorf("pin service not available")
+	}
+
+	pins, err := um.pinService.GetPinsByUploadID(um.ctx, uploadID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pins for upload: %w", err)
+	}
+
+	return lo.Uniq(lo.Map(pins, func(pin *portalModels.Pin, _ int) uint {
+		return pin.UserID
+	})), nil
 }
 
 // RecordStorageChange records storage usage changes for a user
@@ -502,7 +580,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 		pluginModels.UsageTypeStorageAdd,
 		pluginModels.UsageTypeStorageRemove,
 	}
-	
+
 	for _, usageType := range usageTypes {
 		bytes, err := um.GetAggregatedUsageByType(userID, pluginCore.UsageType(usageType))
 		if err != nil {

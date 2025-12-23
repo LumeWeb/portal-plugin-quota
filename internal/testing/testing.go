@@ -19,7 +19,7 @@ func TestOptions() coreTesting.TestContextBuilderOption {
 func TestOptionsWithConfig(config *config.QuotaConfig) coreTesting.TestContextBuilderOption {
 	return coreTesting.CombineOptions(coreTesting.NewMockPluginBuilder(internal.PLUGIN_NAME).
 		WithMigrations(core.DBMigration{core.DB_TYPE_SQLITE: migrations.GetSQLite()}).
-		WithMockServiceFactory(pluginCore.QUOTA_SERVICE, pluginCore.NewMockQuotaService).BuilderOption(),
-		coreTesting.WithServiceConfig(internal.PLUGIN_NAME, pluginCore.QUOTA_SERVICE, config),
+		WithMockServiceFactory(pluginCore.QUOTA_SERVICE, pluginCore.NewMockQuotaService).
+		WithServiceConfig(pluginCore.QUOTA_SERVICE, config).BuilderOption(),
 	)
 }

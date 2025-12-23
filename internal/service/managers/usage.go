@@ -18,12 +18,11 @@ import (
 // UsageManager handles centralized usage recording and shared usage calculations
 // Implements core.UsageManager interface
 type UsageManager struct {
-	ctx           portalCore.Context
-	db            *gorm.DB
-	logger        *portalCore.Logger
-	config        *config.QuotaConfig
-	pinService    portalCore.PinService
-	uploadService portalCore.UploadService
+	ctx        portalCore.Context
+	db         *gorm.DB
+	logger     *portalCore.Logger
+	config     *config.QuotaConfig
+	pinService portalCore.PinService
 }
 
 // NewUsageManager creates a new usage manager
@@ -31,12 +30,11 @@ func NewUsageManager(ctx portalCore.Context) *UsageManager {
 	quotaConfig := portalCore.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
 
 	return &UsageManager{
-		ctx:           ctx,
-		db:            ctx.DB(),
-		logger:        ctx.NamedLogger("quota.UsageManager"),
-		config:        quotaConfig,
-		pinService:    portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
-		uploadService: portalCore.GetService[portalCore.UploadService](ctx, portalCore.UPLOAD_SERVICE),
+		ctx:        ctx,
+		db:         ctx.DB(),
+		logger:     ctx.NamedLogger("quota.UsageManager"),
+		config:     quotaConfig,
+		pinService: portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
 	}
 }
 
@@ -284,6 +282,7 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 	sharedBytes := um.calculateSharedBytes(bytes, userCount, um.config.SharedUsagePrecision)
 
 	// Record usage for each pinned user
+	recordingFailures := 0
 	for _, userID := range pinnedUsers {
 		detail := &pluginModels.UserUsageDetail{
 			UserID:     userID,
@@ -300,6 +299,7 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 				zap.Uint("userID", userID),
 				zap.Uint("uploadID", uploadID),
 				zap.Error(err))
+			recordingFailures++
 			continue
 		}
 
@@ -309,7 +309,17 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 				zap.Uint("userID", userID),
 				zap.Uint("uploadID", uploadID),
 				zap.Error(err))
+			recordingFailures++
 		}
+	}
+
+	if recordingFailures > 0 {
+		um.logger.Warn("Partial failure recording anonymous download",
+			zap.Uint("uploadID", uploadID),
+			zap.Uint64("bytes", bytes),
+			zap.Int("totalUsers", len(pinnedUsers)),
+			zap.Int("failures", recordingFailures),
+			zap.Int("successes", len(pinnedUsers)-recordingFailures))
 	}
 
 	return nil

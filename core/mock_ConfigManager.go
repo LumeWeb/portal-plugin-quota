@@ -5,6 +5,8 @@
 package core
 
 import (
+	"context"
+
 	mock "github.com/stretchr/testify/mock"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
@@ -37,8 +39,8 @@ func (_m *MockConfigManager) EXPECT() *MockConfigManager_Expecter {
 }
 
 // GetPolicyEnforcer provides a mock function for the type MockConfigManager
-func (_mock *MockConfigManager) GetPolicyEnforcer(userID uint) (PolicyEnforcer, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockConfigManager) GetPolicyEnforcer(ctx context.Context, userID uint) (PolicyEnforcer, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetPolicyEnforcer")
@@ -46,18 +48,18 @@ func (_mock *MockConfigManager) GetPolicyEnforcer(userID uint) (PolicyEnforcer, 
 
 	var r0 PolicyEnforcer
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (PolicyEnforcer, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (PolicyEnforcer, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) PolicyEnforcer); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) PolicyEnforcer); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(PolicyEnforcer)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -70,19 +72,25 @@ type MockConfigManager_GetPolicyEnforcer_Call struct {
 }
 
 // GetPolicyEnforcer is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockConfigManager_Expecter) GetPolicyEnforcer(userID interface{}) *MockConfigManager_GetPolicyEnforcer_Call {
-	return &MockConfigManager_GetPolicyEnforcer_Call{Call: _e.mock.On("GetPolicyEnforcer", userID)}
+func (_e *MockConfigManager_Expecter) GetPolicyEnforcer(ctx interface{}, userID interface{}) *MockConfigManager_GetPolicyEnforcer_Call {
+	return &MockConfigManager_GetPolicyEnforcer_Call{Call: _e.mock.On("GetPolicyEnforcer", ctx, userID)}
 }
 
-func (_c *MockConfigManager_GetPolicyEnforcer_Call) Run(run func(userID uint)) *MockConfigManager_GetPolicyEnforcer_Call {
+func (_c *MockConfigManager_GetPolicyEnforcer_Call) Run(run func(ctx context.Context, userID uint)) *MockConfigManager_GetPolicyEnforcer_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -93,14 +101,14 @@ func (_c *MockConfigManager_GetPolicyEnforcer_Call) Return(policyEnforcer Policy
 	return _c
 }
 
-func (_c *MockConfigManager_GetPolicyEnforcer_Call) RunAndReturn(run func(userID uint) (PolicyEnforcer, error)) *MockConfigManager_GetPolicyEnforcer_Call {
+func (_c *MockConfigManager_GetPolicyEnforcer_Call) RunAndReturn(run func(ctx context.Context, userID uint) (PolicyEnforcer, error)) *MockConfigManager_GetPolicyEnforcer_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUserAllowanceGrants provides a mock function for the type MockConfigManager
-func (_mock *MockConfigManager) GetUserAllowanceGrants(userID uint) ([]*models.AllowanceGrant, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockConfigManager) GetUserAllowanceGrants(ctx context.Context, userID uint) ([]*models.AllowanceGrant, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserAllowanceGrants")
@@ -108,18 +116,18 @@ func (_mock *MockConfigManager) GetUserAllowanceGrants(userID uint) ([]*models.A
 
 	var r0 []*models.AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) ([]*models.AllowanceGrant, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) ([]*models.AllowanceGrant, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) []*models.AllowanceGrant); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) []*models.AllowanceGrant); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*models.AllowanceGrant)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -132,19 +140,25 @@ type MockConfigManager_GetUserAllowanceGrants_Call struct {
 }
 
 // GetUserAllowanceGrants is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockConfigManager_Expecter) GetUserAllowanceGrants(userID interface{}) *MockConfigManager_GetUserAllowanceGrants_Call {
-	return &MockConfigManager_GetUserAllowanceGrants_Call{Call: _e.mock.On("GetUserAllowanceGrants", userID)}
+func (_e *MockConfigManager_Expecter) GetUserAllowanceGrants(ctx interface{}, userID interface{}) *MockConfigManager_GetUserAllowanceGrants_Call {
+	return &MockConfigManager_GetUserAllowanceGrants_Call{Call: _e.mock.On("GetUserAllowanceGrants", ctx, userID)}
 }
 
-func (_c *MockConfigManager_GetUserAllowanceGrants_Call) Run(run func(userID uint)) *MockConfigManager_GetUserAllowanceGrants_Call {
+func (_c *MockConfigManager_GetUserAllowanceGrants_Call) Run(run func(ctx context.Context, userID uint)) *MockConfigManager_GetUserAllowanceGrants_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -155,14 +169,14 @@ func (_c *MockConfigManager_GetUserAllowanceGrants_Call) Return(allowanceGrants 
 	return _c
 }
 
-func (_c *MockConfigManager_GetUserAllowanceGrants_Call) RunAndReturn(run func(userID uint) ([]*models.AllowanceGrant, error)) *MockConfigManager_GetUserAllowanceGrants_Call {
+func (_c *MockConfigManager_GetUserAllowanceGrants_Call) RunAndReturn(run func(ctx context.Context, userID uint) ([]*models.AllowanceGrant, error)) *MockConfigManager_GetUserAllowanceGrants_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUserAllowanceGrantsByType provides a mock function for the type MockConfigManager
-func (_mock *MockConfigManager) GetUserAllowanceGrantsByType(userID uint, grantType models.GrantType) ([]*models.AllowanceGrant, error) {
-	ret := _mock.Called(userID, grantType)
+func (_mock *MockConfigManager) GetUserAllowanceGrantsByType(ctx context.Context, userID uint, grantType models.GrantType) ([]*models.AllowanceGrant, error) {
+	ret := _mock.Called(ctx, userID, grantType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserAllowanceGrantsByType")
@@ -170,18 +184,18 @@ func (_mock *MockConfigManager) GetUserAllowanceGrantsByType(userID uint, grantT
 
 	var r0 []*models.AllowanceGrant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, models.GrantType) ([]*models.AllowanceGrant, error)); ok {
-		return returnFunc(userID, grantType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, models.GrantType) ([]*models.AllowanceGrant, error)); ok {
+		return returnFunc(ctx, userID, grantType)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, models.GrantType) []*models.AllowanceGrant); ok {
-		r0 = returnFunc(userID, grantType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, models.GrantType) []*models.AllowanceGrant); ok {
+		r0 = returnFunc(ctx, userID, grantType)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*models.AllowanceGrant)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, models.GrantType) error); ok {
-		r1 = returnFunc(userID, grantType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, models.GrantType) error); ok {
+		r1 = returnFunc(ctx, userID, grantType)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -194,25 +208,31 @@ type MockConfigManager_GetUserAllowanceGrantsByType_Call struct {
 }
 
 // GetUserAllowanceGrantsByType is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - grantType models.GrantType
-func (_e *MockConfigManager_Expecter) GetUserAllowanceGrantsByType(userID interface{}, grantType interface{}) *MockConfigManager_GetUserAllowanceGrantsByType_Call {
-	return &MockConfigManager_GetUserAllowanceGrantsByType_Call{Call: _e.mock.On("GetUserAllowanceGrantsByType", userID, grantType)}
+func (_e *MockConfigManager_Expecter) GetUserAllowanceGrantsByType(ctx interface{}, userID interface{}, grantType interface{}) *MockConfigManager_GetUserAllowanceGrantsByType_Call {
+	return &MockConfigManager_GetUserAllowanceGrantsByType_Call{Call: _e.mock.On("GetUserAllowanceGrantsByType", ctx, userID, grantType)}
 }
 
-func (_c *MockConfigManager_GetUserAllowanceGrantsByType_Call) Run(run func(userID uint, grantType models.GrantType)) *MockConfigManager_GetUserAllowanceGrantsByType_Call {
+func (_c *MockConfigManager_GetUserAllowanceGrantsByType_Call) Run(run func(ctx context.Context, userID uint, grantType models.GrantType)) *MockConfigManager_GetUserAllowanceGrantsByType_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 models.GrantType
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(models.GrantType)
+			arg1 = args[1].(uint)
+		}
+		var arg2 models.GrantType
+		if args[2] != nil {
+			arg2 = args[2].(models.GrantType)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -223,14 +243,14 @@ func (_c *MockConfigManager_GetUserAllowanceGrantsByType_Call) Return(allowanceG
 	return _c
 }
 
-func (_c *MockConfigManager_GetUserAllowanceGrantsByType_Call) RunAndReturn(run func(userID uint, grantType models.GrantType) ([]*models.AllowanceGrant, error)) *MockConfigManager_GetUserAllowanceGrantsByType_Call {
+func (_c *MockConfigManager_GetUserAllowanceGrantsByType_Call) RunAndReturn(run func(ctx context.Context, userID uint, grantType models.GrantType) ([]*models.AllowanceGrant, error)) *MockConfigManager_GetUserAllowanceGrantsByType_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUserQuotaConfig provides a mock function for the type MockConfigManager
-func (_mock *MockConfigManager) GetUserQuotaConfig(userID uint) (*models.UserQuotaConfig, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockConfigManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*models.UserQuotaConfig, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserQuotaConfig")
@@ -238,18 +258,18 @@ func (_mock *MockConfigManager) GetUserQuotaConfig(userID uint) (*models.UserQuo
 
 	var r0 *models.UserQuotaConfig
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (*models.UserQuotaConfig, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (*models.UserQuotaConfig, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) *models.UserQuotaConfig); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) *models.UserQuotaConfig); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*models.UserQuotaConfig)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -262,19 +282,25 @@ type MockConfigManager_GetUserQuotaConfig_Call struct {
 }
 
 // GetUserQuotaConfig is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockConfigManager_Expecter) GetUserQuotaConfig(userID interface{}) *MockConfigManager_GetUserQuotaConfig_Call {
-	return &MockConfigManager_GetUserQuotaConfig_Call{Call: _e.mock.On("GetUserQuotaConfig", userID)}
+func (_e *MockConfigManager_Expecter) GetUserQuotaConfig(ctx interface{}, userID interface{}) *MockConfigManager_GetUserQuotaConfig_Call {
+	return &MockConfigManager_GetUserQuotaConfig_Call{Call: _e.mock.On("GetUserQuotaConfig", ctx, userID)}
 }
 
-func (_c *MockConfigManager_GetUserQuotaConfig_Call) Run(run func(userID uint)) *MockConfigManager_GetUserQuotaConfig_Call {
+func (_c *MockConfigManager_GetUserQuotaConfig_Call) Run(run func(ctx context.Context, userID uint)) *MockConfigManager_GetUserQuotaConfig_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -285,14 +311,14 @@ func (_c *MockConfigManager_GetUserQuotaConfig_Call) Return(userQuotaConfig *mod
 	return _c
 }
 
-func (_c *MockConfigManager_GetUserQuotaConfig_Call) RunAndReturn(run func(userID uint) (*models.UserQuotaConfig, error)) *MockConfigManager_GetUserQuotaConfig_Call {
+func (_c *MockConfigManager_GetUserQuotaConfig_Call) RunAndReturn(run func(ctx context.Context, userID uint) (*models.UserQuotaConfig, error)) *MockConfigManager_GetUserQuotaConfig_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ResolveEffectiveLimits provides a mock function for the type MockConfigManager
-func (_mock *MockConfigManager) ResolveEffectiveLimits(userID uint) (*EffectiveLimits, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockConfigManager) ResolveEffectiveLimits(ctx context.Context, userID uint) (*EffectiveLimits, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ResolveEffectiveLimits")
@@ -300,18 +326,18 @@ func (_mock *MockConfigManager) ResolveEffectiveLimits(userID uint) (*EffectiveL
 
 	var r0 *EffectiveLimits
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (*EffectiveLimits, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (*EffectiveLimits, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) *EffectiveLimits); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) *EffectiveLimits); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*EffectiveLimits)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -324,19 +350,25 @@ type MockConfigManager_ResolveEffectiveLimits_Call struct {
 }
 
 // ResolveEffectiveLimits is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockConfigManager_Expecter) ResolveEffectiveLimits(userID interface{}) *MockConfigManager_ResolveEffectiveLimits_Call {
-	return &MockConfigManager_ResolveEffectiveLimits_Call{Call: _e.mock.On("ResolveEffectiveLimits", userID)}
+func (_e *MockConfigManager_Expecter) ResolveEffectiveLimits(ctx interface{}, userID interface{}) *MockConfigManager_ResolveEffectiveLimits_Call {
+	return &MockConfigManager_ResolveEffectiveLimits_Call{Call: _e.mock.On("ResolveEffectiveLimits", ctx, userID)}
 }
 
-func (_c *MockConfigManager_ResolveEffectiveLimits_Call) Run(run func(userID uint)) *MockConfigManager_ResolveEffectiveLimits_Call {
+func (_c *MockConfigManager_ResolveEffectiveLimits_Call) Run(run func(ctx context.Context, userID uint)) *MockConfigManager_ResolveEffectiveLimits_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -347,7 +379,7 @@ func (_c *MockConfigManager_ResolveEffectiveLimits_Call) Return(effectiveLimits 
 	return _c
 }
 
-func (_c *MockConfigManager_ResolveEffectiveLimits_Call) RunAndReturn(run func(userID uint) (*EffectiveLimits, error)) *MockConfigManager_ResolveEffectiveLimits_Call {
+func (_c *MockConfigManager_ResolveEffectiveLimits_Call) RunAndReturn(run func(ctx context.Context, userID uint) (*EffectiveLimits, error)) *MockConfigManager_ResolveEffectiveLimits_Call {
 	_c.Call.Return(run)
 	return _c
 }

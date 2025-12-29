@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/docker/go-units"
@@ -72,27 +73,36 @@ func (b *BasePolicyEnforcer) validateStorageRecordParams(userID, uploadID uint, 
 }
 
 // delegateRecordUpload delegates to usageManager.RecordUpload after validation
-func (b *BasePolicyEnforcer) delegateRecordUpload(userID, uploadID uint, bytes uint64, ip string) error {
+func (b *BasePolicyEnforcer) delegateRecordUpload(ctx context.Context, userID, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "BasePolicyEnforcer.delegateRecordUpload")
+	defer span.End()
+
 	if err := b.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
-	return b.usageManager.RecordUpload(userID, uploadID, bytes, ip)
+	return b.usageManager.RecordUpload(ctx, userID, uploadID, bytes, ip)
 }
 
 // delegateRecordDownload delegates to usageManager.RecordDownload after validation
-func (b *BasePolicyEnforcer) delegateRecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
+func (b *BasePolicyEnforcer) delegateRecordDownload(ctx context.Context, userID, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "BasePolicyEnforcer.delegateRecordDownload")
+	defer span.End()
+
 	if err := b.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
-	return b.usageManager.RecordDownload(userID, uploadID, bytes, ip)
+	return b.usageManager.RecordDownload(ctx, userID, uploadID, bytes, ip)
 }
 
 // delegateRecordStorageChange delegates to usageManager.RecordStorageChange after validation
-func (b *BasePolicyEnforcer) delegateRecordStorageChange(userID, uploadID uint, bytes int64, ip string) error {
+func (b *BasePolicyEnforcer) delegateRecordStorageChange(ctx context.Context, userID, uploadID uint, bytes int64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "BasePolicyEnforcer.delegateRecordStorageChange")
+	defer span.End()
+
 	if err := b.validateStorageRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
-	return b.usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
+	return b.usageManager.RecordStorageChange(ctx, userID, uploadID, bytes, ip)
 }
 
 // QuotaResultBuilder helps build quota check results with a fluent interface
@@ -240,4 +250,45 @@ func (b *BasePolicyEnforcer) applyLimitWithOptions(dest **uint64, source int64, 
 
 	*dest = convertedValue
 	return nil
+}
+
+// getPolicyLabel returns the metric label for a given enforcement policy
+func (b *BasePolicyEnforcer) getPolicyLabel(policy models.EnforcementPolicy) string {
+	switch policy {
+	case models.EnforcementPolicyHardLimits:
+		return LabelPolicyHardLimits
+	case models.EnforcementPolicyThreshold:
+		return LabelPolicyThreshold
+	case models.EnforcementPolicyUnlimited:
+		return LabelPolicyUnlimited
+	case models.EnforcementPolicyAllowance:
+		return LabelPolicyAllowance
+	default:
+		return "unknown"
+	}
+}
+
+// trackPolicyCheck wraps a policy check with duration, error, and result metrics
+func (b *BasePolicyEnforcer) trackPolicyCheck(policy models.EnforcementPolicy, fn func() (pluginCore.QuotaCheckResult, error)) (pluginCore.QuotaCheckResult, error) {
+	policyLabel := b.getPolicyLabel(policy)
+	result, err := core.MetricTrackResult(
+		PolicyDuration.WithLabelValues(policyLabel),
+		PolicyChecks.WithLabelValues(policyLabel, LabelResultError),
+		fn,
+	)
+
+	if err == nil {
+		// Track the result label based on the QuotaCheckResult
+		if result.Allowed {
+			if result.Reason == models.QuotaCheckReasonWarningThreshold {
+				PolicyChecks.WithLabelValues(policyLabel, LabelResultWarning).Inc()
+			} else {
+				PolicyChecks.WithLabelValues(policyLabel, LabelResultAllowed).Inc()
+			}
+		} else {
+			PolicyChecks.WithLabelValues(policyLabel, LabelResultDenied).Inc()
+		}
+	}
+
+	return result, err
 }

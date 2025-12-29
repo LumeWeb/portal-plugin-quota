@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -301,7 +302,7 @@ func createMockGrantManager(t *testing.T) *pluginCore.MockGrantManager {
 }
 
 // RunBoundaryConditionTests executes common boundary condition tests for quota policies
-func RunBoundaryConditionTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy, usageAgg *pluginCore.MockUsageAggregator) {
+func RunBoundaryConditionTests(t *testing.T, ctx context.Context, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy, usageAgg *pluginCore.MockUsageAggregator) {
 	tests := []struct {
 		name            string
 		userID          uint
@@ -385,10 +386,10 @@ func RunBoundaryConditionTests(t *testing.T, enforcer pluginCore.PolicyEnforcer,
 
 			// Stub usage aggregation calls if MockUsageAggregator is provided
 			if usageAgg != nil {
-				usageAgg.On("GetAggregatedUsageByType", test.userID, models.UsageTypeUpload).Return(test.currentUsage, nil).Maybe()
+				usageAgg.EXPECT().GetAggregatedUsageByType(ctx, test.userID, models.UsageTypeUpload).Return(test.currentUsage, nil).Maybe()
 			}
 
-			result, err := enforcer.CheckUploadQuota(config, test.requestBytes)
+			result, err := enforcer.CheckUploadQuota(ctx, config, test.requestBytes)
 			require.NoError(t, err)
 			assert.Equal(t, test.expectedAllowed, result.Allowed)
 			assert.Equal(t, test.expectedReason, result.Reason)
@@ -397,7 +398,7 @@ func RunBoundaryConditionTests(t *testing.T, enforcer pluginCore.PolicyEnforcer,
 }
 
 // RunInvalidLimitValueTests tests invalid limit values handling
-func RunInvalidLimitValueTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy) {
+func RunInvalidLimitValueTests(t *testing.T, ctx context.Context, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy) {
 	tests := []struct {
 		name          string
 		dailyLimit    *int64
@@ -427,7 +428,7 @@ func RunInvalidLimitValueTests(t *testing.T, enforcer pluginCore.PolicyEnforcer,
 				UploadTotalLimit:  test.totalLimit,
 			}
 
-			result, err := enforcer.CheckUploadQuota(config, uint64(500))
+			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), test.expectedError)
 			assert.Equal(t, models.QuotaCheckReason(""), result.Reason)
@@ -436,13 +437,13 @@ func RunInvalidLimitValueTests(t *testing.T, enforcer pluginCore.PolicyEnforcer,
 }
 
 // RunUsageRecordingTests tests usage recording functionality
-func RunUsageRecordingTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, usageManager *pluginCore.MockUsageManager, userID, uploadID uint, bytes uint64, ip string) {
+func RunUsageRecordingTests(t *testing.T, ctx context.Context, enforcer pluginCore.PolicyEnforcer, usageManager *pluginCore.MockUsageManager, userID, uploadID uint, bytes uint64, ip string) {
 	// Default unlimited config to allow recording without quota failures
 	usageManager.
-		On("GetUserQuotaConfig", userID).
+		On("GetUserQuotaConfig", ctx, userID).
 		Return(&models.UserQuotaConfig{
-			UserID:            userID,
-			EnforcementPolicy: models.EnforcementPolicyHardLimits,
+			UserID:             userID,
+			EnforcementPolicy:  models.EnforcementPolicyHardLimits,
 			StorageLimit:       lo.ToPtr(int64(-1)),
 			UploadDailyLimit:   lo.ToPtr(int64(-1)),
 			DownloadDailyLimit: lo.ToPtr(int64(-1)),
@@ -460,40 +461,40 @@ func RunUsageRecordingTests(t *testing.T, enforcer pluginCore.PolicyEnforcer, us
 		{
 			name: "RecordUpload",
 			testFunc: func() error {
-				return enforcer.RecordUpload(userID, uploadID, bytes, ip)
+				return enforcer.RecordUpload(ctx, userID, uploadID, bytes, ip)
 			},
 			assertFunc: func() {
-				usageManager.AssertCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
+				usageManager.AssertCalled(t, "RecordUpload", ctx, userID, uploadID, bytes, ip)
 			},
 			expectedErr: false,
 		},
 		{
 			name: "RecordDownload",
 			testFunc: func() error {
-				return enforcer.RecordDownload(userID, uploadID, bytes, ip)
+				return enforcer.RecordDownload(ctx, userID, uploadID, bytes, ip)
 			},
 			assertFunc: func() {
-				usageManager.AssertCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
+				usageManager.AssertCalled(t, "RecordDownload", ctx, userID, uploadID, bytes, ip)
 			},
 			expectedErr: false,
 		},
 		{
 			name: "RecordStorageChange",
 			testFunc: func() error {
-				return enforcer.RecordStorageChange(userID, uploadID, int64(bytes), ip)
+				return enforcer.RecordStorageChange(ctx, userID, uploadID, int64(bytes), ip)
 			},
 			assertFunc: func() {
-				usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, int64(bytes), ip)
+				usageManager.AssertCalled(t, "RecordStorageChange", ctx, userID, uploadID, int64(bytes), ip)
 			},
 			expectedErr: false,
 		},
 		{
 			name: "RecordStorageRemove",
 			testFunc: func() error {
-				return enforcer.RecordStorageChange(userID, uploadID, -int64(bytes), ip)
+				return enforcer.RecordStorageChange(ctx, userID, uploadID, -int64(bytes), ip)
 			},
 			assertFunc: func() {
-				usageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, -int64(bytes), ip)
+				usageManager.AssertCalled(t, "RecordStorageChange", ctx, userID, uploadID, -int64(bytes), ip)
 			},
 			expectedErr: false,
 		},

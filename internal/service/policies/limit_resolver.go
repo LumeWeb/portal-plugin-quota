@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -14,22 +15,23 @@ import (
 
 // DefaultLimitResolver implements the LimitResolver interface
 type DefaultLimitResolver struct {
-	ctx          core.Context
-	logger       *core.Logger
+	*core.BaseComponent
 	quotaService pluginCore.QuotaService
 }
 
 // NewLimitResolver creates a new default limit resolver
 func NewLimitResolver(ctx core.Context, quotaService pluginCore.QuotaService) *DefaultLimitResolver {
 	return &DefaultLimitResolver{
-		ctx:          ctx,
-		logger:       ctx.NamedLogger("quota.LimitResolver"),
-		quotaService: quotaService,
+		BaseComponent: core.NewBaseComponent(ctx),
+		quotaService:  quotaService,
 	}
 }
 
 // ResolveEffectiveLimits resolves the effective limits for a user based on their configuration
-func (r *DefaultLimitResolver) ResolveEffectiveLimits(config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*pluginCore.EffectiveLimits, error) {
+func (r *DefaultLimitResolver) ResolveEffectiveLimits(ctx context.Context, config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*pluginCore.EffectiveLimits, error) {
+	ctx, span := core.TraceMethod(ctx, "DefaultLimitResolver.ResolveEffectiveLimits")
+	defer span.End()
+
 	if config == nil {
 		return nil, fmt.Errorf("quota config is nil")
 	}
@@ -43,13 +45,13 @@ func (r *DefaultLimitResolver) ResolveEffectiveLimits(config *models.UserQuotaCo
 	var plan *models.QuotaPlan
 	var err error
 	if config.QuotaPlanID != nil {
-		plan, err = r.quotaService.GetQuotaPlanManager().GetQuotaPlanByID(*config.QuotaPlanID)
+		plan, err = r.quotaService.GetQuotaPlanManager().GetQuotaPlanByID(ctx, *config.QuotaPlanID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve quota plan: %w", err)
 		}
 	} else {
 		// Try to get default plan
-		plan, err = r.quotaService.GetQuotaPlanManager().GetDefaultQuotaPlan()
+		plan, err = r.quotaService.GetQuotaPlanManager().GetDefaultQuotaPlan(ctx)
 		if err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, fmt.Errorf("failed to retrieve default quota plan: %w", err)
@@ -68,32 +70,36 @@ func (r *DefaultLimitResolver) ResolveEffectiveLimits(config *models.UserQuotaCo
 			return nil, err
 		}
 		limits.QuotaPlanID = lo.ToPtr(uint64(plan.ID))
+		LimitResolved.WithLabelValues(LabelLimitSourcePlan).Inc()
 	}
 
 	// Override with user-specific limits
 	if err := r.applyUserLimits(limits, config); err != nil {
 		return nil, err
 	}
+	if limits.HasAnyLimits() {
+		LimitResolved.WithLabelValues(LabelLimitSourceUser).Inc()
+	}
 
 	// Apply policy-specific validation
 	if policy == models.EnforcementPolicyHardLimits {
-		return r.validateHardLimits(limits, config)
+		return r.validateHardLimits(ctx, limits, config)
 	}
 
 	// Validate threshold vs limit for threshold policy
 	if policy == models.EnforcementPolicyThreshold {
 		if limits.UploadThreshold != nil && limits.UploadDailyLimit != nil {
-			if err := r.ValidateThresholdVsLimit(int64(*limits.UploadThreshold), int64(*limits.UploadDailyLimit), "upload threshold"); err != nil {
+			if err := r.ValidateThresholdVsLimit(ctx, int64(*limits.UploadThreshold), int64(*limits.UploadDailyLimit), "upload threshold"); err != nil {
 				return nil, err
 			}
 		}
 		if limits.DownloadThreshold != nil && limits.DownloadDailyLimit != nil {
-			if err := r.ValidateThresholdVsLimit(int64(*limits.DownloadThreshold), int64(*limits.DownloadDailyLimit), "download threshold"); err != nil {
+			if err := r.ValidateThresholdVsLimit(ctx, int64(*limits.DownloadThreshold), int64(*limits.DownloadDailyLimit), "download threshold"); err != nil {
 				return nil, err
 			}
 		}
 		if limits.StorageThreshold != nil && limits.StorageLimit != nil {
-			if err := r.ValidateThresholdVsLimit(int64(*limits.StorageThreshold), int64(*limits.StorageLimit), "storage threshold"); err != nil {
+			if err := r.ValidateThresholdVsLimit(ctx, int64(*limits.StorageThreshold), int64(*limits.StorageLimit), "storage threshold"); err != nil {
 				return nil, err
 			}
 		}
@@ -103,7 +109,10 @@ func (r *DefaultLimitResolver) ResolveEffectiveLimits(config *models.UserQuotaCo
 }
 
 // ValidateThresholdVsLimit ensures threshold cannot exceed limit
-func (r *DefaultLimitResolver) ValidateThresholdVsLimit(thresholdValue, limitValue int64, thresholdType string) error {
+func (r *DefaultLimitResolver) ValidateThresholdVsLimit(ctx context.Context, thresholdValue, limitValue int64, thresholdType string) error {
+	ctx, span := core.TraceMethod(ctx, "DefaultLimitResolver.ValidateThresholdVsLimit")
+	defer span.End()
+
 	// If limit is disabled (0), skip threshold validation
 	if limitValue == 0 {
 		return nil
@@ -116,7 +125,10 @@ func (r *DefaultLimitResolver) ValidateThresholdVsLimit(thresholdValue, limitVal
 }
 
 // ValidateThresholdValue validates that a threshold value is reasonable
-func (r *DefaultLimitResolver) ValidateThresholdValue(thresholdValue int64, thresholdType string) error {
+func (r *DefaultLimitResolver) ValidateThresholdValue(ctx context.Context, thresholdValue int64, thresholdType string) error {
+	ctx, span := core.TraceMethod(ctx, "DefaultLimitResolver.ValidateThresholdValue")
+	defer span.End()
+
 	// Allow -1 (unlimited), 0 (always warn), and positive values
 	if thresholdValue < -1 {
 		return fmt.Errorf("invalid %s value", thresholdType)
@@ -131,7 +143,10 @@ func (r *DefaultLimitResolver) ValidateThresholdValue(thresholdValue int64, thre
 }
 
 // ApplyLimit converts and validates database limit values to core limit values
-func (r *DefaultLimitResolver) ApplyLimit(dest **uint64, source int64, limitName string, options ...pluginCore.LimitOption) error {
+func (r *DefaultLimitResolver) ApplyLimit(ctx context.Context, dest **uint64, source int64, limitName string, options ...pluginCore.LimitOption) error {
+	ctx, span := core.TraceMethod(ctx, "DefaultLimitResolver.ApplyLimit")
+	defer span.End()
+
 	config := &pluginCore.LimitConfig{}
 	for _, opt := range options {
 		opt(config)
@@ -181,21 +196,21 @@ func (r *DefaultLimitResolver) applyPlanLimits(limits *pluginCore.EffectiveLimit
 
 	// Apply thresholds (for threshold policy)
 	if plan.StorageThreshold != nil {
-		if err := r.ValidateThresholdValue(*plan.StorageThreshold, "storage threshold"); err != nil {
+		if err := r.ValidateThresholdValue(context.Background(), *plan.StorageThreshold, "storage threshold"); err != nil {
 			return err
 		}
 		limits.StorageThreshold = r.convertLimitValue(*plan.StorageThreshold)
 		limits.HasStorageThresholdConfig = true
 	}
 	if plan.UploadThreshold != nil {
-		if err := r.ValidateThresholdValue(*plan.UploadThreshold, "upload threshold"); err != nil {
+		if err := r.ValidateThresholdValue(context.Background(), *plan.UploadThreshold, "upload threshold"); err != nil {
 			return err
 		}
 		limits.UploadThreshold = r.convertLimitValue(*plan.UploadThreshold)
 		limits.HasUploadThresholdConfig = true
 	}
 	if plan.DownloadThreshold != nil {
-		if err := r.ValidateThresholdValue(*plan.DownloadThreshold, "download threshold"); err != nil {
+		if err := r.ValidateThresholdValue(context.Background(), *plan.DownloadThreshold, "download threshold"); err != nil {
 			return err
 		}
 		limits.DownloadThreshold = r.convertLimitValue(*plan.DownloadThreshold)
@@ -241,51 +256,51 @@ func (r *DefaultLimitResolver) applyPlanLimit(dest **uint64, source int64, limit
 // 0 values are treated as disabled limits
 func (r *DefaultLimitResolver) applyUserLimits(limits *pluginCore.EffectiveLimits, config *models.UserQuotaConfig) error {
 	if config.StorageLimit != nil {
-		if err := r.ApplyLimit(&limits.StorageLimit, *config.StorageLimit, "storage limit in user config"); err != nil {
+		if err := r.ApplyLimit(context.Background(), &limits.StorageLimit, *config.StorageLimit, "storage limit in user config"); err != nil {
 			return err
 		}
 		limits.HasStorageLimitConfig = true
 	}
 	if config.UploadDailyLimit != nil {
-		if err := r.ApplyLimit(&limits.UploadDailyLimit, *config.UploadDailyLimit, "upload daily limit in user config"); err != nil {
+		if err := r.ApplyLimit(context.Background(), &limits.UploadDailyLimit, *config.UploadDailyLimit, "upload daily limit in user config"); err != nil {
 			return err
 		}
 		limits.HasUploadDailyLimitConfig = true
 	}
 	if config.DownloadDailyLimit != nil {
-		if err := r.ApplyLimit(&limits.DownloadDailyLimit, *config.DownloadDailyLimit, "download daily limit in user config"); err != nil {
+		if err := r.ApplyLimit(context.Background(), &limits.DownloadDailyLimit, *config.DownloadDailyLimit, "download daily limit in user config"); err != nil {
 			return err
 		}
 		limits.HasDownloadDailyLimitConfig = true
 	}
 	if config.UploadTotalLimit != nil {
-		if err := r.ApplyLimit(&limits.UploadTotalLimit, *config.UploadTotalLimit, "upload total limit in user config"); err != nil {
+		if err := r.ApplyLimit(context.Background(), &limits.UploadTotalLimit, *config.UploadTotalLimit, "upload total limit in user config"); err != nil {
 			return err
 		}
 		limits.HasUploadTotalLimitConfig = true
 	}
 	if config.DownloadTotalLimit != nil {
-		if err := r.ApplyLimit(&limits.DownloadTotalLimit, *config.DownloadTotalLimit, "download total limit in user config"); err != nil {
+		if err := r.ApplyLimit(context.Background(), &limits.DownloadTotalLimit, *config.DownloadTotalLimit, "download total limit in user config"); err != nil {
 			return err
 		}
 		limits.HasDownloadTotalLimitConfig = true
 	}
 	if config.StorageThreshold != nil {
-		if err := r.ValidateThresholdValue(*config.StorageThreshold, "storage threshold"); err != nil {
+		if err := r.ValidateThresholdValue(context.Background(), *config.StorageThreshold, "storage threshold"); err != nil {
 			return err
 		}
 		limits.StorageThreshold = r.convertLimitValue(*config.StorageThreshold)
 		limits.HasStorageThresholdConfig = true
 	}
 	if config.UploadThreshold != nil {
-		if err := r.ValidateThresholdValue(*config.UploadThreshold, "upload threshold"); err != nil {
+		if err := r.ValidateThresholdValue(context.Background(), *config.UploadThreshold, "upload threshold"); err != nil {
 			return err
 		}
 		limits.UploadThreshold = r.convertLimitValue(*config.UploadThreshold)
 		limits.HasUploadThresholdConfig = true
 	}
 	if config.DownloadThreshold != nil {
-		if err := r.ValidateThresholdValue(*config.DownloadThreshold, "download threshold"); err != nil {
+		if err := r.ValidateThresholdValue(context.Background(), *config.DownloadThreshold, "download threshold"); err != nil {
 			return err
 		}
 		limits.DownloadThreshold = r.convertLimitValue(*config.DownloadThreshold)
@@ -295,13 +310,16 @@ func (r *DefaultLimitResolver) applyUserLimits(limits *pluginCore.EffectiveLimit
 }
 
 // validateHardLimits performs additional validation for hard limits policy
-func (r *DefaultLimitResolver) validateHardLimits(limits *pluginCore.EffectiveLimits, config *models.UserQuotaConfig) (*pluginCore.EffectiveLimits, error) {
+func (r *DefaultLimitResolver) validateHardLimits(ctx context.Context, limits *pluginCore.EffectiveLimits, config *models.UserQuotaConfig) (*pluginCore.EffectiveLimits, error) {
+	ctx, span := core.TraceMethod(ctx, "DefaultLimitResolver.validateHardLimits")
+	defer span.End()
+
 	// Check if any limits are configured
 	hasLimits := limits.HasAnyLimits()
 
 	if !hasLimits {
 		// Check if there's a default plan that could provide limits
-		_, err := r.quotaService.GetQuotaPlanManager().GetDefaultQuotaPlan()
+		_, err := r.quotaService.GetQuotaPlanManager().GetDefaultQuotaPlan(ctx)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, fmt.Errorf("no limits configured for hard limits policy")

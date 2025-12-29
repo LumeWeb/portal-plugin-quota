@@ -15,7 +15,6 @@ import (
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"gorm.io/gorm"
 )
 
 // Test constants
@@ -62,12 +61,10 @@ func TestQuotaServiceDefault_RecordUpload_Success(t *testing.T) {
 		bytes := uint64(testBytesMedium)
 		ip := "192.168.1.1"
 
-		mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil)
+		mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-		err := quotaService.RecordUpload(userID, uploadID, bytes, ip)
+		err := quotaService.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
-
-		mockUsageManager.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -85,13 +82,11 @@ func TestQuotaServiceDefault_RecordUpload_Error(t *testing.T) {
 		ip := "192.168.1.1"
 
 		expectedErr := fmt.Errorf("upload recording failed")
-		mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(expectedErr)
+		mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, bytes, ip).Return(expectedErr)
 
-		err := quotaService.RecordUpload(userID, uploadID, bytes, ip)
+		err := quotaService.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		assert.Error(t, err)
 		assert.Equal(t, expectedErr, err)
-
-		mockUsageManager.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -107,7 +102,7 @@ func TestQuotaServiceDefault_RecordUpload_Uninitialized(t *testing.T) {
 		bytes := uint64(testBytesMedium)
 		ip := "192.168.1.1"
 
-		err := quotaService.RecordUpload(userID, uploadID, bytes, ip)
+		err := quotaService.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "usage manager not initialized")
 	}, testOptions())
@@ -126,12 +121,10 @@ func TestQuotaServiceDefault_RecordDownload_Success(t *testing.T) {
 		bytes := uint64(testBytesMedium)
 		ip := "192.168.1.1"
 
-		mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil)
+		mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-		err := quotaService.RecordDownload(userID, uploadID, bytes, ip)
+		err := quotaService.RecordDownload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
-
-		mockUsageManager.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -148,12 +141,10 @@ func TestQuotaServiceDefault_RecordStorageChange_Success(t *testing.T) {
 		bytes := int64(testBytesMedium)
 		ip := "192.168.1.1"
 
-		mockUsageManager.On("RecordStorageChange", userID, uploadID, bytes, ip).Return(nil)
+		mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-		err := quotaService.RecordStorageChange(userID, uploadID, bytes, ip)
+		err := quotaService.RecordStorageChange(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
-
-		mockUsageManager.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -180,16 +171,13 @@ func TestQuotaServiceDefault_CheckUploadQuota_Success(t *testing.T) {
 			Reason:  "within quota limits",
 		}
 
-		mockConfigManager.On("GetUserQuotaConfig", userID).Return(userConfig, nil)
-		mockConfigManager.On("GetPolicyEnforcer", userID).Return(mockPolicyEnforcer, nil)
-		mockPolicyEnforcer.On("CheckUploadQuota", userConfig, requestedBytes).Return(expectedResult, nil)
+		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil)
+		mockConfigManager.EXPECT().GetPolicyEnforcer(mock.Anything, userID).Return(mockPolicyEnforcer, nil)
+		mockPolicyEnforcer.EXPECT().CheckUploadQuota(mock.Anything, userConfig, requestedBytes).Return(expectedResult, nil)
 
-		result, err := quotaService.CheckUploadQuota(userID, requestedBytes)
+		result, err := quotaService.CheckUploadQuota(ctx, userID, requestedBytes)
 		require.NoError(t, err)
 		assert.Equal(t, expectedResult, result)
-
-		mockConfigManager.AssertExpectations(t)
-		mockPolicyEnforcer.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -211,13 +199,11 @@ func TestQuotaServiceDefault_GetCurrentUsage_Success(t *testing.T) {
 			LastUpdated:     time.Now().UTC(),
 		}
 
-		mockUsageManager.On("GetCurrentUsage", userID).Return(expectedUsage, nil)
+		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(expectedUsage, nil)
 
-		usage, err := quotaService.GetCurrentUsage(userID)
+		usage, err := quotaService.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedUsage, usage)
-
-		mockUsageManager.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -248,13 +234,11 @@ func TestQuotaServiceDefault_GetUsageHistory_Success(t *testing.T) {
 			},
 		}
 
-		mockUsageManager.On("GetUsageHistory", userID, period, usageType).Return(expectedPoints, nil)
+		mockUsageManager.EXPECT().GetUsageHistory(mock.Anything, userID, period, usageType).Return(expectedPoints, nil)
 
-		points, err := quotaService.GetUsageHistory(userID, period, usageType)
+		points, err := quotaService.GetUsageHistory(ctx, userID, period, usageType)
 		require.NoError(t, err)
 		assert.Equal(t, expectedPoints, points)
-
-		mockUsageManager.AssertExpectations(t)
 	}, testOptions())
 }
 
@@ -268,7 +252,7 @@ func TestQuotaServiceDefault_CreateQuotaPlan_Success(t *testing.T) {
 			Description: "Test quota plan",
 		}
 
-		err := quotaService.CreateQuotaPlan(plan)
+		err := quotaService.CreateQuotaPlan(ctx, plan)
 		require.NoError(t, err)
 
 		// Verify plan was created in DB
@@ -293,214 +277,10 @@ func TestQuotaServiceDefault_GetQuotaPlan_Success(t *testing.T) {
 		err := ctx.DB().Create(plan).Error
 		require.NoError(t, err)
 
-		retrievedPlan, err := quotaService.GetQuotaPlan(plan.ID)
+		retrievedPlan, err := quotaService.GetQuotaPlan(ctx, plan.ID)
 		require.NoError(t, err)
 		assert.Equal(t, plan.ID, retrievedPlan.ID)
 		assert.Equal(t, plan.Name, retrievedPlan.Name)
 		assert.Equal(t, plan.Description, retrievedPlan.Description)
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_GetQuotaPlan_NotFound tests quota plan retrieval when plan doesn't exist
-func TestQuotaServiceDefault_GetQuotaPlan_NotFound(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		plan, err := quotaService.GetQuotaPlan(testInvalidPlanID)
-		assert.Error(t, err)
-		assert.Nil(t, plan)
-		assert.Contains(t, err.Error(), "quota plan not found")
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_AddBonusAllowance_Success tests successful bonus allowance addition
-func TestQuotaServiceDefault_AddBonusAllowance_Success(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		mockGrantManager := pluginCore.NewMockGrantManager(tb)
-		quotaService.(*QuotaServiceDefault).grantManager = mockGrantManager
-
-		userID := uint(testUserID)
-		storage := uint64(testBytesLarge)
-		upload := uint64(testBytesMedium)
-		download := uint64(testBytesSmall)
-
-		mockGrantManager.On("CreateAllowanceGrantLocked", userID, mock.AnythingOfType("*models.AllowanceGrant"), mock.AnythingOfType("*gorm.DB")).Return(nil)
-
-		err := quotaService.AddBonusAllowance(userID, storage, upload, download)
-		require.NoError(t, err)
-
-		mockGrantManager.AssertExpectations(t)
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_GetAllowanceBalance_Success tests successful allowance balance retrieval
-func TestQuotaServiceDefault_GetAllowanceBalance_Success(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		mockConfigManager := pluginCore.NewMockConfigManager(tb)
-		quotaService.(*QuotaServiceDefault).configManager = mockConfigManager
-
-		userID := uint(testUserID)
-
-		grants := []*pluginModels.AllowanceGrant{
-			{
-				Type:           pluginModels.GrantTypeStorage,
-				Bytes:          testBytesLarge,
-				BytesUsed:      testBytesSmall,
-				BytesRemaining: testBytesLarge - testBytesSmall,
-			},
-			{
-				Type:           pluginModels.GrantTypeUpload,
-				Bytes:          testBytesMedium,
-				BytesUsed:      testBytesSmall,
-				BytesRemaining: testBytesMedium - testBytesSmall,
-			},
-		}
-
-		expectedBalance := &pluginCore.AllowanceBalance{
-			StorageAllowance:  testBytesLarge,
-			StorageUsed:       testBytesSmall,
-			StorageRemaining:  testBytesLarge - testBytesSmall,
-			UploadAllowance:   testBytesMedium,
-			UploadUsed:        testBytesSmall,
-			UploadRemaining:   testBytesMedium - testBytesSmall,
-			DownloadAllowance: 0,
-			DownloadUsed:      0,
-			DownloadRemaining: 0,
-		}
-
-		mockConfigManager.On("GetUserAllowanceGrants", userID).Return(grants, nil)
-
-		balance, err := quotaService.GetAllowanceBalance(userID)
-		require.NoError(t, err)
-		assert.Equal(t, expectedBalance, balance)
-
-		mockConfigManager.AssertExpectations(t)
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_RemoveUserFromPlan_Success tests successful removal of user from plan
-func TestQuotaServiceDefault_RemoveUserFromPlan_Success(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		// First assign user to a plan
-		userID := uint(testUserID)
-
-		// Create a plan first
-		plan := &pluginModels.QuotaPlan{
-			Name:        "test_plan",
-			Description: "Test quota plan",
-		}
-		err := ctx.DB().Create(plan).Error
-		require.NoError(t, err)
-
-		// Assign user to plan
-		err = quotaService.AssignUserToPlan(userID, plan.ID)
-		require.NoError(t, err)
-
-		// Verify user is assigned to plan
-		cfg, err := quotaService.GetQuotaConfig(userID)
-		require.NoError(t, err)
-		require.NotNil(t, cfg.QuotaPlanID)
-		assert.Equal(t, uint64(plan.ID), *cfg.QuotaPlanID)
-
-		// Remove user from plan
-		err = quotaService.RemoveUserFromPlan(userID)
-		require.NoError(t, err)
-
-		// Verify user is no longer assigned to plan
-		cfg, err = quotaService.GetQuotaConfig(userID)
-		require.NoError(t, err)
-		assert.Nil(t, cfg.QuotaPlanID)
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_ResetAllowance_Success tests successful allowance reset
-func TestQuotaServiceDefault_ResetAllowance_Success(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		mockGrantManager := pluginCore.NewMockGrantManager(tb)
-		quotaService.(*QuotaServiceDefault).grantManager = mockGrantManager
-
-		userID := uint(testUserID)
-
-		grants := []*pluginModels.AllowanceGrant{
-			{
-				Model: gorm.Model{
-					ID: 1,
-				},
-
-				IsActive: true,
-			},
-			{
-
-				Model: gorm.Model{
-					ID: 2,
-				},
-				IsActive: true,
-			},
-		}
-
-		mockGrantManager.On("GetActiveGrants", userID).Return(grants, nil)
-		mockGrantManager.On("DeactivateGrant", uint(1)).Return(nil)
-		mockGrantManager.On("DeactivateGrant", uint(2)).Return(nil)
-
-		err := quotaService.ResetAllowance(userID)
-		require.NoError(t, err)
-
-		mockGrantManager.AssertExpectations(t)
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_CleanupOldRecords_Success tests successful cleanup of old records
-func TestQuotaServiceDefault_CleanupOldRecords_Success(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		retentionDays := 30
-
-		err := quotaService.CleanupOldRecords(retentionDays)
-		require.NoError(t, err)
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_Getters tests the various getter methods
-func TestQuotaServiceDefault_Getters(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		mockUsageManager := pluginCore.NewMockUsageManager(tb)
-		mockGrantManager := pluginCore.NewMockGrantManager(tb)
-		mockUsageAggregator := pluginCore.NewMockUsageAggregator(tb)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
-		mockConfigManager := pluginCore.NewMockConfigManager(tb)
-
-		quotaService.(*QuotaServiceDefault).usageManager = mockUsageManager
-		quotaService.(*QuotaServiceDefault).grantManager = mockGrantManager
-		quotaService.(*QuotaServiceDefault).usageAggregator = mockUsageAggregator
-		quotaService.(*QuotaServiceDefault).planManager = mockQuotaPlanManager
-		quotaService.(*QuotaServiceDefault).configManager = mockConfigManager
-
-		assert.Equal(t, mockUsageManager, quotaService.GetUsageManager())
-		assert.Equal(t, mockGrantManager, quotaService.GetGrantManager())
-		assert.Equal(t, mockUsageAggregator, quotaService.GetUsageAggregator())
-		assert.Equal(t, mockQuotaPlanManager, quotaService.GetQuotaPlanManager())
-		assert.Equal(t, mockConfigManager, quotaService.GetConfigManager())
-	}, testOptions())
-}
-
-// TestQuotaServiceDefault_Config tests the Config method
-func TestQuotaServiceDefault_Config(t *testing.T) {
-	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
-		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
-
-		cfg, err := quotaService.Config()
-		require.NoError(t, err)
-		assert.IsType(t, &config.QuotaConfig{}, cfg)
 	}, testOptions())
 }

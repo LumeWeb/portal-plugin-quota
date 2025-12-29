@@ -7,6 +7,7 @@ import (
 	"github.com/docker/go-units"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -18,7 +19,7 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_CustomLimitsOnly
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 	config := &models.UserQuotaConfig{
 		UserID:             1,
@@ -29,9 +30,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_CustomLimitsOnly
 	}
 
 	// Mock default quota plan lookup to return not found
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-	limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
 	assert.Equal(t, uint(1), limits.UserID)
 	assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits), limits.EnforcementPolicy)
@@ -47,7 +48,7 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_PlanLimitsWithCu
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 	planID := uint64(42)
 	config := &models.UserQuotaConfig{
@@ -65,9 +66,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_PlanLimitsWithCu
 		IsActive:           lo.ToPtr(true),
 	}
 
-	mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
-	limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(3000), *limits.StorageLimit)       // Custom value
 	assert.Equal(t, uint64(500), *limits.UploadDailyLimit)    // Plan value
@@ -79,7 +80,7 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanWhenN
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 	config := &models.UserQuotaConfig{
 		UserID:            3,
@@ -94,9 +95,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanWhenN
 		IsActive:           lo.ToPtr(true),
 	}
 
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(plan, nil)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(plan, nil)
 
-	limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(5000), *limits.StorageLimit)
 	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
@@ -107,16 +108,16 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_ErrorWhenNoLimit
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 	config := &models.UserQuotaConfig{
 		UserID:            4,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 	}
 
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-	limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	assert.Error(t, err)
 	assert.Nil(t, limits)
 	assert.Contains(t, err.Error(), "no limits configured")
@@ -126,7 +127,7 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanProvi
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 	config := &models.UserQuotaConfig{
 		UserID:            5,
@@ -141,9 +142,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanProvi
 		IsActive:           lo.ToPtr(true),
 	}
 
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(plan, nil)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(plan, nil)
 
-	limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(5000), *limits.StorageLimit)
 	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
@@ -154,7 +155,7 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 
@@ -178,9 +179,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
 			IsActive:         lo.ToPtr(true),
 		}
 
-		mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(plan, nil)
+		mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
-		limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyThreshold)
+		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyThreshold)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(1000), *limits.StorageLimit)
 		assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
@@ -208,9 +209,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
 			IsActive:         lo.ToPtr(true),
 		}
 
-		mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(plan, nil)
+		mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
-		limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyThreshold)
+		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyThreshold)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(900), *limits.StorageThreshold) // Custom value
 	})
@@ -222,23 +223,23 @@ func TestDefaultLimitResolver_ValidateThresholdVsLimit(t *testing.T) {
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 
 	t.Run("Valid threshold", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(800, 1000, "storage threshold")
+		err := resolver.ValidateThresholdVsLimit(ctx, 800, 1000, "storage threshold")
 		assert.NoError(t, err)
 	})
 
 	t.Run("Threshold exceeds limit", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(1200, 1000, "storage threshold")
+		err := resolver.ValidateThresholdVsLimit(ctx, 1200, 1000, "storage threshold")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "threshold cannot exceed limit")
 	})
 
 	t.Run("Unlimited limit", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(2000, -1, "storage threshold")
+		err := resolver.ValidateThresholdVsLimit(ctx, 2000, -1, "storage threshold")
 		assert.NoError(t, err)
 	})
 
 	t.Run("Disabled limit", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(1000, 0, "storage threshold")
+		err := resolver.ValidateThresholdVsLimit(ctx, 1000, 0, "storage threshold")
 		assert.NoError(t, err) // Should skip validation when limit is disabled
 	})
 }
@@ -250,42 +251,42 @@ func TestDefaultLimitResolver_ApplyLimit(t *testing.T) {
 
 	t.Run("Positive value", func(t *testing.T) {
 		var limit *uint64
-		err := resolver.ApplyLimit(&limit, 1000, "test limit")
+		err := resolver.ApplyLimit(ctx, &limit, 1000, "test limit")
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(1000), *limit)
 	})
 
 	t.Run("Unlimited value", func(t *testing.T) {
 		var limit *uint64
-		err := resolver.ApplyLimit(&limit, -1, "test limit")
+		err := resolver.ApplyLimit(ctx, &limit, -1, "test limit")
 		assert.NoError(t, err)
 		assert.Nil(t, limit)
 	})
 
 	t.Run("Zero value", func(t *testing.T) {
 		var limit *uint64
-		err := resolver.ApplyLimit(&limit, 0, "test limit")
+		err := resolver.ApplyLimit(ctx, &limit, 0, "test limit")
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(0), *limit)
 	})
 
 	t.Run("Zero value with treatZeroAsNil", func(t *testing.T) {
 		var limit *uint64
-		err := resolver.ApplyLimit(&limit, 0, "test limit", pluginCore.WithTreatZeroAsNil())
+		err := resolver.ApplyLimit(ctx, &limit, 0, "test limit", pluginCore.WithTreatZeroAsNil())
 		assert.NoError(t, err)
 		assert.Nil(t, limit)
 	})
 
 	t.Run("Invalid negative value", func(t *testing.T) {
 		var limit *uint64
-		err := resolver.ApplyLimit(&limit, -2, "test limit")
+		err := resolver.ApplyLimit(ctx, &limit, -2, "test limit")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "must be -1, 0, or positive")
 	})
 
 	t.Run("Unreasonably large value", func(t *testing.T) {
 		var limit *uint64
-		err := resolver.ApplyLimit(&limit, int64(2*units.PiB), "test limit")
+		err := resolver.ApplyLimit(ctx, &limit, int64(2*units.PiB), "test limit")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unreasonably large")
 	})
@@ -332,12 +333,12 @@ func TestDefaultLimitResolver_ErrorCases(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 
 	t.Run("Nil config", func(t *testing.T) {
-		limits, err := resolver.ResolveEffectiveLimits(nil, models.EnforcementPolicyHardLimits)
+		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), nil, models.EnforcementPolicyHardLimits)
 		assert.Error(t, err)
 		assert.Nil(t, limits)
 		assert.Contains(t, err.Error(), "quota config is nil")
@@ -351,9 +352,9 @@ func TestDefaultLimitResolver_ErrorCases(t *testing.T) {
 			QuotaPlanID:       &planID,
 		}
 
-		mockQuotaPlanManager.On("GetQuotaPlanByID", planID).Return(nil, errors.New("plan not found"))
+		mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(nil, errors.New("plan not found"))
 
-		limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 		assert.Error(t, err)
 		assert.Nil(t, limits)
 		assert.Contains(t, err.Error(), "failed to retrieve quota plan")
@@ -365,9 +366,9 @@ func TestDefaultLimitResolver_ErrorCases(t *testing.T) {
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
 		}
 
-		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, errors.New("default plan error"))
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, errors.New("default plan error"))
 
-		limits, err := resolver.ResolveEffectiveLimits(config, models.EnforcementPolicyThreshold)
+		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyThreshold)
 		assert.Error(t, err)
 		assert.Nil(t, limits)
 		assert.Contains(t, err.Error(), "failed to retrieve default quota plan")
@@ -436,8 +437,8 @@ func TestDefaultLimitResolver_applyPlanLimits_HasConfigFlags(t *testing.T) {
 		assert.True(t, limits.HasStorageLimitConfig)
 		assert.True(t, limits.HasUploadDailyLimitConfig)
 		assert.True(t, limits.HasDownloadDailyLimitConfig)
-		
-		// Total limits weren't set in plan, but we still mark them as configured 
+
+		// Total limits weren't set in plan, but we still mark them as configured
 		// since they exist in the plan structure
 		assert.True(t, limits.HasUploadTotalLimitConfig)
 		assert.True(t, limits.HasDownloadTotalLimitConfig)
@@ -445,14 +446,14 @@ func TestDefaultLimitResolver_applyPlanLimits_HasConfigFlags(t *testing.T) {
 		// Check the actual values
 		assert.NotNil(t, limits.StorageLimit)
 		assert.Equal(t, uint64(1000), *limits.StorageLimit)
-		
-		assert.Nil(t, limits.UploadDailyLimit) // -1 becomes nil (unlimited)
+
+		assert.Nil(t, limits.UploadDailyLimit)   // -1 becomes nil (unlimited)
 		assert.Nil(t, limits.DownloadDailyLimit) // 0 becomes nil (disabled)
-		
+
 		// Total limits default to 0, so they become nil with TreatZeroAsNil behavior
 		assert.Nil(t, limits.UploadTotalLimit)
 		assert.Nil(t, limits.DownloadTotalLimit)
-		
+
 		// Threshold should be set
 		assert.True(t, limits.HasStorageThresholdConfig)
 		assert.NotNil(t, limits.StorageThreshold)

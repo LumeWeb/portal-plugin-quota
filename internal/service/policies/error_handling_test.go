@@ -43,9 +43,9 @@ func TestHardLimitsPolicyEnforcer_InvalidLimitValues(t *testing.T) {
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
-			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-			mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -56,7 +56,7 @@ func TestHardLimitsPolicyEnforcer_InvalidLimitValues(t *testing.T) {
 				UploadTotalLimit:  test.totalLimit,
 			}
 
-			result, err := enforcer.CheckUploadQuota(config, uint64(500))
+			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), test.expectedError)
 			assert.Equal(t, models.QuotaCheckReason(""), result.Reason)
@@ -101,13 +101,13 @@ func TestThresholdPolicyEnforcer_InvalidThresholdValues(t *testing.T) {
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
-			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-			mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
 			// Add the missing mock expectation for GetTodayUsage
 			if test.errorShouldBeNil {
-				mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+				mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
 					UserID:        2,
 					BytesUploaded: 0,
 				}, nil)
@@ -122,7 +122,7 @@ func TestThresholdPolicyEnforcer_InvalidThresholdValues(t *testing.T) {
 				UploadThreshold:   test.threshold,
 			}
 
-			result, err := enforcer.CheckUploadQuota(config, uint64(500))
+			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 
 			if test.errorShouldBeNil {
 				assert.NoError(t, err)
@@ -139,44 +139,44 @@ func TestThresholdPolicyEnforcer_InvalidThresholdValues(t *testing.T) {
 func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupMocks    func(*pluginCore.MockGrantManager)
-		testFunc      func(*AllowancePolicyEnforcer) error
+		setupMocks    func(*pluginCore.MockGrantManager, coreTesting.TestContext)
+		testFunc      func(*AllowancePolicyEnforcer, coreTesting.TestContext) error
 		expectedError string
 	}{
 		{
 			name: "CheckUploadQuota - GetActiveGrants error",
-			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("GetActiveGrantsByType", uint(1), models.GrantTypeUpload).Return(nil, errors.New("grant manager error"))
+			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager, ctx coreTesting.TestContext) {
+				mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, uint(1), models.GrantTypeUpload).Return(nil, errors.New("grant manager error"))
 			},
-			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
+			testFunc: func(enforcer *AllowancePolicyEnforcer, ctx coreTesting.TestContext) error {
 				config := &models.UserQuotaConfig{
 					UserID:            1,
 					EnforcementPolicy: models.EnforcementPolicyAllowance,
 				}
-				_, err := enforcer.CheckUploadQuota(config, uint64(500))
+				_, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 				return err
 			},
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - ConsumeFromGrants returns generic error",
-			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, errors.New("grant manager error"))
+			name: "RecordUpload - RecordUsageAndConsume returns generic error",
+			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager, ctx coreTesting.TestContext) {
+				// No grant manager setup needed - error comes from UsageManager
 			},
-			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
-				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
+			testFunc: func(enforcer *AllowancePolicyEnforcer, ctx coreTesting.TestContext) error {
+				return enforcer.RecordUpload(ctx, uint(1), uint(1), uint64(100), "192.168.1.1")
 			},
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - ConsumeFromGrants wraps as failed to consume upload allowance",
-			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager) {
-				mockGrantManager.On("ConsumeFromGrants", uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, errors.New("consumption error"))
+			name: "RecordUpload - RecordUsageAndConsume wraps as failed to consume upload allowance",
+			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager, ctx coreTesting.TestContext) {
+				// No grant manager setup needed - error comes from UsageManager
 			},
-			testFunc: func(enforcer *AllowancePolicyEnforcer) error {
-				return enforcer.RecordUpload(uint(1), uint(1), uint64(100), "192.168.1.1")
+			testFunc: func(enforcer *AllowancePolicyEnforcer, ctx coreTesting.TestContext) error {
+				return enforcer.RecordUpload(ctx, uint(1), uint(1), uint64(100), "192.168.1.1")
 			},
-			expectedError: "failed to consume upload allowance",
+			expectedError: "failed to consume from grants",
 		},
 	}
 
@@ -187,20 +187,20 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 
-			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-			mockQuotaService.On("GetGrantManager").Return(mockGrantManager)
-			
-			// Add mock expectation for RecordUserUsageDetail for RecordUpload tests
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager).Maybe()
+
+			// Add mock expectation for RecordUsageAndConsume for RecordUpload tests
 			// We identify RecordUpload tests by checking if the test function name contains "RecordUpload"
 			if test.testFunc != nil && strings.Contains(test.name, "RecordUpload") {
-				mockUsageManager.On("RecordUserUsageDetail", mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
+				mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, uint64(100)).Return(errors.New(test.expectedError))
 			}
 
-			test.setupMocks(mockGrantManager)
+			test.setupMocks(mockGrantManager, ctx)
 
 			enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-			err := test.testFunc(enforcer)
+			err := test.testFunc(enforcer, ctx)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), test.expectedError)
 		})
@@ -213,10 +213,10 @@ func TestErrorHandling_InvalidConfiguration(t *testing.T) {
 		ctx, _ := coreTesting.NewTestContext(t)
 		mockQuotaService := pluginCore.NewMockQuotaService(t)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
-		_, err := enforcer.limitResolver.ResolveEffectiveLimits(nil, models.EnforcementPolicyHardLimits)
+		_, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, nil, models.EnforcementPolicyHardLimits)
 		assert.Error(t, err)
 	})
 }

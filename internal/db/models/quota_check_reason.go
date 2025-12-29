@@ -17,12 +17,13 @@ const (
 	QuotaCheckReasonLimitExceeded     QuotaCheckReason = "LIMIT_EXCEEDED"
 	QuotaCheckReasonAllowanceDepleted QuotaCheckReason = "ALLOWANCE_DEPLETED"
 	QuotaCheckReasonWarningThreshold  QuotaCheckReason = "WARNING_THRESHOLD"
+	QuotaCheckReasonThresholdExceeded QuotaCheckReason = "THRESHOLD_EXCEEDED"
 )
 
 // IsValid checks if the quota check reason is valid
 func (r QuotaCheckReason) IsValid() bool {
 	switch r {
-	case QuotaCheckReasonOK, QuotaCheckReasonLimitExceeded, QuotaCheckReasonAllowanceDepleted, QuotaCheckReasonWarningThreshold:
+	case QuotaCheckReasonOK, QuotaCheckReasonLimitExceeded, QuotaCheckReasonAllowanceDepleted, QuotaCheckReasonWarningThreshold, QuotaCheckReasonThresholdExceeded:
 		return true
 	default:
 		return false

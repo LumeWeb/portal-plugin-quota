@@ -5,6 +5,7 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -16,7 +17,7 @@ import (
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_Allowed(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
@@ -27,20 +28,20 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_
 		UploadTotalLimit:  lo.ToPtr(int64(5000)),
 	}
 
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 	// Mock current usage
-	mockQuotaService.On("GetTodayUsage", uint(1)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
 		UserID:        1,
 		BytesUploaded: 200,
 	}, nil)
 
 	// Mock aggregated usage for total limit check
 	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.On("GetAggregatedUsageByType", uint(1), models.UsageTypeUpload).Return(uint64(200), nil)
-	mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
+	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(1), models.UsageTypeUpload).Return(uint64(200), nil)
+	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
 
-	result, err := enforcer.CheckUploadQuota(config, uint64(500))
+	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -50,7 +51,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integration_Blocked(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
@@ -63,14 +64,14 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integrati
 	}
 
 	// Mock current usage that's close to daily limit
-	mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
 		UserID:        2,
 		BytesUploaded: 800,
 	}, nil)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
-	result, err := enforcer.CheckUploadQuota(config, uint64(300))
+	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
@@ -79,7 +80,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integrati
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingTotalLimit_Integration_Blocked(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
@@ -92,17 +93,17 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingTotalLimit_Integrati
 	}
 
 	// Mock current usage that's close to total limit
-	mockQuotaService.On("GetTodayUsage", uint(3)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
 		UserID:        3,
 		BytesUploaded: 900,
 	}, nil)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.On("GetAggregatedUsageByType", uint(3), models.UsageTypeUpload).Return(uint64(900), nil)
-	mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
+	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(3), models.UsageTypeUpload).Return(uint64(900), nil)
+	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
 
-	result, err := enforcer.CheckUploadQuota(config, uint64(200))
+	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
@@ -111,7 +112,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingTotalLimit_Integrati
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integration_Allowed(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
@@ -123,19 +124,19 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integratio
 	}
 
 	// Mock current usage
-	mockQuotaService.On("GetTodayUsage", uint(1)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
 		UserID:          1,
 		BytesDownloaded: 500,
 	}, nil)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
 	// Mock usage aggregator for total limit check
 	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.On("GetAggregatedUsageByType", uint(1), models.UsageTypeDownload).Return(uint64(500), nil)
-	mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
+	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(1), models.UsageTypeDownload).Return(uint64(500), nil)
+	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
 
-	result, err := enforcer.CheckDownloadQuota(config, uint64(1000))
+	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -145,7 +146,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integratio
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integration_Blocked(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
@@ -158,14 +159,14 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integra
 	}
 
 	// Mock current usage that's close to daily limit
-	mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
 		UserID:          2,
 		BytesDownloaded: 1800,
 	}, nil)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
-	result, err := enforcer.CheckDownloadQuota(config, uint64(300))
+	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
@@ -174,7 +175,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integra
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingTotalLimit_Integration_Blocked(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
@@ -187,18 +188,18 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingTotalLimit_Integra
 	}
 
 	// Mock current usage that's close to total limit
-	mockQuotaService.On("GetTodayUsage", uint(3)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
 		UserID:          3,
 		BytesDownloaded: 1900,
 	}, nil)
 
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.On("GetAggregatedUsageByType", uint(3), models.UsageTypeDownload).Return(uint64(1900), nil)
-	mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
+	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(3), models.UsageTypeDownload).Return(uint64(1900), nil)
+	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
 
-	result, err := enforcer.CheckDownloadQuota(config, uint64(200))
+	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(200))
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
@@ -207,7 +208,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingTotalLimit_Integra
 func TestHardLimitsPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integration_Allowed(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
@@ -218,14 +219,14 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integrati
 	}
 
 	// Mock current usage
-	mockQuotaService.On("GetTodayUsage", uint(1)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
 		UserID:      1,
 		BytesStored: 1000,
 	}, nil)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
-	result, err := enforcer.CheckStorageQuota(config, uint64(1500))
+	result, err := enforcer.CheckStorageQuota(ctx, config, uint64(1500))
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -235,7 +236,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integrati
 func TestHardLimitsPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integration_Blocked(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
@@ -247,14 +248,14 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integr
 	}
 
 	// Mock current usage that's close to storage limit
-	mockQuotaService.On("GetTodayUsage", uint(2)).Return(&pluginCore.Usage{
+	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
 		UserID:      2,
 		BytesStored: 2800,
 	}, nil)
-	mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
+	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
-	result, err := enforcer.CheckStorageQuota(config, uint64(300))
+	result, err := enforcer.CheckStorageQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
@@ -269,7 +270,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_SuccessfulUploadRecording_Integra
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
 		// Set up mock expectations
-		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -287,28 +288,28 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_SuccessfulUploadRecording_Integra
 		require.NoError(t, err)
 
 		// Set up remaining mock expectations
-		mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.On("GetTodayUsage", uint(userID)).Return(&pluginCore.Usage{
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:        userID,
 			BytesUploaded: 0,
 		}, nil)
 		mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-		mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeUpload).Return(uint64(0), nil)
-		mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(config, nil)
-		mockUsageManager.On("RecordUpload", userID, uint(100), uint64(500), "127.0.0.1").Return(nil)
-		mockUsageManager.On("GetCurrentUsage", userID).Return(&pluginCore.Usage{
+		mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil)
+		mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
+		mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uint(100), uint64(500), "127.0.0.1").Return(nil)
+		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:        userID,
 			BytesUploaded: 500,
 		}, nil)
 
 		// Test successful upload recording
-		err = enforcer.RecordUpload(userID, 100, 500, "127.0.0.1")
+		err = enforcer.RecordUpload(ctx, userID, 100, 500, "127.0.0.1")
 		assert.NoError(t, err)
 
 		// Verify the usage was recorded
-		usage, err := enforcer.GetCurrentUsage(userID)
+		usage, err := enforcer.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(500), usage.BytesUploaded)
 
@@ -325,7 +326,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_ExceedsQuota_Integration_Error(t 
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
 		// Set up mock expectations
-		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -343,17 +344,17 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_ExceedsQuota_Integration_Error(t 
 		require.NoError(t, err)
 
 		// Set up remaining mock expectations
-		mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:        userID,
 			BytesUploaded: 900,
 		}, nil)
 		// Note: GetUsageAggregator and GetAggregatedUsageByType are not called because daily limit check fails first
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(config, nil)
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 
 		// Test upload that exceeds quota
-		err = enforcer.RecordUpload(userID, 101, 1500, "127.0.0.1")
+		err = enforcer.RecordUpload(ctx, userID, 101, 1500, "127.0.0.1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "upload blocked")
 
@@ -370,7 +371,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_SuccessfulDownloadRecording_Int
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
 		// Set up mock expectations
-		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -388,28 +389,28 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_SuccessfulDownloadRecording_Int
 		require.NoError(t, err)
 
 		// Set up remaining mock expectations
-		mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.On("GetTodayUsage", uint(userID)).Return(&pluginCore.Usage{
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(userID)).Return(&pluginCore.Usage{
 			UserID:          userID,
 			BytesDownloaded: 0,
 		}, nil)
 		mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-		mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeDownload).Return(uint64(0), nil)
-		mockQuotaService.On("GetUsageAggregator").Return(mockUsageAggregator)
-		mockUsageManager.On("RecordDownload", userID, uint(200), uint64(1000), "127.0.0.1").Return(nil)
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(config, nil)
-		mockUsageManager.On("GetCurrentUsage", userID).Return(&pluginCore.Usage{
+		mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(0), nil)
+		mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+		mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uint(200), uint64(1000), "127.0.0.1").Return(nil)
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
+		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:          userID,
 			BytesDownloaded: 1000,
 		}, nil)
 
 		// Test successful download recording
-		err = enforcer.RecordDownload(userID, 200, 1000, "127.0.0.1")
+		err = enforcer.RecordDownload(ctx, userID, 200, 1000, "127.0.0.1")
 		assert.NoError(t, err)
 
 		// Verify the usage was recorded
-		usage, err := enforcer.GetCurrentUsage(userID)
+		usage, err := enforcer.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(1000), usage.BytesDownloaded)
 
@@ -426,7 +427,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_ExceedsQuota_Integration_Error(
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
 		// Set up mock expectations
-		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -444,17 +445,17 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_ExceedsQuota_Integration_Error(
 		require.NoError(t, err)
 
 		// Set up remaining mock expectations
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(config, nil)
-		mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:          userID,
 			BytesDownloaded: 900,
 		}, nil)
 		// Note: GetUsageAggregator and GetAggregatedUsageByType are not called because daily limit check fails first
 
 		// Test download that exceeds quota
-		err = enforcer.RecordDownload(userID, 201, 1500, "127.0.0.1")
+		err = enforcer.RecordDownload(ctx, userID, 201, 1500, "127.0.0.1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "download blocked")
 
@@ -471,7 +472,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange_SuccessfulStorageRecording
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
 		// Set up mock expectations
-		mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -487,25 +488,25 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange_SuccessfulStorageRecording
 		require.NoError(t, err)
 
 		// Set up remaining mock expectations
-		mockQuotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.On("GetTodayUsage", uint(userID)).Return(&pluginCore.Usage{
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(userID)).Return(&pluginCore.Usage{
 			UserID:      userID,
 			BytesStored: 0,
 		}, nil)
-		mockUsageManager.On("RecordStorageChange", userID, uint(300), int64(1500), "127.0.0.1").Return(nil)
-		mockUsageManager.On("GetUserQuotaConfig", userID).Return(config, nil)
-		mockUsageManager.On("GetCurrentUsage", userID).Return(&pluginCore.Usage{
+		mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uint(300), int64(1500), "127.0.0.1").Return(nil)
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
+		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:      userID,
 			BytesStored: 1500,
 		}, nil)
 
 		// Test successful storage change recording
-		err = enforcer.RecordStorageChange(userID, 300, 1500, "127.0.0.1")
+		err = enforcer.RecordStorageChange(ctx, userID, 300, 1500, "127.0.0.1")
 		assert.NoError(t, err)
 
 		// Verify the usage was recorded
-		usage, err := enforcer.GetCurrentUsage(userID)
+		usage, err := enforcer.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(1500), usage.BytesStored)
 

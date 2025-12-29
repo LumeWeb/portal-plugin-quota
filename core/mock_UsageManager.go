@@ -5,10 +5,12 @@
 package core
 
 import (
+	"context"
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"gorm.io/gorm"
 )
 
 // NewMockUsageManager creates a new instance of MockUsageManager. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -39,8 +41,8 @@ func (_m *MockUsageManager) EXPECT() *MockUsageManager_Expecter {
 }
 
 // GetCurrentUsage provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) GetCurrentUsage(userID uint) (*Usage, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockUsageManager) GetCurrentUsage(ctx context.Context, userID uint) (*Usage, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetCurrentUsage")
@@ -48,18 +50,18 @@ func (_mock *MockUsageManager) GetCurrentUsage(userID uint) (*Usage, error) {
 
 	var r0 *Usage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (*Usage, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (*Usage, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) *Usage); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) *Usage); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*Usage)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -72,19 +74,25 @@ type MockUsageManager_GetCurrentUsage_Call struct {
 }
 
 // GetCurrentUsage is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockUsageManager_Expecter) GetCurrentUsage(userID interface{}) *MockUsageManager_GetCurrentUsage_Call {
-	return &MockUsageManager_GetCurrentUsage_Call{Call: _e.mock.On("GetCurrentUsage", userID)}
+func (_e *MockUsageManager_Expecter) GetCurrentUsage(ctx interface{}, userID interface{}) *MockUsageManager_GetCurrentUsage_Call {
+	return &MockUsageManager_GetCurrentUsage_Call{Call: _e.mock.On("GetCurrentUsage", ctx, userID)}
 }
 
-func (_c *MockUsageManager_GetCurrentUsage_Call) Run(run func(userID uint)) *MockUsageManager_GetCurrentUsage_Call {
+func (_c *MockUsageManager_GetCurrentUsage_Call) Run(run func(ctx context.Context, userID uint)) *MockUsageManager_GetCurrentUsage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -95,14 +103,14 @@ func (_c *MockUsageManager_GetCurrentUsage_Call) Return(usage *Usage, err error)
 	return _c
 }
 
-func (_c *MockUsageManager_GetCurrentUsage_Call) RunAndReturn(run func(userID uint) (*Usage, error)) *MockUsageManager_GetCurrentUsage_Call {
+func (_c *MockUsageManager_GetCurrentUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint) (*Usage, error)) *MockUsageManager_GetCurrentUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetDetailedUsage provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) GetDetailedUsage(userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error) {
-	ret := _mock.Called(userID, start, end)
+func (_mock *MockUsageManager) GetDetailedUsage(ctx context.Context, userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error) {
+	ret := _mock.Called(ctx, userID, start, end)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDetailedUsage")
@@ -110,18 +118,18 @@ func (_mock *MockUsageManager) GetDetailedUsage(userID uint, start time.Time, en
 
 	var r0 []*UserUsageDetail
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, time.Time, time.Time) ([]*UserUsageDetail, error)); ok {
-		return returnFunc(userID, start, end)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, time.Time, time.Time) ([]*UserUsageDetail, error)); ok {
+		return returnFunc(ctx, userID, start, end)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, time.Time, time.Time) []*UserUsageDetail); ok {
-		r0 = returnFunc(userID, start, end)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, time.Time, time.Time) []*UserUsageDetail); ok {
+		r0 = returnFunc(ctx, userID, start, end)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*UserUsageDetail)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, time.Time, time.Time) error); ok {
-		r1 = returnFunc(userID, start, end)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, time.Time, time.Time) error); ok {
+		r1 = returnFunc(ctx, userID, start, end)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -134,31 +142,37 @@ type MockUsageManager_GetDetailedUsage_Call struct {
 }
 
 // GetDetailedUsage is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - start time.Time
 //   - end time.Time
-func (_e *MockUsageManager_Expecter) GetDetailedUsage(userID interface{}, start interface{}, end interface{}) *MockUsageManager_GetDetailedUsage_Call {
-	return &MockUsageManager_GetDetailedUsage_Call{Call: _e.mock.On("GetDetailedUsage", userID, start, end)}
+func (_e *MockUsageManager_Expecter) GetDetailedUsage(ctx interface{}, userID interface{}, start interface{}, end interface{}) *MockUsageManager_GetDetailedUsage_Call {
+	return &MockUsageManager_GetDetailedUsage_Call{Call: _e.mock.On("GetDetailedUsage", ctx, userID, start, end)}
 }
 
-func (_c *MockUsageManager_GetDetailedUsage_Call) Run(run func(userID uint, start time.Time, end time.Time)) *MockUsageManager_GetDetailedUsage_Call {
+func (_c *MockUsageManager_GetDetailedUsage_Call) Run(run func(ctx context.Context, userID uint, start time.Time, end time.Time)) *MockUsageManager_GetDetailedUsage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 time.Time
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(time.Time)
+			arg1 = args[1].(uint)
 		}
 		var arg2 time.Time
 		if args[2] != nil {
 			arg2 = args[2].(time.Time)
 		}
+		var arg3 time.Time
+		if args[3] != nil {
+			arg3 = args[3].(time.Time)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -169,14 +183,14 @@ func (_c *MockUsageManager_GetDetailedUsage_Call) Return(vs []*UserUsageDetail, 
 	return _c
 }
 
-func (_c *MockUsageManager_GetDetailedUsage_Call) RunAndReturn(run func(userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error)) *MockUsageManager_GetDetailedUsage_Call {
+func (_c *MockUsageManager_GetDetailedUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error)) *MockUsageManager_GetDetailedUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetTotalBytesByType provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) GetTotalBytesByType(userID uint, usageType UsageType) (uint64, error) {
-	ret := _mock.Called(userID, usageType)
+func (_mock *MockUsageManager) GetTotalBytesByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error) {
+	ret := _mock.Called(ctx, userID, usageType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTotalBytesByType")
@@ -184,16 +198,16 @@ func (_mock *MockUsageManager) GetTotalBytesByType(userID uint, usageType UsageT
 
 	var r0 uint64
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, UsageType) (uint64, error)); ok {
-		return returnFunc(userID, usageType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) (uint64, error)); ok {
+		return returnFunc(ctx, userID, usageType)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, UsageType) uint64); ok {
-		r0 = returnFunc(userID, usageType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) uint64); ok {
+		r0 = returnFunc(ctx, userID, usageType)
 	} else {
 		r0 = ret.Get(0).(uint64)
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, UsageType) error); ok {
-		r1 = returnFunc(userID, usageType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, UsageType) error); ok {
+		r1 = returnFunc(ctx, userID, usageType)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -206,90 +220,22 @@ type MockUsageManager_GetTotalBytesByType_Call struct {
 }
 
 // GetTotalBytesByType is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - usageType UsageType
-func (_e *MockUsageManager_Expecter) GetTotalBytesByType(userID interface{}, usageType interface{}) *MockUsageManager_GetTotalBytesByType_Call {
-	return &MockUsageManager_GetTotalBytesByType_Call{Call: _e.mock.On("GetTotalBytesByType", userID, usageType)}
+func (_e *MockUsageManager_Expecter) GetTotalBytesByType(ctx interface{}, userID interface{}, usageType interface{}) *MockUsageManager_GetTotalBytesByType_Call {
+	return &MockUsageManager_GetTotalBytesByType_Call{Call: _e.mock.On("GetTotalBytesByType", ctx, userID, usageType)}
 }
 
-func (_c *MockUsageManager_GetTotalBytesByType_Call) Run(run func(userID uint, usageType UsageType)) *MockUsageManager_GetTotalBytesByType_Call {
+func (_c *MockUsageManager_GetTotalBytesByType_Call) Run(run func(ctx context.Context, userID uint, usageType UsageType)) *MockUsageManager_GetTotalBytesByType_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 UsageType
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(UsageType)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockUsageManager_GetTotalBytesByType_Call) Return(v uint64, err error) *MockUsageManager_GetTotalBytesByType_Call {
-	_c.Call.Return(v, err)
-	return _c
-}
-
-func (_c *MockUsageManager_GetTotalBytesByType_Call) RunAndReturn(run func(userID uint, usageType UsageType) (uint64, error)) *MockUsageManager_GetTotalBytesByType_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetUsageHistory provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) GetUsageHistory(userID uint, period int, usageType UsageType) ([]*UsagePoint, error) {
-	ret := _mock.Called(userID, period, usageType)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetUsageHistory")
-	}
-
-	var r0 []*UsagePoint
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, int, UsageType) ([]*UsagePoint, error)); ok {
-		return returnFunc(userID, period, usageType)
-	}
-	if returnFunc, ok := ret.Get(0).(func(uint, int, UsageType) []*UsagePoint); ok {
-		r0 = returnFunc(userID, period, usageType)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*UsagePoint)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(uint, int, UsageType) error); ok {
-		r1 = returnFunc(userID, period, usageType)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockUsageManager_GetUsageHistory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageHistory'
-type MockUsageManager_GetUsageHistory_Call struct {
-	*mock.Call
-}
-
-// GetUsageHistory is a helper method to define mock.On call
-//   - userID uint
-//   - period int
-//   - usageType UsageType
-func (_e *MockUsageManager_Expecter) GetUsageHistory(userID interface{}, period interface{}, usageType interface{}) *MockUsageManager_GetUsageHistory_Call {
-	return &MockUsageManager_GetUsageHistory_Call{Call: _e.mock.On("GetUsageHistory", userID, period, usageType)}
-}
-
-func (_c *MockUsageManager_GetUsageHistory_Call) Run(run func(userID uint, period int, usageType UsageType)) *MockUsageManager_GetUsageHistory_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
-		if args[0] != nil {
-			arg0 = args[0].(uint)
-		}
-		var arg1 int
-		if args[1] != nil {
-			arg1 = args[1].(int)
+			arg1 = args[1].(uint)
 		}
 		var arg2 UsageType
 		if args[2] != nil {
@@ -304,19 +250,99 @@ func (_c *MockUsageManager_GetUsageHistory_Call) Run(run func(userID uint, perio
 	return _c
 }
 
+func (_c *MockUsageManager_GetTotalBytesByType_Call) Return(v uint64, err error) *MockUsageManager_GetTotalBytesByType_Call {
+	_c.Call.Return(v, err)
+	return _c
+}
+
+func (_c *MockUsageManager_GetTotalBytesByType_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType) (uint64, error)) *MockUsageManager_GetTotalBytesByType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetUsageHistory provides a mock function for the type MockUsageManager
+func (_mock *MockUsageManager) GetUsageHistory(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error) {
+	ret := _mock.Called(ctx, userID, period, usageType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUsageHistory")
+	}
+
+	var r0 []*UsagePoint
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, int, UsageType) ([]*UsagePoint, error)); ok {
+		return returnFunc(ctx, userID, period, usageType)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, int, UsageType) []*UsagePoint); ok {
+		r0 = returnFunc(ctx, userID, period, usageType)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*UsagePoint)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, int, UsageType) error); ok {
+		r1 = returnFunc(ctx, userID, period, usageType)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockUsageManager_GetUsageHistory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageHistory'
+type MockUsageManager_GetUsageHistory_Call struct {
+	*mock.Call
+}
+
+// GetUsageHistory is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - period int
+//   - usageType UsageType
+func (_e *MockUsageManager_Expecter) GetUsageHistory(ctx interface{}, userID interface{}, period interface{}, usageType interface{}) *MockUsageManager_GetUsageHistory_Call {
+	return &MockUsageManager_GetUsageHistory_Call{Call: _e.mock.On("GetUsageHistory", ctx, userID, period, usageType)}
+}
+
+func (_c *MockUsageManager_GetUsageHistory_Call) Run(run func(ctx context.Context, userID uint, period int, usageType UsageType)) *MockUsageManager_GetUsageHistory_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		var arg3 UsageType
+		if args[3] != nil {
+			arg3 = args[3].(UsageType)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
 func (_c *MockUsageManager_GetUsageHistory_Call) Return(usagePoints []*UsagePoint, err error) *MockUsageManager_GetUsageHistory_Call {
 	_c.Call.Return(usagePoints, err)
 	return _c
 }
 
-func (_c *MockUsageManager_GetUsageHistory_Call) RunAndReturn(run func(userID uint, period int, usageType UsageType) ([]*UsagePoint, error)) *MockUsageManager_GetUsageHistory_Call {
+func (_c *MockUsageManager_GetUsageHistory_Call) RunAndReturn(run func(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error)) *MockUsageManager_GetUsageHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUserQuotaConfig provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) GetUserQuotaConfig(userID uint) (*models.UserQuotaConfig, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockUsageManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*models.UserQuotaConfig, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserQuotaConfig")
@@ -324,18 +350,18 @@ func (_mock *MockUsageManager) GetUserQuotaConfig(userID uint) (*models.UserQuot
 
 	var r0 *models.UserQuotaConfig
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (*models.UserQuotaConfig, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (*models.UserQuotaConfig, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) *models.UserQuotaConfig); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) *models.UserQuotaConfig); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*models.UserQuotaConfig)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -348,19 +374,25 @@ type MockUsageManager_GetUserQuotaConfig_Call struct {
 }
 
 // GetUserQuotaConfig is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockUsageManager_Expecter) GetUserQuotaConfig(userID interface{}) *MockUsageManager_GetUserQuotaConfig_Call {
-	return &MockUsageManager_GetUserQuotaConfig_Call{Call: _e.mock.On("GetUserQuotaConfig", userID)}
+func (_e *MockUsageManager_Expecter) GetUserQuotaConfig(ctx interface{}, userID interface{}) *MockUsageManager_GetUserQuotaConfig_Call {
+	return &MockUsageManager_GetUserQuotaConfig_Call{Call: _e.mock.On("GetUserQuotaConfig", ctx, userID)}
 }
 
-func (_c *MockUsageManager_GetUserQuotaConfig_Call) Run(run func(userID uint)) *MockUsageManager_GetUserQuotaConfig_Call {
+func (_c *MockUsageManager_GetUserQuotaConfig_Call) Run(run func(ctx context.Context, userID uint)) *MockUsageManager_GetUserQuotaConfig_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -371,22 +403,22 @@ func (_c *MockUsageManager_GetUserQuotaConfig_Call) Return(userQuotaConfig *mode
 	return _c
 }
 
-func (_c *MockUsageManager_GetUserQuotaConfig_Call) RunAndReturn(run func(userID uint) (*models.UserQuotaConfig, error)) *MockUsageManager_GetUserQuotaConfig_Call {
+func (_c *MockUsageManager_GetUserQuotaConfig_Call) RunAndReturn(run func(ctx context.Context, userID uint) (*models.UserQuotaConfig, error)) *MockUsageManager_GetUserQuotaConfig_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordDownload provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) RecordDownload(userID uint, uploadID uint, bytes uint64, ip string) error {
-	ret := _mock.Called(userID, uploadID, bytes, ip)
+func (_mock *MockUsageManager) RecordDownload(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error {
+	ret := _mock.Called(ctx, userID, uploadID, bytes, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordDownload")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uint, uint64, string) error); ok {
-		r0 = returnFunc(userID, uploadID, bytes, ip)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, uint64, string) error); ok {
+		r0 = returnFunc(ctx, userID, uploadID, bytes, ip)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -399,37 +431,43 @@ type MockUsageManager_RecordDownload_Call struct {
 }
 
 // RecordDownload is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uploadID uint
 //   - bytes uint64
 //   - ip string
-func (_e *MockUsageManager_Expecter) RecordDownload(userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockUsageManager_RecordDownload_Call {
-	return &MockUsageManager_RecordDownload_Call{Call: _e.mock.On("RecordDownload", userID, uploadID, bytes, ip)}
+func (_e *MockUsageManager_Expecter) RecordDownload(ctx interface{}, userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockUsageManager_RecordDownload_Call {
+	return &MockUsageManager_RecordDownload_Call{Call: _e.mock.On("RecordDownload", ctx, userID, uploadID, bytes, ip)}
 }
 
-func (_c *MockUsageManager_RecordDownload_Call) Run(run func(userID uint, uploadID uint, bytes uint64, ip string)) *MockUsageManager_RecordDownload_Call {
+func (_c *MockUsageManager_RecordDownload_Call) Run(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string)) *MockUsageManager_RecordDownload_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 uint
 		if args[1] != nil {
 			arg1 = args[1].(uint)
 		}
-		var arg2 uint64
+		var arg2 uint
 		if args[2] != nil {
-			arg2 = args[2].(uint64)
+			arg2 = args[2].(uint)
 		}
-		var arg3 string
+		var arg3 uint64
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(uint64)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -440,22 +478,22 @@ func (_c *MockUsageManager_RecordDownload_Call) Return(err error) *MockUsageMana
 	return _c
 }
 
-func (_c *MockUsageManager_RecordDownload_Call) RunAndReturn(run func(userID uint, uploadID uint, bytes uint64, ip string) error) *MockUsageManager_RecordDownload_Call {
+func (_c *MockUsageManager_RecordDownload_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error) *MockUsageManager_RecordDownload_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordStorageChange provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) RecordStorageChange(userID uint, uploadID uint, bytes int64, ip string) error {
-	ret := _mock.Called(userID, uploadID, bytes, ip)
+func (_mock *MockUsageManager) RecordStorageChange(ctx context.Context, userID uint, uploadID uint, bytes int64, ip string) error {
+	ret := _mock.Called(ctx, userID, uploadID, bytes, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordStorageChange")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uint, int64, string) error); ok {
-		r0 = returnFunc(userID, uploadID, bytes, ip)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, int64, string) error); ok {
+		r0 = returnFunc(ctx, userID, uploadID, bytes, ip)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -468,37 +506,43 @@ type MockUsageManager_RecordStorageChange_Call struct {
 }
 
 // RecordStorageChange is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uploadID uint
 //   - bytes int64
 //   - ip string
-func (_e *MockUsageManager_Expecter) RecordStorageChange(userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockUsageManager_RecordStorageChange_Call {
-	return &MockUsageManager_RecordStorageChange_Call{Call: _e.mock.On("RecordStorageChange", userID, uploadID, bytes, ip)}
+func (_e *MockUsageManager_Expecter) RecordStorageChange(ctx interface{}, userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockUsageManager_RecordStorageChange_Call {
+	return &MockUsageManager_RecordStorageChange_Call{Call: _e.mock.On("RecordStorageChange", ctx, userID, uploadID, bytes, ip)}
 }
 
-func (_c *MockUsageManager_RecordStorageChange_Call) Run(run func(userID uint, uploadID uint, bytes int64, ip string)) *MockUsageManager_RecordStorageChange_Call {
+func (_c *MockUsageManager_RecordStorageChange_Call) Run(run func(ctx context.Context, userID uint, uploadID uint, bytes int64, ip string)) *MockUsageManager_RecordStorageChange_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 uint
 		if args[1] != nil {
 			arg1 = args[1].(uint)
 		}
-		var arg2 int64
+		var arg2 uint
 		if args[2] != nil {
-			arg2 = args[2].(int64)
+			arg2 = args[2].(uint)
 		}
-		var arg3 string
+		var arg3 int64
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(int64)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -509,22 +553,22 @@ func (_c *MockUsageManager_RecordStorageChange_Call) Return(err error) *MockUsag
 	return _c
 }
 
-func (_c *MockUsageManager_RecordStorageChange_Call) RunAndReturn(run func(userID uint, uploadID uint, bytes int64, ip string) error) *MockUsageManager_RecordStorageChange_Call {
+func (_c *MockUsageManager_RecordStorageChange_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes int64, ip string) error) *MockUsageManager_RecordStorageChange_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordUpload provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) RecordUpload(userID uint, uploadID uint, bytes uint64, ip string) error {
-	ret := _mock.Called(userID, uploadID, bytes, ip)
+func (_mock *MockUsageManager) RecordUpload(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error {
+	ret := _mock.Called(ctx, userID, uploadID, bytes, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordUpload")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uint, uint64, string) error); ok {
-		r0 = returnFunc(userID, uploadID, bytes, ip)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, uint64, string) error); ok {
+		r0 = returnFunc(ctx, userID, uploadID, bytes, ip)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -537,31 +581,106 @@ type MockUsageManager_RecordUpload_Call struct {
 }
 
 // RecordUpload is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uploadID uint
 //   - bytes uint64
 //   - ip string
-func (_e *MockUsageManager_Expecter) RecordUpload(userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockUsageManager_RecordUpload_Call {
-	return &MockUsageManager_RecordUpload_Call{Call: _e.mock.On("RecordUpload", userID, uploadID, bytes, ip)}
+func (_e *MockUsageManager_Expecter) RecordUpload(ctx interface{}, userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockUsageManager_RecordUpload_Call {
+	return &MockUsageManager_RecordUpload_Call{Call: _e.mock.On("RecordUpload", ctx, userID, uploadID, bytes, ip)}
 }
 
-func (_c *MockUsageManager_RecordUpload_Call) Run(run func(userID uint, uploadID uint, bytes uint64, ip string)) *MockUsageManager_RecordUpload_Call {
+func (_c *MockUsageManager_RecordUpload_Call) Run(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string)) *MockUsageManager_RecordUpload_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 uint
 		if args[1] != nil {
 			arg1 = args[1].(uint)
 		}
-		var arg2 uint64
+		var arg2 uint
 		if args[2] != nil {
-			arg2 = args[2].(uint64)
+			arg2 = args[2].(uint)
 		}
-		var arg3 string
+		var arg3 uint64
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(uint64)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUsageManager_RecordUpload_Call) Return(err error) *MockUsageManager_RecordUpload_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockUsageManager_RecordUpload_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error) *MockUsageManager_RecordUpload_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RecordUsageAndConsume provides a mock function for the type MockUsageManager
+func (_mock *MockUsageManager) RecordUsageAndConsume(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64) error {
+	ret := _mock.Called(ctx, detail, grantType, bytes)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordUsageAndConsume")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *models.UserUsageDetail, models.GrantType, uint64) error); ok {
+		r0 = returnFunc(ctx, detail, grantType, bytes)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockUsageManager_RecordUsageAndConsume_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordUsageAndConsume'
+type MockUsageManager_RecordUsageAndConsume_Call struct {
+	*mock.Call
+}
+
+// RecordUsageAndConsume is a helper method to define mock.On call
+//   - ctx context.Context
+//   - detail *models.UserUsageDetail
+//   - grantType models.GrantType
+//   - bytes uint64
+func (_e *MockUsageManager_Expecter) RecordUsageAndConsume(ctx interface{}, detail interface{}, grantType interface{}, bytes interface{}) *MockUsageManager_RecordUsageAndConsume_Call {
+	return &MockUsageManager_RecordUsageAndConsume_Call{Call: _e.mock.On("RecordUsageAndConsume", ctx, detail, grantType, bytes)}
+}
+
+func (_c *MockUsageManager_RecordUsageAndConsume_Call) Run(run func(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64)) *MockUsageManager_RecordUsageAndConsume_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *models.UserUsageDetail
+		if args[1] != nil {
+			arg1 = args[1].(*models.UserUsageDetail)
+		}
+		var arg2 models.GrantType
+		if args[2] != nil {
+			arg2 = args[2].(models.GrantType)
+		}
+		var arg3 uint64
+		if args[3] != nil {
+			arg3 = args[3].(uint64)
 		}
 		run(
 			arg0,
@@ -573,27 +692,27 @@ func (_c *MockUsageManager_RecordUpload_Call) Run(run func(userID uint, uploadID
 	return _c
 }
 
-func (_c *MockUsageManager_RecordUpload_Call) Return(err error) *MockUsageManager_RecordUpload_Call {
+func (_c *MockUsageManager_RecordUsageAndConsume_Call) Return(err error) *MockUsageManager_RecordUsageAndConsume_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockUsageManager_RecordUpload_Call) RunAndReturn(run func(userID uint, uploadID uint, bytes uint64, ip string) error) *MockUsageManager_RecordUpload_Call {
+func (_c *MockUsageManager_RecordUsageAndConsume_Call) RunAndReturn(run func(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64) error) *MockUsageManager_RecordUsageAndConsume_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordUserUsageDetail provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) RecordUserUsageDetail(detail *UserUsageDetail) error {
-	ret := _mock.Called(detail)
+func (_mock *MockUsageManager) RecordUserUsageDetail(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB) error {
+	ret := _mock.Called(ctx, detail, tx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordUserUsageDetail")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(*UserUsageDetail) error); ok {
-		r0 = returnFunc(detail)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserUsageDetail, *gorm.DB) error); ok {
+		r0 = returnFunc(ctx, detail, tx)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -606,19 +725,31 @@ type MockUsageManager_RecordUserUsageDetail_Call struct {
 }
 
 // RecordUserUsageDetail is a helper method to define mock.On call
+//   - ctx context.Context
 //   - detail *UserUsageDetail
-func (_e *MockUsageManager_Expecter) RecordUserUsageDetail(detail interface{}) *MockUsageManager_RecordUserUsageDetail_Call {
-	return &MockUsageManager_RecordUserUsageDetail_Call{Call: _e.mock.On("RecordUserUsageDetail", detail)}
+//   - tx *gorm.DB
+func (_e *MockUsageManager_Expecter) RecordUserUsageDetail(ctx interface{}, detail interface{}, tx interface{}) *MockUsageManager_RecordUserUsageDetail_Call {
+	return &MockUsageManager_RecordUserUsageDetail_Call{Call: _e.mock.On("RecordUserUsageDetail", ctx, detail, tx)}
 }
 
-func (_c *MockUsageManager_RecordUserUsageDetail_Call) Run(run func(detail *UserUsageDetail)) *MockUsageManager_RecordUserUsageDetail_Call {
+func (_c *MockUsageManager_RecordUserUsageDetail_Call) Run(run func(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB)) *MockUsageManager_RecordUserUsageDetail_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *UserUsageDetail
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(*UserUsageDetail)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *UserUsageDetail
+		if args[1] != nil {
+			arg1 = args[1].(*UserUsageDetail)
+		}
+		var arg2 *gorm.DB
+		if args[2] != nil {
+			arg2 = args[2].(*gorm.DB)
 		}
 		run(
 			arg0,
+			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -629,22 +760,22 @@ func (_c *MockUsageManager_RecordUserUsageDetail_Call) Return(err error) *MockUs
 	return _c
 }
 
-func (_c *MockUsageManager_RecordUserUsageDetail_Call) RunAndReturn(run func(detail *UserUsageDetail) error) *MockUsageManager_RecordUserUsageDetail_Call {
+func (_c *MockUsageManager_RecordUserUsageDetail_Call) RunAndReturn(run func(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB) error) *MockUsageManager_RecordUserUsageDetail_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // UpdateDailyUsage provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) UpdateDailyUsage(userID uint, usageType UsageType, bytes int64) error {
-	ret := _mock.Called(userID, usageType, bytes)
+func (_mock *MockUsageManager) UpdateDailyUsage(ctx context.Context, userID uint, usageType UsageType, bytes int64) error {
+	ret := _mock.Called(ctx, userID, usageType, bytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateDailyUsage")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, UsageType, int64) error); ok {
-		r0 = returnFunc(userID, usageType, bytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType, int64) error); ok {
+		r0 = returnFunc(ctx, userID, usageType, bytes)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -657,31 +788,37 @@ type MockUsageManager_UpdateDailyUsage_Call struct {
 }
 
 // UpdateDailyUsage is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - usageType UsageType
 //   - bytes int64
-func (_e *MockUsageManager_Expecter) UpdateDailyUsage(userID interface{}, usageType interface{}, bytes interface{}) *MockUsageManager_UpdateDailyUsage_Call {
-	return &MockUsageManager_UpdateDailyUsage_Call{Call: _e.mock.On("UpdateDailyUsage", userID, usageType, bytes)}
+func (_e *MockUsageManager_Expecter) UpdateDailyUsage(ctx interface{}, userID interface{}, usageType interface{}, bytes interface{}) *MockUsageManager_UpdateDailyUsage_Call {
+	return &MockUsageManager_UpdateDailyUsage_Call{Call: _e.mock.On("UpdateDailyUsage", ctx, userID, usageType, bytes)}
 }
 
-func (_c *MockUsageManager_UpdateDailyUsage_Call) Run(run func(userID uint, usageType UsageType, bytes int64)) *MockUsageManager_UpdateDailyUsage_Call {
+func (_c *MockUsageManager_UpdateDailyUsage_Call) Run(run func(ctx context.Context, userID uint, usageType UsageType, bytes int64)) *MockUsageManager_UpdateDailyUsage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 UsageType
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(UsageType)
+			arg1 = args[1].(uint)
 		}
-		var arg2 int64
+		var arg2 UsageType
 		if args[2] != nil {
-			arg2 = args[2].(int64)
+			arg2 = args[2].(UsageType)
+		}
+		var arg3 int64
+		if args[3] != nil {
+			arg3 = args[3].(int64)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -692,7 +829,7 @@ func (_c *MockUsageManager_UpdateDailyUsage_Call) Return(err error) *MockUsageMa
 	return _c
 }
 
-func (_c *MockUsageManager_UpdateDailyUsage_Call) RunAndReturn(run func(userID uint, usageType UsageType, bytes int64) error) *MockUsageManager_UpdateDailyUsage_Call {
+func (_c *MockUsageManager_UpdateDailyUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType, bytes int64) error) *MockUsageManager_UpdateDailyUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }

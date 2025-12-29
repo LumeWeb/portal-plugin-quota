@@ -1,11 +1,12 @@
 package quota
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
 
-	portalCore "go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/core"
 	portalModels "go.lumeweb.com/portal/db/models"
 	portalEvent "go.lumeweb.com/portal/event"
 	"go.uber.org/zap"
@@ -18,39 +19,38 @@ var (
 
 // registerEventListeners registers all portal event listeners for the quota service
 func (s *QuotaServiceDefault) registerEventListeners() {
-	if s.ctx == nil {
-		return
-	}
-
 	// Register upload completed handler
-	portalEvent.OnUploadCompleted(s.ctx, s.handleUploadCompleted)
+	portalEvent.OnUploadCompleted(s.Context(), s.handleUploadCompleted)
 
 	// Register download completed handler
-	portalEvent.OnDownloadCompleted(s.ctx, s.handleDownloadCompleted)
+	portalEvent.OnDownloadCompleted(s.Context(), s.handleDownloadCompleted)
 
 	// Register storage pin handler
-	portalEvent.OnStorageObjectPinned(s.ctx, s.handleStorageObjectPinned)
+	portalEvent.OnStorageObjectPinned(s.Context(), s.handleStorageObjectPinned)
 
 	// Register storage unpin handler
-	portalEvent.OnStorageObjectUnpinned(s.ctx, s.handleStorageObjectUnpinned)
+	portalEvent.OnStorageObjectUnpinned(s.Context(), s.handleStorageObjectUnpinned)
 }
 
 // getUploadSize retrieves the upload size for storage change recording.
 // It returns an error if the upload size exceeds math.MaxInt64, as this would cause overflow
 // when converting to int64 for RecordStorageChange. In such cases, the size is capped at
 // math.MaxInt64 to prevent overflow and the error is logged.
-func (s *QuotaServiceDefault) getUploadSize(pin *portalModels.Pin) (uint64, error) {
-	uploadService := portalCore.GetService[portalCore.UploadService](s.ctx, portalCore.UPLOAD_SERVICE)
+func (s *QuotaServiceDefault) getUploadSize(ctx context.Context, pin *portalModels.Pin) (uint64, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.getUploadSize")
+	defer span.End()
+
+	uploadService := core.GetService[core.UploadService](s.Context(), core.UPLOAD_SERVICE)
 	if uploadService == nil {
-		s.logger.Error("Upload service not available",
+		s.Logger().Error("Upload service not available",
 			zap.Uint("pinID", pin.ID),
 			zap.Uint("uploadID", pin.UploadID))
 		return 0, errServiceUnavailable
 	}
 
-	upload, err := uploadService.GetUploadByID(s.ctx, pin.UploadID)
+	upload, err := uploadService.GetUploadByID(ctx, pin.UploadID)
 	if err != nil {
-		s.logger.Error("Failed to get upload for pin",
+		s.Logger().Error("Failed to get upload for pin",
 			zap.Uint("pinID", pin.ID),
 			zap.Uint("uploadID", pin.UploadID),
 			zap.Error(err))
@@ -58,7 +58,7 @@ func (s *QuotaServiceDefault) getUploadSize(pin *portalModels.Pin) (uint64, erro
 	}
 
 	if upload.Size > math.MaxInt64 {
-		s.logger.Warn("Upload size exceeds maximum int64 value, capping for storage change",
+		s.Logger().Warn("Upload size exceeds maximum int64 value, capping for storage change",
 			zap.Uint("pinID", pin.ID),
 			zap.Uint("uploadID", pin.UploadID),
 			zap.Uint64("uploadSize", upload.Size),
@@ -70,25 +70,31 @@ func (s *QuotaServiceDefault) getUploadSize(pin *portalModels.Pin) (uint64, erro
 }
 
 // handleUploadCompleted handles the upload completed event
-func (s *QuotaServiceDefault) handleUploadCompleted(uploadID uint, bytes uint64, ip string, userID *uint) error {
+func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleUploadCompleted")
+	defer span.End()
+
 	// Anonymous uploads are not tracked for quota
 	if userID == nil {
-		s.logger.Debug("Skipping anonymous upload for quota tracking",
+		s.Logger().Debug("Skipping anonymous upload for quota tracking",
 			zap.Uint("uploadID", uploadID),
 			zap.Uint64("bytes", bytes))
 		return nil
 	}
 
-	s.logger.Debug("Recording upload usage from event",
+	s.Logger().Debug("Recording upload usage from event",
 		zap.Uint("userID", *userID),
 		zap.Uint("uploadID", uploadID),
 		zap.Uint64("bytes", bytes))
 
-	return s.RecordUpload(*userID, uploadID, bytes, ip)
+	return s.RecordUpload(ctx, *userID, uploadID, bytes, ip)
 }
 
 // handleDownloadCompleted handles the download completed event
-func (s *QuotaServiceDefault) handleDownloadCompleted(uploadID uint, bytes uint64, ip string, userID *uint) error {
+func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleDownloadCompleted")
+	defer span.End()
+
 	var effectiveUserID uint
 	if userID == nil {
 		effectiveUserID = 0 // Anonymous download - will use shared usage
@@ -96,36 +102,42 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(uploadID uint, bytes uint6
 		effectiveUserID = *userID
 	}
 
-	return s.RecordDownload(effectiveUserID, uploadID, bytes, ip)
+	return s.RecordDownload(ctx, effectiveUserID, uploadID, bytes, ip)
 }
 
 // handleStorageObjectPinned handles the storage object pinned event
-func (s *QuotaServiceDefault) handleStorageObjectPinned(pin *portalModels.Pin, ip string) error {
-	size, err := s.getUploadSize(pin)
+func (s *QuotaServiceDefault) handleStorageObjectPinned(ctx context.Context, pin *portalModels.Pin, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleStorageObjectPinned")
+	defer span.End()
+
+	size, err := s.getUploadSize(ctx, pin)
 	if err != nil && !errors.Is(err, errUploadSizeOverflow) {
 		return err
 	}
 
-	s.logger.Debug("Recording storage usage from pin event",
+	s.Logger().Debug("Recording storage usage from pin event",
 		zap.Uint("userID", pin.UserID),
 		zap.Uint("uploadID", pin.UploadID),
 		zap.Uint64("bytes", size))
 
-	return s.RecordStorageChange(pin.UserID, pin.UploadID, int64(size), ip)
+	return s.RecordStorageChange(ctx, pin.UserID, pin.UploadID, int64(size), ip)
 }
 
 // handleStorageObjectUnpinned handles the storage object unpinned event
-func (s *QuotaServiceDefault) handleStorageObjectUnpinned(pin *portalModels.Pin, ip string) error {
-	size, err := s.getUploadSize(pin)
+func (s *QuotaServiceDefault) handleStorageObjectUnpinned(ctx context.Context, pin *portalModels.Pin, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleStorageObjectUnpinned")
+	defer span.End()
+
+	size, err := s.getUploadSize(ctx, pin)
 	if err != nil && !errors.Is(err, errUploadSizeOverflow) {
 		return err
 	}
 
-	s.logger.Debug("Recording storage usage from unpin event",
+	s.Logger().Debug("Recording storage usage from unpin event",
 		zap.Uint("userID", pin.UserID),
 		zap.Uint("uploadID", pin.UploadID),
 		zap.Uint64("bytes", size))
 
 	// Storage removal uses negative bytes
-	return s.RecordStorageChange(pin.UserID, pin.UploadID, -int64(size), ip)
+	return s.RecordStorageChange(ctx, pin.UserID, pin.UploadID, -int64(size), ip)
 }

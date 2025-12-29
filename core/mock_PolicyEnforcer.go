@@ -5,6 +5,7 @@
 package core
 
 import (
+	"context"
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
@@ -38,8 +39,8 @@ func (_m *MockPolicyEnforcer) EXPECT() *MockPolicyEnforcer_Expecter {
 }
 
 // CheckDownloadQuota provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) CheckDownloadQuota(config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error) {
-	ret := _mock.Called(config, requestedBytes)
+func (_mock *MockPolicyEnforcer) CheckDownloadQuota(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error) {
+	ret := _mock.Called(ctx, config, requestedBytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckDownloadQuota")
@@ -47,16 +48,16 @@ func (_mock *MockPolicyEnforcer) CheckDownloadQuota(config *UserQuotaConfig, req
 
 	var r0 QuotaCheckResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*UserQuotaConfig, uint64) (QuotaCheckResult, error)); ok {
-		return returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserQuotaConfig, uint64) (QuotaCheckResult, error)); ok {
+		return returnFunc(ctx, config, requestedBytes)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*UserQuotaConfig, uint64) QuotaCheckResult); ok {
-		r0 = returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserQuotaConfig, uint64) QuotaCheckResult); ok {
+		r0 = returnFunc(ctx, config, requestedBytes)
 	} else {
 		r0 = ret.Get(0).(QuotaCheckResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(*UserQuotaConfig, uint64) error); ok {
-		r1 = returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *UserQuotaConfig, uint64) error); ok {
+		r1 = returnFunc(ctx, config, requestedBytes)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -69,25 +70,31 @@ type MockPolicyEnforcer_CheckDownloadQuota_Call struct {
 }
 
 // CheckDownloadQuota is a helper method to define mock.On call
+//   - ctx context.Context
 //   - config *UserQuotaConfig
 //   - requestedBytes uint64
-func (_e *MockPolicyEnforcer_Expecter) CheckDownloadQuota(config interface{}, requestedBytes interface{}) *MockPolicyEnforcer_CheckDownloadQuota_Call {
-	return &MockPolicyEnforcer_CheckDownloadQuota_Call{Call: _e.mock.On("CheckDownloadQuota", config, requestedBytes)}
+func (_e *MockPolicyEnforcer_Expecter) CheckDownloadQuota(ctx interface{}, config interface{}, requestedBytes interface{}) *MockPolicyEnforcer_CheckDownloadQuota_Call {
+	return &MockPolicyEnforcer_CheckDownloadQuota_Call{Call: _e.mock.On("CheckDownloadQuota", ctx, config, requestedBytes)}
 }
 
-func (_c *MockPolicyEnforcer_CheckDownloadQuota_Call) Run(run func(config *UserQuotaConfig, requestedBytes uint64)) *MockPolicyEnforcer_CheckDownloadQuota_Call {
+func (_c *MockPolicyEnforcer_CheckDownloadQuota_Call) Run(run func(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64)) *MockPolicyEnforcer_CheckDownloadQuota_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *UserQuotaConfig
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(*UserQuotaConfig)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 uint64
+		var arg1 *UserQuotaConfig
 		if args[1] != nil {
-			arg1 = args[1].(uint64)
+			arg1 = args[1].(*UserQuotaConfig)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -98,14 +105,14 @@ func (_c *MockPolicyEnforcer_CheckDownloadQuota_Call) Return(quotaCheckResult Qu
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_CheckDownloadQuota_Call) RunAndReturn(run func(config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error)) *MockPolicyEnforcer_CheckDownloadQuota_Call {
+func (_c *MockPolicyEnforcer_CheckDownloadQuota_Call) RunAndReturn(run func(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error)) *MockPolicyEnforcer_CheckDownloadQuota_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CheckStorageQuota provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) CheckStorageQuota(config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error) {
-	ret := _mock.Called(config, requestedBytes)
+func (_mock *MockPolicyEnforcer) CheckStorageQuota(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error) {
+	ret := _mock.Called(ctx, config, requestedBytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckStorageQuota")
@@ -113,16 +120,16 @@ func (_mock *MockPolicyEnforcer) CheckStorageQuota(config *UserQuotaConfig, requ
 
 	var r0 QuotaCheckResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*UserQuotaConfig, uint64) (QuotaCheckResult, error)); ok {
-		return returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserQuotaConfig, uint64) (QuotaCheckResult, error)); ok {
+		return returnFunc(ctx, config, requestedBytes)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*UserQuotaConfig, uint64) QuotaCheckResult); ok {
-		r0 = returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserQuotaConfig, uint64) QuotaCheckResult); ok {
+		r0 = returnFunc(ctx, config, requestedBytes)
 	} else {
 		r0 = ret.Get(0).(QuotaCheckResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(*UserQuotaConfig, uint64) error); ok {
-		r1 = returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *UserQuotaConfig, uint64) error); ok {
+		r1 = returnFunc(ctx, config, requestedBytes)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -135,25 +142,31 @@ type MockPolicyEnforcer_CheckStorageQuota_Call struct {
 }
 
 // CheckStorageQuota is a helper method to define mock.On call
+//   - ctx context.Context
 //   - config *UserQuotaConfig
 //   - requestedBytes uint64
-func (_e *MockPolicyEnforcer_Expecter) CheckStorageQuota(config interface{}, requestedBytes interface{}) *MockPolicyEnforcer_CheckStorageQuota_Call {
-	return &MockPolicyEnforcer_CheckStorageQuota_Call{Call: _e.mock.On("CheckStorageQuota", config, requestedBytes)}
+func (_e *MockPolicyEnforcer_Expecter) CheckStorageQuota(ctx interface{}, config interface{}, requestedBytes interface{}) *MockPolicyEnforcer_CheckStorageQuota_Call {
+	return &MockPolicyEnforcer_CheckStorageQuota_Call{Call: _e.mock.On("CheckStorageQuota", ctx, config, requestedBytes)}
 }
 
-func (_c *MockPolicyEnforcer_CheckStorageQuota_Call) Run(run func(config *UserQuotaConfig, requestedBytes uint64)) *MockPolicyEnforcer_CheckStorageQuota_Call {
+func (_c *MockPolicyEnforcer_CheckStorageQuota_Call) Run(run func(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64)) *MockPolicyEnforcer_CheckStorageQuota_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *UserQuotaConfig
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(*UserQuotaConfig)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 uint64
+		var arg1 *UserQuotaConfig
 		if args[1] != nil {
-			arg1 = args[1].(uint64)
+			arg1 = args[1].(*UserQuotaConfig)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -164,14 +177,14 @@ func (_c *MockPolicyEnforcer_CheckStorageQuota_Call) Return(quotaCheckResult Quo
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_CheckStorageQuota_Call) RunAndReturn(run func(config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error)) *MockPolicyEnforcer_CheckStorageQuota_Call {
+func (_c *MockPolicyEnforcer_CheckStorageQuota_Call) RunAndReturn(run func(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error)) *MockPolicyEnforcer_CheckStorageQuota_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CheckUploadQuota provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) CheckUploadQuota(config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error) {
-	ret := _mock.Called(config, requestedBytes)
+func (_mock *MockPolicyEnforcer) CheckUploadQuota(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error) {
+	ret := _mock.Called(ctx, config, requestedBytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckUploadQuota")
@@ -179,16 +192,16 @@ func (_mock *MockPolicyEnforcer) CheckUploadQuota(config *UserQuotaConfig, reque
 
 	var r0 QuotaCheckResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*UserQuotaConfig, uint64) (QuotaCheckResult, error)); ok {
-		return returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserQuotaConfig, uint64) (QuotaCheckResult, error)); ok {
+		return returnFunc(ctx, config, requestedBytes)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*UserQuotaConfig, uint64) QuotaCheckResult); ok {
-		r0 = returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserQuotaConfig, uint64) QuotaCheckResult); ok {
+		r0 = returnFunc(ctx, config, requestedBytes)
 	} else {
 		r0 = ret.Get(0).(QuotaCheckResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(*UserQuotaConfig, uint64) error); ok {
-		r1 = returnFunc(config, requestedBytes)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *UserQuotaConfig, uint64) error); ok {
+		r1 = returnFunc(ctx, config, requestedBytes)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -201,25 +214,31 @@ type MockPolicyEnforcer_CheckUploadQuota_Call struct {
 }
 
 // CheckUploadQuota is a helper method to define mock.On call
+//   - ctx context.Context
 //   - config *UserQuotaConfig
 //   - requestedBytes uint64
-func (_e *MockPolicyEnforcer_Expecter) CheckUploadQuota(config interface{}, requestedBytes interface{}) *MockPolicyEnforcer_CheckUploadQuota_Call {
-	return &MockPolicyEnforcer_CheckUploadQuota_Call{Call: _e.mock.On("CheckUploadQuota", config, requestedBytes)}
+func (_e *MockPolicyEnforcer_Expecter) CheckUploadQuota(ctx interface{}, config interface{}, requestedBytes interface{}) *MockPolicyEnforcer_CheckUploadQuota_Call {
+	return &MockPolicyEnforcer_CheckUploadQuota_Call{Call: _e.mock.On("CheckUploadQuota", ctx, config, requestedBytes)}
 }
 
-func (_c *MockPolicyEnforcer_CheckUploadQuota_Call) Run(run func(config *UserQuotaConfig, requestedBytes uint64)) *MockPolicyEnforcer_CheckUploadQuota_Call {
+func (_c *MockPolicyEnforcer_CheckUploadQuota_Call) Run(run func(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64)) *MockPolicyEnforcer_CheckUploadQuota_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *UserQuotaConfig
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(*UserQuotaConfig)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 uint64
+		var arg1 *UserQuotaConfig
 		if args[1] != nil {
-			arg1 = args[1].(uint64)
+			arg1 = args[1].(*UserQuotaConfig)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -230,14 +249,14 @@ func (_c *MockPolicyEnforcer_CheckUploadQuota_Call) Return(quotaCheckResult Quot
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_CheckUploadQuota_Call) RunAndReturn(run func(config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error)) *MockPolicyEnforcer_CheckUploadQuota_Call {
+func (_c *MockPolicyEnforcer_CheckUploadQuota_Call) RunAndReturn(run func(ctx context.Context, config *UserQuotaConfig, requestedBytes uint64) (QuotaCheckResult, error)) *MockPolicyEnforcer_CheckUploadQuota_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetCurrentUsage provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) GetCurrentUsage(userID uint) (*Usage, error) {
-	ret := _mock.Called(userID)
+func (_mock *MockPolicyEnforcer) GetCurrentUsage(ctx context.Context, userID uint) (*Usage, error) {
+	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetCurrentUsage")
@@ -245,18 +264,18 @@ func (_mock *MockPolicyEnforcer) GetCurrentUsage(userID uint) (*Usage, error) {
 
 	var r0 *Usage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint) (*Usage, error)); ok {
-		return returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (*Usage, error)); ok {
+		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint) *Usage); ok {
-		r0 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) *Usage); ok {
+		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*Usage)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint) error); ok {
-		r1 = returnFunc(userID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, userID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -269,19 +288,25 @@ type MockPolicyEnforcer_GetCurrentUsage_Call struct {
 }
 
 // GetCurrentUsage is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
-func (_e *MockPolicyEnforcer_Expecter) GetCurrentUsage(userID interface{}) *MockPolicyEnforcer_GetCurrentUsage_Call {
-	return &MockPolicyEnforcer_GetCurrentUsage_Call{Call: _e.mock.On("GetCurrentUsage", userID)}
+func (_e *MockPolicyEnforcer_Expecter) GetCurrentUsage(ctx interface{}, userID interface{}) *MockPolicyEnforcer_GetCurrentUsage_Call {
+	return &MockPolicyEnforcer_GetCurrentUsage_Call{Call: _e.mock.On("GetCurrentUsage", ctx, userID)}
 }
 
-func (_c *MockPolicyEnforcer_GetCurrentUsage_Call) Run(run func(userID uint)) *MockPolicyEnforcer_GetCurrentUsage_Call {
+func (_c *MockPolicyEnforcer_GetCurrentUsage_Call) Run(run func(ctx context.Context, userID uint)) *MockPolicyEnforcer_GetCurrentUsage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -292,14 +317,14 @@ func (_c *MockPolicyEnforcer_GetCurrentUsage_Call) Return(usage *Usage, err erro
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_GetCurrentUsage_Call) RunAndReturn(run func(userID uint) (*Usage, error)) *MockPolicyEnforcer_GetCurrentUsage_Call {
+func (_c *MockPolicyEnforcer_GetCurrentUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint) (*Usage, error)) *MockPolicyEnforcer_GetCurrentUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetDetailedUsage provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) GetDetailedUsage(userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error) {
-	ret := _mock.Called(userID, start, end)
+func (_mock *MockPolicyEnforcer) GetDetailedUsage(ctx context.Context, userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error) {
+	ret := _mock.Called(ctx, userID, start, end)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDetailedUsage")
@@ -307,18 +332,18 @@ func (_mock *MockPolicyEnforcer) GetDetailedUsage(userID uint, start time.Time, 
 
 	var r0 []*UserUsageDetail
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, time.Time, time.Time) ([]*UserUsageDetail, error)); ok {
-		return returnFunc(userID, start, end)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, time.Time, time.Time) ([]*UserUsageDetail, error)); ok {
+		return returnFunc(ctx, userID, start, end)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, time.Time, time.Time) []*UserUsageDetail); ok {
-		r0 = returnFunc(userID, start, end)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, time.Time, time.Time) []*UserUsageDetail); ok {
+		r0 = returnFunc(ctx, userID, start, end)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*UserUsageDetail)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, time.Time, time.Time) error); ok {
-		r1 = returnFunc(userID, start, end)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, time.Time, time.Time) error); ok {
+		r1 = returnFunc(ctx, userID, start, end)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -331,31 +356,37 @@ type MockPolicyEnforcer_GetDetailedUsage_Call struct {
 }
 
 // GetDetailedUsage is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - start time.Time
 //   - end time.Time
-func (_e *MockPolicyEnforcer_Expecter) GetDetailedUsage(userID interface{}, start interface{}, end interface{}) *MockPolicyEnforcer_GetDetailedUsage_Call {
-	return &MockPolicyEnforcer_GetDetailedUsage_Call{Call: _e.mock.On("GetDetailedUsage", userID, start, end)}
+func (_e *MockPolicyEnforcer_Expecter) GetDetailedUsage(ctx interface{}, userID interface{}, start interface{}, end interface{}) *MockPolicyEnforcer_GetDetailedUsage_Call {
+	return &MockPolicyEnforcer_GetDetailedUsage_Call{Call: _e.mock.On("GetDetailedUsage", ctx, userID, start, end)}
 }
 
-func (_c *MockPolicyEnforcer_GetDetailedUsage_Call) Run(run func(userID uint, start time.Time, end time.Time)) *MockPolicyEnforcer_GetDetailedUsage_Call {
+func (_c *MockPolicyEnforcer_GetDetailedUsage_Call) Run(run func(ctx context.Context, userID uint, start time.Time, end time.Time)) *MockPolicyEnforcer_GetDetailedUsage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 time.Time
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(time.Time)
+			arg1 = args[1].(uint)
 		}
 		var arg2 time.Time
 		if args[2] != nil {
 			arg2 = args[2].(time.Time)
 		}
+		var arg3 time.Time
+		if args[3] != nil {
+			arg3 = args[3].(time.Time)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -366,14 +397,14 @@ func (_c *MockPolicyEnforcer_GetDetailedUsage_Call) Return(vs []*UserUsageDetail
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_GetDetailedUsage_Call) RunAndReturn(run func(userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error)) *MockPolicyEnforcer_GetDetailedUsage_Call {
+func (_c *MockPolicyEnforcer_GetDetailedUsage_Call) RunAndReturn(run func(ctx context.Context, userID uint, start time.Time, end time.Time) ([]*UserUsageDetail, error)) *MockPolicyEnforcer_GetDetailedUsage_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUsageHistory provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) GetUsageHistory(userID uint, period int, usageType UsageType) ([]*UsagePoint, error) {
-	ret := _mock.Called(userID, period, usageType)
+func (_mock *MockPolicyEnforcer) GetUsageHistory(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error) {
+	ret := _mock.Called(ctx, userID, period, usageType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUsageHistory")
@@ -381,18 +412,18 @@ func (_mock *MockPolicyEnforcer) GetUsageHistory(userID uint, period int, usageT
 
 	var r0 []*UsagePoint
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, int, UsageType) ([]*UsagePoint, error)); ok {
-		return returnFunc(userID, period, usageType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, int, UsageType) ([]*UsagePoint, error)); ok {
+		return returnFunc(ctx, userID, period, usageType)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, int, UsageType) []*UsagePoint); ok {
-		r0 = returnFunc(userID, period, usageType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, int, UsageType) []*UsagePoint); ok {
+		r0 = returnFunc(ctx, userID, period, usageType)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*UsagePoint)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, int, UsageType) error); ok {
-		r1 = returnFunc(userID, period, usageType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, int, UsageType) error); ok {
+		r1 = returnFunc(ctx, userID, period, usageType)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -405,31 +436,37 @@ type MockPolicyEnforcer_GetUsageHistory_Call struct {
 }
 
 // GetUsageHistory is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - period int
 //   - usageType UsageType
-func (_e *MockPolicyEnforcer_Expecter) GetUsageHistory(userID interface{}, period interface{}, usageType interface{}) *MockPolicyEnforcer_GetUsageHistory_Call {
-	return &MockPolicyEnforcer_GetUsageHistory_Call{Call: _e.mock.On("GetUsageHistory", userID, period, usageType)}
+func (_e *MockPolicyEnforcer_Expecter) GetUsageHistory(ctx interface{}, userID interface{}, period interface{}, usageType interface{}) *MockPolicyEnforcer_GetUsageHistory_Call {
+	return &MockPolicyEnforcer_GetUsageHistory_Call{Call: _e.mock.On("GetUsageHistory", ctx, userID, period, usageType)}
 }
 
-func (_c *MockPolicyEnforcer_GetUsageHistory_Call) Run(run func(userID uint, period int, usageType UsageType)) *MockPolicyEnforcer_GetUsageHistory_Call {
+func (_c *MockPolicyEnforcer_GetUsageHistory_Call) Run(run func(ctx context.Context, userID uint, period int, usageType UsageType)) *MockPolicyEnforcer_GetUsageHistory_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 int
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(int)
+			arg1 = args[1].(uint)
 		}
-		var arg2 UsageType
+		var arg2 int
 		if args[2] != nil {
-			arg2 = args[2].(UsageType)
+			arg2 = args[2].(int)
+		}
+		var arg3 UsageType
+		if args[3] != nil {
+			arg3 = args[3].(UsageType)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -440,22 +477,22 @@ func (_c *MockPolicyEnforcer_GetUsageHistory_Call) Return(usagePoints []*UsagePo
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_GetUsageHistory_Call) RunAndReturn(run func(userID uint, period int, usageType UsageType) ([]*UsagePoint, error)) *MockPolicyEnforcer_GetUsageHistory_Call {
+func (_c *MockPolicyEnforcer_GetUsageHistory_Call) RunAndReturn(run func(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error)) *MockPolicyEnforcer_GetUsageHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordDownload provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) RecordDownload(userID uint, uploadID uint, bytes uint64, ip string) error {
-	ret := _mock.Called(userID, uploadID, bytes, ip)
+func (_mock *MockPolicyEnforcer) RecordDownload(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error {
+	ret := _mock.Called(ctx, userID, uploadID, bytes, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordDownload")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uint, uint64, string) error); ok {
-		r0 = returnFunc(userID, uploadID, bytes, ip)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, uint64, string) error); ok {
+		r0 = returnFunc(ctx, userID, uploadID, bytes, ip)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -468,37 +505,43 @@ type MockPolicyEnforcer_RecordDownload_Call struct {
 }
 
 // RecordDownload is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uploadID uint
 //   - bytes uint64
 //   - ip string
-func (_e *MockPolicyEnforcer_Expecter) RecordDownload(userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockPolicyEnforcer_RecordDownload_Call {
-	return &MockPolicyEnforcer_RecordDownload_Call{Call: _e.mock.On("RecordDownload", userID, uploadID, bytes, ip)}
+func (_e *MockPolicyEnforcer_Expecter) RecordDownload(ctx interface{}, userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockPolicyEnforcer_RecordDownload_Call {
+	return &MockPolicyEnforcer_RecordDownload_Call{Call: _e.mock.On("RecordDownload", ctx, userID, uploadID, bytes, ip)}
 }
 
-func (_c *MockPolicyEnforcer_RecordDownload_Call) Run(run func(userID uint, uploadID uint, bytes uint64, ip string)) *MockPolicyEnforcer_RecordDownload_Call {
+func (_c *MockPolicyEnforcer_RecordDownload_Call) Run(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string)) *MockPolicyEnforcer_RecordDownload_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 uint
 		if args[1] != nil {
 			arg1 = args[1].(uint)
 		}
-		var arg2 uint64
+		var arg2 uint
 		if args[2] != nil {
-			arg2 = args[2].(uint64)
+			arg2 = args[2].(uint)
 		}
-		var arg3 string
+		var arg3 uint64
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(uint64)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -509,22 +552,22 @@ func (_c *MockPolicyEnforcer_RecordDownload_Call) Return(err error) *MockPolicyE
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_RecordDownload_Call) RunAndReturn(run func(userID uint, uploadID uint, bytes uint64, ip string) error) *MockPolicyEnforcer_RecordDownload_Call {
+func (_c *MockPolicyEnforcer_RecordDownload_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error) *MockPolicyEnforcer_RecordDownload_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordStorageChange provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) RecordStorageChange(userID uint, uploadID uint, bytes int64, ip string) error {
-	ret := _mock.Called(userID, uploadID, bytes, ip)
+func (_mock *MockPolicyEnforcer) RecordStorageChange(ctx context.Context, userID uint, uploadID uint, bytes int64, ip string) error {
+	ret := _mock.Called(ctx, userID, uploadID, bytes, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordStorageChange")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uint, int64, string) error); ok {
-		r0 = returnFunc(userID, uploadID, bytes, ip)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, int64, string) error); ok {
+		r0 = returnFunc(ctx, userID, uploadID, bytes, ip)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -537,37 +580,43 @@ type MockPolicyEnforcer_RecordStorageChange_Call struct {
 }
 
 // RecordStorageChange is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uploadID uint
 //   - bytes int64
 //   - ip string
-func (_e *MockPolicyEnforcer_Expecter) RecordStorageChange(userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockPolicyEnforcer_RecordStorageChange_Call {
-	return &MockPolicyEnforcer_RecordStorageChange_Call{Call: _e.mock.On("RecordStorageChange", userID, uploadID, bytes, ip)}
+func (_e *MockPolicyEnforcer_Expecter) RecordStorageChange(ctx interface{}, userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockPolicyEnforcer_RecordStorageChange_Call {
+	return &MockPolicyEnforcer_RecordStorageChange_Call{Call: _e.mock.On("RecordStorageChange", ctx, userID, uploadID, bytes, ip)}
 }
 
-func (_c *MockPolicyEnforcer_RecordStorageChange_Call) Run(run func(userID uint, uploadID uint, bytes int64, ip string)) *MockPolicyEnforcer_RecordStorageChange_Call {
+func (_c *MockPolicyEnforcer_RecordStorageChange_Call) Run(run func(ctx context.Context, userID uint, uploadID uint, bytes int64, ip string)) *MockPolicyEnforcer_RecordStorageChange_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 uint
 		if args[1] != nil {
 			arg1 = args[1].(uint)
 		}
-		var arg2 int64
+		var arg2 uint
 		if args[2] != nil {
-			arg2 = args[2].(int64)
+			arg2 = args[2].(uint)
 		}
-		var arg3 string
+		var arg3 int64
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(int64)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -578,22 +627,22 @@ func (_c *MockPolicyEnforcer_RecordStorageChange_Call) Return(err error) *MockPo
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_RecordStorageChange_Call) RunAndReturn(run func(userID uint, uploadID uint, bytes int64, ip string) error) *MockPolicyEnforcer_RecordStorageChange_Call {
+func (_c *MockPolicyEnforcer_RecordStorageChange_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes int64, ip string) error) *MockPolicyEnforcer_RecordStorageChange_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RecordUpload provides a mock function for the type MockPolicyEnforcer
-func (_mock *MockPolicyEnforcer) RecordUpload(userID uint, uploadID uint, bytes uint64, ip string) error {
-	ret := _mock.Called(userID, uploadID, bytes, ip)
+func (_mock *MockPolicyEnforcer) RecordUpload(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error {
+	ret := _mock.Called(ctx, userID, uploadID, bytes, ip)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordUpload")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(uint, uint, uint64, string) error); ok {
-		r0 = returnFunc(userID, uploadID, bytes, ip)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint, uint64, string) error); ok {
+		r0 = returnFunc(ctx, userID, uploadID, bytes, ip)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -606,37 +655,43 @@ type MockPolicyEnforcer_RecordUpload_Call struct {
 }
 
 // RecordUpload is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - uploadID uint
 //   - bytes uint64
 //   - ip string
-func (_e *MockPolicyEnforcer_Expecter) RecordUpload(userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockPolicyEnforcer_RecordUpload_Call {
-	return &MockPolicyEnforcer_RecordUpload_Call{Call: _e.mock.On("RecordUpload", userID, uploadID, bytes, ip)}
+func (_e *MockPolicyEnforcer_Expecter) RecordUpload(ctx interface{}, userID interface{}, uploadID interface{}, bytes interface{}, ip interface{}) *MockPolicyEnforcer_RecordUpload_Call {
+	return &MockPolicyEnforcer_RecordUpload_Call{Call: _e.mock.On("RecordUpload", ctx, userID, uploadID, bytes, ip)}
 }
 
-func (_c *MockPolicyEnforcer_RecordUpload_Call) Run(run func(userID uint, uploadID uint, bytes uint64, ip string)) *MockPolicyEnforcer_RecordUpload_Call {
+func (_c *MockPolicyEnforcer_RecordUpload_Call) Run(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string)) *MockPolicyEnforcer_RecordUpload_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 uint
 		if args[1] != nil {
 			arg1 = args[1].(uint)
 		}
-		var arg2 uint64
+		var arg2 uint
 		if args[2] != nil {
-			arg2 = args[2].(uint64)
+			arg2 = args[2].(uint)
 		}
-		var arg3 string
+		var arg3 uint64
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(uint64)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -647,7 +702,7 @@ func (_c *MockPolicyEnforcer_RecordUpload_Call) Return(err error) *MockPolicyEnf
 	return _c
 }
 
-func (_c *MockPolicyEnforcer_RecordUpload_Call) RunAndReturn(run func(userID uint, uploadID uint, bytes uint64, ip string) error) *MockPolicyEnforcer_RecordUpload_Call {
+func (_c *MockPolicyEnforcer_RecordUpload_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error) *MockPolicyEnforcer_RecordUpload_Call {
 	_c.Call.Return(run)
 	return _c
 }

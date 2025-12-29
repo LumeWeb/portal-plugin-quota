@@ -6,11 +6,11 @@ import (
 
 // Predefined validation errors
 var (
-	ErrInvalidUserID              = errors.New("user_id must be greater than 0")
-	ErrInvalidDate                = errors.New("date must not be zero")
-	ErrInvalidUploadID            = errors.New("upload_id must be greater than 0")
+	ErrInvalidUserID   = errors.New("user_id must be greater than 0")
+	ErrInvalidDate     = errors.New("date must not be zero")
+	ErrInvalidUploadID = errors.New("upload_id must be greater than 0")
 	// ErrInvalidBytes is returned when bytes input is invalid (e.g., zero or negative values that are not allowed)
-	ErrInvalidBytes               = errors.New("bytes must be greater than 0")
+	ErrInvalidBytes = errors.New("bytes must be greater than 0")
 	// ErrZeroBytes is returned when bytes input is zero and represents a no-op or meaningless operation
 	ErrZeroBytes                  = errors.New("bytes must be non-zero")
 	ErrInvalidIP                  = errors.New("ip must be a valid IP address")
@@ -36,5 +36,6 @@ var (
 	ErrInvalidDownloadTotalLimit  = errors.New("download_total_limit must be greater than or equal to 0")
 	ErrThresholdExceedsLimit      = errors.New("threshold cannot be greater than limit")
 	ErrQuotaPlanNotFound          = errors.New("quota plan not found")
+	ErrNoDefaultQuotaPlan         = errors.New("no default quota plan set")
 	ErrInsufficientAllowance      = errors.New("insufficient allowance")
 )

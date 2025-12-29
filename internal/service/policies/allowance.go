@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -28,135 +29,153 @@ func NewAllowancePolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaS
 }
 
 // CheckUploadQuota checks if an upload operation is allowed under allowance policy
-func (a *AllowancePolicyEnforcer) CheckUploadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if config == nil {
-		return pluginCore.QuotaCheckResult{}, errors.New("config cannot be nil")
-	}
-	if err := a.validateRequestedBytes(requestedBytes); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-	if err := a.validateUserID(config.UserID); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
+func (a *AllowancePolicyEnforcer) CheckUploadQuota(ctx context.Context, config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.CheckUploadQuota")
+	defer span.End()
 
-	// Get active grants for upload
-	grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(config.UserID, models.GrantTypeUpload)
-	if err != nil {
-		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get active upload grants: %w", err)
-	}
+	return a.trackPolicyCheck(models.EnforcementPolicyAllowance, func() (pluginCore.QuotaCheckResult, error) {
+		if config == nil {
+			return pluginCore.QuotaCheckResult{}, errors.New("config cannot be nil")
+		}
+		if err := a.validateRequestedBytes(requestedBytes); err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		if err := a.validateUserID(config.UserID); err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
 
-	// Calculate available bytes from grants
-	availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
+		// Get active grants for upload
+		grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(ctx, config.UserID, models.GrantTypeUpload)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get active upload grants: %w", err)
+		}
 
-	// Calculate used bytes
-	used := uint64(0)
-	for _, grant := range grants {
-		used += grant.BytesUsed
-	}
+		// Calculate available bytes from grants
+		availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
 
-	details := pluginCore.QuotaCheckDetails{
-		CurrentUsage:  used,
-		Allowance:     &availableBytes,
-		AllowanceUsed: &used,
-		Policy:        pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance),
-	}
+		// Calculate used bytes
+		used := uint64(0)
+		for _, grant := range grants {
+			used += grant.BytesUsed
+		}
 
-	if requestedBytes > availableBytes {
-		return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
-	}
+		details := pluginCore.QuotaCheckDetails{
+			CurrentUsage:  used,
+			Allowance:     &availableBytes,
+			AllowanceUsed: &used,
+			Policy:        pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance),
+		}
 
-	return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
+		if requestedBytes > availableBytes {
+			return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
+		}
+
+		return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
+	})
 }
 
 // CheckDownloadQuota checks if a download operation is allowed under allowance policy
-func (a *AllowancePolicyEnforcer) CheckDownloadQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if config == nil {
-		return pluginCore.QuotaCheckResult{}, errors.New("config cannot be nil")
-	}
-	if err := a.validateRequestedBytes(requestedBytes); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-	if err := a.validateUserID(config.UserID); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
+func (a *AllowancePolicyEnforcer) CheckDownloadQuota(ctx context.Context, config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.CheckDownloadQuota")
+	defer span.End()
 
-	// Get active grants for download
-	grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(config.UserID, models.GrantTypeDownload)
-	if err != nil {
-		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get active download grants: %w", err)
-	}
+	return a.trackPolicyCheck(models.EnforcementPolicyAllowance, func() (pluginCore.QuotaCheckResult, error) {
+		if config == nil {
+			return pluginCore.QuotaCheckResult{}, errors.New("config cannot be nil")
+		}
+		if err := a.validateRequestedBytes(requestedBytes); err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		if err := a.validateUserID(config.UserID); err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
 
-	// Calculate available bytes from grants
-	availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
+		// Get active grants for download
+		grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(ctx, config.UserID, models.GrantTypeDownload)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get active download grants: %w", err)
+		}
 
-	// Calculate used bytes
-	used := uint64(0)
-	for _, grant := range grants {
-		used += grant.BytesUsed
-	}
+		// Calculate available bytes from grants
+		availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
 
-	details := pluginCore.QuotaCheckDetails{
-		CurrentUsage:  used,
-		Allowance:     &availableBytes,
-		AllowanceUsed: &used,
-		Policy:        pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance),
-	}
+		// Calculate used bytes
+		used := uint64(0)
+		for _, grant := range grants {
+			used += grant.BytesUsed
+		}
 
-	if requestedBytes > availableBytes {
-		return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
-	}
+		details := pluginCore.QuotaCheckDetails{
+			CurrentUsage:  used,
+			Allowance:     &availableBytes,
+			AllowanceUsed: &used,
+			Policy:        pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance),
+		}
 
-	return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
+		if requestedBytes > availableBytes {
+			return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
+		}
+
+		return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
+	})
 }
 
 // CheckStorageQuota checks if a storage operation is allowed under allowance policy
-func (a *AllowancePolicyEnforcer) CheckStorageQuota(config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	if config == nil {
-		return pluginCore.QuotaCheckResult{}, errors.New("config cannot be nil")
-	}
-	if err := a.validateRequestedBytes(requestedBytes); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
-	if err := a.validateUserID(config.UserID); err != nil {
-		return pluginCore.QuotaCheckResult{}, err
-	}
+func (a *AllowancePolicyEnforcer) CheckStorageQuota(ctx context.Context, config *models.UserQuotaConfig, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.CheckStorageQuota")
+	defer span.End()
 
-	// Get active grants for storage
-	grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(config.UserID, models.GrantTypeStorage)
-	if err != nil {
-		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get active storage grants: %w", err)
-	}
+	return a.trackPolicyCheck(models.EnforcementPolicyAllowance, func() (pluginCore.QuotaCheckResult, error) {
+		if config == nil {
+			return pluginCore.QuotaCheckResult{}, errors.New("config cannot be nil")
+		}
+		if err := a.validateRequestedBytes(requestedBytes); err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+		if err := a.validateUserID(config.UserID); err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
 
-	// Calculate available bytes from grants
-	availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
+		// Get active grants for storage
+		grants, err := a.quotaService.GetGrantManager().GetActiveGrantsByType(ctx, config.UserID, models.GrantTypeStorage)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get active storage grants: %w", err)
+		}
 
-	// Calculate used bytes
-	used := uint64(0)
-	for _, grant := range grants {
-		used += grant.BytesUsed
-	}
+		// Calculate available bytes from grants
+		availableBytes := a.quotaService.GetGrantManager().CalculateAvailableBytes(grants)
 
-	details := pluginCore.QuotaCheckDetails{
-		CurrentUsage:  used,
-		Allowance:     &availableBytes,
-		AllowanceUsed: &used,
-		Policy:        pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance),
-	}
+		// Calculate used bytes
+		used := uint64(0)
+		for _, grant := range grants {
+			used += grant.BytesUsed
+		}
 
-	if requestedBytes > availableBytes {
-		return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
-	}
+		details := pluginCore.QuotaCheckDetails{
+			CurrentUsage:  used,
+			Allowance:     &availableBytes,
+			AllowanceUsed: &used,
+			Policy:        pluginCore.EnforcementPolicy(models.EnforcementPolicyAllowance),
+		}
 
-	return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
+		if requestedBytes > availableBytes {
+			return a.createFailureResult(models.QuotaCheckReasonAllowanceDepleted, models.EnforcementPolicyAllowance, details), nil
+		}
+
+		return a.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyAllowance, details), nil
+	})
 }
 
 // RecordUpload records an upload operation and consumes allowance
-func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint64, ip string) error {
+func (a *AllowancePolicyEnforcer) RecordUpload(ctx context.Context, userID, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.RecordUpload")
+	defer span.End()
+
 	if err := a.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
 
-	// Create usage detail record first
+	// Create usage detail record
 	usageDetail := &models.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
@@ -167,29 +186,24 @@ func (a *AllowancePolicyEnforcer) RecordUpload(userID, uploadID uint, bytes uint
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(usageDetail); err != nil {
-		return fmt.Errorf("failed to record upload usage detail: %w", err)
+	// Record usage and consume allowance in a single transaction
+	if err := a.quotaService.GetUsageManager().RecordUsageAndConsume(ctx, usageDetail, models.GrantTypeUpload, bytes); err != nil {
+		return err
 	}
 
-	// Consume allowance from grants, passing the usage detail ID
-	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeUpload, bytes, usageDetail.ID, nil)
-	if err != nil {
-		if errors.Is(err, models.ErrInsufficientAllowance) {
-			return fmt.Errorf("upload blocked: insufficient upload allowance")
-		}
-		return fmt.Errorf("failed to consume upload allowance: %w", err)
-	}
-
-	return a.delegateRecordUpload(userID, uploadID, bytes, ip)
+	return a.delegateRecordUpload(ctx, userID, uploadID, bytes, ip)
 }
 
 // RecordDownload records a download operation and consumes allowance
-func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
+func (a *AllowancePolicyEnforcer) RecordDownload(ctx context.Context, userID, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.RecordDownload")
+	defer span.End()
+
 	if err := a.validateRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
 
-	// Create usage detail record first
+	// Create usage detail record
 	usageDetail := &models.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
@@ -200,25 +214,19 @@ func (a *AllowancePolicyEnforcer) RecordDownload(userID, uploadID uint, bytes ui
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(usageDetail); err != nil {
-		return fmt.Errorf("failed to record download usage detail: %w", err)
+	// Record usage and consume allowance in a single transaction
+	if err := a.quotaService.GetUsageManager().RecordUsageAndConsume(ctx, usageDetail, models.GrantTypeDownload, bytes); err != nil {
+		return err
 	}
 
-	// Consume allowance from grants atomically, passing the usage detail ID
-	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeDownload, bytes, usageDetail.ID, nil)
-	if err != nil {
-		// Check if this is an insufficiency error
-		if errors.Is(err, models.ErrInsufficientAllowance) {
-			return fmt.Errorf("insufficient download allowance")
-		}
-		return fmt.Errorf("failed to consume download allowance: %w", err)
-	}
-
-	return a.delegateRecordDownload(userID, uploadID, bytes, ip)
+	return a.delegateRecordDownload(ctx, userID, uploadID, bytes, ip)
 }
 
 // RecordStorageChange records a storage change operation and consumes allowance
-func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, bytes int64, ip string) error {
+func (a *AllowancePolicyEnforcer) RecordStorageChange(ctx context.Context, userID, uploadID uint, bytes int64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.RecordStorageChange")
+	defer span.End()
+
 	if err := a.validateUserID(userID); err != nil {
 		return err
 	}
@@ -246,7 +254,7 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		recordBytes = uint64(bytes)
 	}
 
-	// Create usage detail record first
+	// Create usage detail record
 	usageDetail := &models.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
@@ -257,16 +265,16 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(usageDetail); err != nil {
-		return fmt.Errorf("failed to record storage usage detail: %w", err)
-	}
-
 	// For storage changes, we only consume allowance when adding storage (positive bytes)
 	if bytes > 0 {
-		// Consume allowance from grants, passing the usage detail ID
-		_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(userID, models.GrantTypeStorage, uint64(bytes), usageDetail.ID, nil)
-		if err != nil {
-			return fmt.Errorf("failed to consume storage allowance: %w", err)
+		// Record usage and consume allowance in a single transaction
+		if err := a.quotaService.GetUsageManager().RecordUsageAndConsume(ctx, usageDetail, models.GrantTypeStorage, uint64(bytes)); err != nil {
+			return err
+		}
+	} else {
+		// For storage removal, just record the usage detail without consuming allowance
+		if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(ctx, usageDetail, nil); err != nil {
+			return err
 		}
 	}
 
@@ -274,20 +282,29 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(userID, uploadID uint, byt
 	if err := a.validateStorageRecordParams(userID, uploadID, bytes); err != nil {
 		return err
 	}
-	return a.delegateRecordStorageChange(userID, uploadID, bytes, ip)
+	return a.delegateRecordStorageChange(ctx, userID, uploadID, bytes, ip)
 }
 
 // GetDetailedUsage delegates to the usage manager
-func (a *AllowancePolicyEnforcer) GetDetailedUsage(userID uint, start, end time.Time) ([]*models.UserUsageDetail, error) {
-	return a.quotaService.GetUsageManager().GetDetailedUsage(userID, start, end)
+func (a *AllowancePolicyEnforcer) GetDetailedUsage(ctx context.Context, userID uint, start, end time.Time) ([]*models.UserUsageDetail, error) {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.GetDetailedUsage")
+	defer span.End()
+
+	return a.quotaService.GetUsageManager().GetDetailedUsage(ctx, userID, start, end)
 }
 
 // GetCurrentUsage delegates to the usage manager
-func (a *AllowancePolicyEnforcer) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) {
-	return a.quotaService.GetUsageManager().GetCurrentUsage(userID)
+func (a *AllowancePolicyEnforcer) GetCurrentUsage(ctx context.Context, userID uint) (*pluginCore.Usage, error) {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.GetCurrentUsage")
+	defer span.End()
+
+	return a.quotaService.GetUsageManager().GetCurrentUsage(ctx, userID)
 }
 
 // GetUsageHistory delegates to the usage manager
-func (a *AllowancePolicyEnforcer) GetUsageHistory(userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
-	return a.quotaService.GetUsageManager().GetUsageHistory(userID, period, usageType)
+func (a *AllowancePolicyEnforcer) GetUsageHistory(ctx context.Context, userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
+	ctx, span := core.TraceMethod(ctx, "AllowancePolicyEnforcer.GetUsageHistory")
+	defer span.End()
+
+	return a.quotaService.GetUsageManager().GetUsageHistory(ctx, userID, period, usageType)
 }

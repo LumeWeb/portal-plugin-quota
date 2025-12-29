@@ -5,6 +5,8 @@
 package core
 
 import (
+	"context"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -36,8 +38,8 @@ func (_m *MockUsageAggregator) EXPECT() *MockUsageAggregator_Expecter {
 }
 
 // GetAggregatedUsageByType provides a mock function for the type MockUsageAggregator
-func (_mock *MockUsageAggregator) GetAggregatedUsageByType(userID uint, usageType UsageType) (uint64, error) {
-	ret := _mock.Called(userID, usageType)
+func (_mock *MockUsageAggregator) GetAggregatedUsageByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error) {
+	ret := _mock.Called(ctx, userID, usageType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetAggregatedUsageByType")
@@ -45,16 +47,16 @@ func (_mock *MockUsageAggregator) GetAggregatedUsageByType(userID uint, usageTyp
 
 	var r0 uint64
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint, UsageType) (uint64, error)); ok {
-		return returnFunc(userID, usageType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) (uint64, error)); ok {
+		return returnFunc(ctx, userID, usageType)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint, UsageType) uint64); ok {
-		r0 = returnFunc(userID, usageType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) uint64); ok {
+		r0 = returnFunc(ctx, userID, usageType)
 	} else {
 		r0 = ret.Get(0).(uint64)
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint, UsageType) error); ok {
-		r1 = returnFunc(userID, usageType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, UsageType) error); ok {
+		r1 = returnFunc(ctx, userID, usageType)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -67,25 +69,31 @@ type MockUsageAggregator_GetAggregatedUsageByType_Call struct {
 }
 
 // GetAggregatedUsageByType is a helper method to define mock.On call
+//   - ctx context.Context
 //   - userID uint
 //   - usageType UsageType
-func (_e *MockUsageAggregator_Expecter) GetAggregatedUsageByType(userID interface{}, usageType interface{}) *MockUsageAggregator_GetAggregatedUsageByType_Call {
-	return &MockUsageAggregator_GetAggregatedUsageByType_Call{Call: _e.mock.On("GetAggregatedUsageByType", userID, usageType)}
+func (_e *MockUsageAggregator_Expecter) GetAggregatedUsageByType(ctx interface{}, userID interface{}, usageType interface{}) *MockUsageAggregator_GetAggregatedUsageByType_Call {
+	return &MockUsageAggregator_GetAggregatedUsageByType_Call{Call: _e.mock.On("GetAggregatedUsageByType", ctx, userID, usageType)}
 }
 
-func (_c *MockUsageAggregator_GetAggregatedUsageByType_Call) Run(run func(userID uint, usageType UsageType)) *MockUsageAggregator_GetAggregatedUsageByType_Call {
+func (_c *MockUsageAggregator_GetAggregatedUsageByType_Call) Run(run func(ctx context.Context, userID uint, usageType UsageType)) *MockUsageAggregator_GetAggregatedUsageByType_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 UsageType
+		var arg1 uint
 		if args[1] != nil {
-			arg1 = args[1].(UsageType)
+			arg1 = args[1].(uint)
+		}
+		var arg2 UsageType
+		if args[2] != nil {
+			arg2 = args[2].(UsageType)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -96,7 +104,7 @@ func (_c *MockUsageAggregator_GetAggregatedUsageByType_Call) Return(v uint64, er
 	return _c
 }
 
-func (_c *MockUsageAggregator_GetAggregatedUsageByType_Call) RunAndReturn(run func(userID uint, usageType UsageType) (uint64, error)) *MockUsageAggregator_GetAggregatedUsageByType_Call {
+func (_c *MockUsageAggregator_GetAggregatedUsageByType_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType) (uint64, error)) *MockUsageAggregator_GetAggregatedUsageByType_Call {
 	_c.Call.Return(run)
 	return _c
 }

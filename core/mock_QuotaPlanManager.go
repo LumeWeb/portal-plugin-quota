@@ -5,6 +5,8 @@
 package core
 
 import (
+	"context"
+
 	mock "github.com/stretchr/testify/mock"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
@@ -37,8 +39,8 @@ func (_m *MockQuotaPlanManager) EXPECT() *MockQuotaPlanManager_Expecter {
 }
 
 // GetDefaultQuotaPlan provides a mock function for the type MockQuotaPlanManager
-func (_mock *MockQuotaPlanManager) GetDefaultQuotaPlan() (*models.QuotaPlan, error) {
-	ret := _mock.Called()
+func (_mock *MockQuotaPlanManager) GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error) {
+	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDefaultQuotaPlan")
@@ -46,18 +48,18 @@ func (_mock *MockQuotaPlanManager) GetDefaultQuotaPlan() (*models.QuotaPlan, err
 
 	var r0 *models.QuotaPlan
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func() (*models.QuotaPlan, error)); ok {
-		return returnFunc()
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (*models.QuotaPlan, error)); ok {
+		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func() *models.QuotaPlan); ok {
-		r0 = returnFunc()
+	if returnFunc, ok := ret.Get(0).(func(context.Context) *models.QuotaPlan); ok {
+		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*models.QuotaPlan)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func() error); ok {
-		r1 = returnFunc()
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -70,13 +72,20 @@ type MockQuotaPlanManager_GetDefaultQuotaPlan_Call struct {
 }
 
 // GetDefaultQuotaPlan is a helper method to define mock.On call
-func (_e *MockQuotaPlanManager_Expecter) GetDefaultQuotaPlan() *MockQuotaPlanManager_GetDefaultQuotaPlan_Call {
-	return &MockQuotaPlanManager_GetDefaultQuotaPlan_Call{Call: _e.mock.On("GetDefaultQuotaPlan")}
+//   - ctx context.Context
+func (_e *MockQuotaPlanManager_Expecter) GetDefaultQuotaPlan(ctx interface{}) *MockQuotaPlanManager_GetDefaultQuotaPlan_Call {
+	return &MockQuotaPlanManager_GetDefaultQuotaPlan_Call{Call: _e.mock.On("GetDefaultQuotaPlan", ctx)}
 }
 
-func (_c *MockQuotaPlanManager_GetDefaultQuotaPlan_Call) Run(run func()) *MockQuotaPlanManager_GetDefaultQuotaPlan_Call {
+func (_c *MockQuotaPlanManager_GetDefaultQuotaPlan_Call) Run(run func(ctx context.Context)) *MockQuotaPlanManager_GetDefaultQuotaPlan_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -86,14 +95,14 @@ func (_c *MockQuotaPlanManager_GetDefaultQuotaPlan_Call) Return(quotaPlan *model
 	return _c
 }
 
-func (_c *MockQuotaPlanManager_GetDefaultQuotaPlan_Call) RunAndReturn(run func() (*models.QuotaPlan, error)) *MockQuotaPlanManager_GetDefaultQuotaPlan_Call {
+func (_c *MockQuotaPlanManager_GetDefaultQuotaPlan_Call) RunAndReturn(run func(ctx context.Context) (*models.QuotaPlan, error)) *MockQuotaPlanManager_GetDefaultQuotaPlan_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetQuotaPlanByID provides a mock function for the type MockQuotaPlanManager
-func (_mock *MockQuotaPlanManager) GetQuotaPlanByID(id uint64) (*models.QuotaPlan, error) {
-	ret := _mock.Called(id)
+func (_mock *MockQuotaPlanManager) GetQuotaPlanByID(ctx context.Context, id uint64) (*models.QuotaPlan, error) {
+	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetQuotaPlanByID")
@@ -101,18 +110,18 @@ func (_mock *MockQuotaPlanManager) GetQuotaPlanByID(id uint64) (*models.QuotaPla
 
 	var r0 *models.QuotaPlan
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(uint64) (*models.QuotaPlan, error)); ok {
-		return returnFunc(id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint64) (*models.QuotaPlan, error)); ok {
+		return returnFunc(ctx, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(uint64) *models.QuotaPlan); ok {
-		r0 = returnFunc(id)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint64) *models.QuotaPlan); ok {
+		r0 = returnFunc(ctx, id)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*models.QuotaPlan)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(uint64) error); ok {
-		r1 = returnFunc(id)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint64) error); ok {
+		r1 = returnFunc(ctx, id)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -125,19 +134,25 @@ type MockQuotaPlanManager_GetQuotaPlanByID_Call struct {
 }
 
 // GetQuotaPlanByID is a helper method to define mock.On call
+//   - ctx context.Context
 //   - id uint64
-func (_e *MockQuotaPlanManager_Expecter) GetQuotaPlanByID(id interface{}) *MockQuotaPlanManager_GetQuotaPlanByID_Call {
-	return &MockQuotaPlanManager_GetQuotaPlanByID_Call{Call: _e.mock.On("GetQuotaPlanByID", id)}
+func (_e *MockQuotaPlanManager_Expecter) GetQuotaPlanByID(ctx interface{}, id interface{}) *MockQuotaPlanManager_GetQuotaPlanByID_Call {
+	return &MockQuotaPlanManager_GetQuotaPlanByID_Call{Call: _e.mock.On("GetQuotaPlanByID", ctx, id)}
 }
 
-func (_c *MockQuotaPlanManager_GetQuotaPlanByID_Call) Run(run func(id uint64)) *MockQuotaPlanManager_GetQuotaPlanByID_Call {
+func (_c *MockQuotaPlanManager_GetQuotaPlanByID_Call) Run(run func(ctx context.Context, id uint64)) *MockQuotaPlanManager_GetQuotaPlanByID_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 uint64
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(uint64)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -148,7 +163,7 @@ func (_c *MockQuotaPlanManager_GetQuotaPlanByID_Call) Return(quotaPlan *models.Q
 	return _c
 }
 
-func (_c *MockQuotaPlanManager_GetQuotaPlanByID_Call) RunAndReturn(run func(id uint64) (*models.QuotaPlan, error)) *MockQuotaPlanManager_GetQuotaPlanByID_Call {
+func (_c *MockQuotaPlanManager_GetQuotaPlanByID_Call) RunAndReturn(run func(ctx context.Context, id uint64) (*models.QuotaPlan, error)) *MockQuotaPlanManager_GetQuotaPlanByID_Call {
 	_c.Call.Return(run)
 	return _c
 }

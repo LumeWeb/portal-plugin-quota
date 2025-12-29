@@ -103,7 +103,7 @@ func TestUsageManager_RecordUpload_ValidInput_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordUpload(userID, uploadID, bytes, ip)
+		err := usageManager.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify the usage detail was recorded
@@ -146,7 +146,7 @@ func TestUsageManager_GetUserQuotaConfig_ExistingConfig_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		config, err := usageManager.GetUserQuotaConfig(userID)
+		config, err := usageManager.GetUserQuotaConfig(ctx, userID)
 		require.NoError(t, err)
 		assert.NotNil(t, config)
 		assert.Equal(t, userID, config.UserID)
@@ -163,7 +163,7 @@ func TestUsageManager_GetUserQuotaConfig_NonExistentConfig_CreatesDefault(t *tes
 
 		usageManager := NewUsageManager(ctx)
 
-		config, err := usageManager.GetUserQuotaConfig(userID)
+		config, err := usageManager.GetUserQuotaConfig(ctx, userID)
 		require.NoError(t, err)
 		assert.NotNil(t, config)
 		assert.Equal(t, userID, config.UserID)
@@ -190,7 +190,7 @@ func TestUsageManager_GetCurrentUsage_NoUsageRecords_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		usage, err := usageManager.GetCurrentUsage(userID)
+		usage, err := usageManager.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.NotNil(t, usage)
 		assert.Equal(t, userID, usage.UserID)
@@ -224,7 +224,7 @@ func TestUsageManager_GetCurrentUsage_WithUsageRecords_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		usage, err := usageManager.GetCurrentUsage(userID)
+		usage, err := usageManager.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.NotNil(t, usage)
 		assert.Equal(t, userID, usage.UserID)
@@ -269,7 +269,7 @@ func TestUsageManager_GetUsageHistory_RecentUsageHistory_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		history, err := usageManager.GetUsageHistory(userID, 1, pluginModels.UsageTypeUpload)
+		history, err := usageManager.GetUsageHistory(ctx, userID, 1, pluginModels.UsageTypeUpload)
 		require.NoError(t, err)
 		assert.Len(t, history, 1) // Only the recent record
 		assert.Equal(t, uint64(testUsageBytesSmall), history[0].Bytes)
@@ -311,7 +311,7 @@ func TestUsageManager_GetUsageHistory_AllUsageHistory_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		history, err := usageManager.GetUsageHistory(userID, 3, pluginModels.UsageTypeUpload)
+		history, err := usageManager.GetUsageHistory(ctx, userID, 3, pluginModels.UsageTypeUpload)
 		require.NoError(t, err)
 		assert.Len(t, history, 2)                                       // Both records
 		assert.Equal(t, uint64(testUsageBytesMedium), history[0].Bytes) // Older record first
@@ -358,7 +358,7 @@ func TestUsageManager_GetDetailedUsage_WithinTimeRange_Success(t *testing.T) {
 		start := now.Add(-24 * time.Hour)
 		end := now.Add(24 * time.Hour)
 
-		details, err := usageManager.GetDetailedUsage(userID, start, end)
+		details, err := usageManager.GetDetailedUsage(ctx, userID, start, end)
 		require.NoError(t, err)
 		assert.Len(t, details, 2) // Only records within time range
 
@@ -396,7 +396,7 @@ func TestUsageManager_RecordUserUsageDetail_RecordDetail_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordUserUsageDetail(detail)
+		err := usageManager.RecordUserUsageDetail(ctx, detail)
 		require.NoError(t, err)
 
 		// Verify the record was created
@@ -428,7 +428,7 @@ func TestUsageManager_UpdateDailyUsage_CreateNewRecord_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
+		err := usageManager.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
 		require.NoError(t, err)
 
 		// Verify the record was created
@@ -463,11 +463,11 @@ func TestUsageManager_UpdateDailyUsage_UpdateExistingRecord_Success(t *testing.T
 		usageManager := NewUsageManager(ctx)
 
 		// First create a record
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
+		err := usageManager.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
 		require.NoError(t, err)
 
 		// Then update it
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall/2))
+		err = usageManager.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall/2))
 		require.NoError(t, err)
 
 		// Verify the record was updated
@@ -499,11 +499,11 @@ func TestUsageManager_UpdateDailyUsage_DifferentUsageTypes_Success(t *testing.T)
 		usageManager := NewUsageManager(ctx)
 
 		// Add different types of usage
-		err := usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
+		err := usageManager.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeUpload, int64(testUsageBytesSmall))
 		require.NoError(t, err)
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(testUsageBytesMedium))
+		err = usageManager.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeDownload, int64(testUsageBytesMedium))
 		require.NoError(t, err)
-		err = usageManager.UpdateDailyUsage(userID, pluginModels.UsageTypeStorageAdd, int64(testUsageBytesLarge))
+		err = usageManager.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeStorageAdd, int64(testUsageBytesLarge))
 		require.NoError(t, err)
 
 		// Verify all types were recorded correctly
@@ -540,7 +540,7 @@ func TestUsageManager_RecordDownload_ValidInput_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordDownload(userID, uploadID, bytes, ip)
+		err := usageManager.RecordDownload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify the usage detail was recorded
@@ -585,7 +585,7 @@ func TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success(t *testing
 			{UserID: userID2},
 			{UserID: userID3},
 		}
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
+		mockPinService.EXPECT().GetPinsByUploadID(mock.Anything, uploadID).Return(pins, nil)
 
 		// Create test users
 		limits := &testdata.TestUserLimits{
@@ -602,7 +602,7 @@ func TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success(t *testing
 		usageManager := NewUsageManager(ctx)
 
 		// Anonymous download (userID = 0) - should be shared among all pinned users
-		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		err := usageManager.RecordDownload(ctx, 0, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify the usage detail was recorded with shared calculation for each pinned user
@@ -640,12 +640,12 @@ func TestUsageManager_RecordDownload_AnonymousNoPins_Skips(t *testing.T) {
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
 		pins := []*models.Pin{}
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
+		mockPinService.EXPECT().GetPinsByUploadID(mock.Anything, uploadID).Return(pins, nil)
 
 		usageManager := NewUsageManager(ctx)
 
 		// Anonymous download with no pinned users - should skip gracefully
-		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		err := usageManager.RecordDownload(ctx, 0, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify no usage details were recorded
@@ -679,7 +679,7 @@ func TestUsageManager_RecordDownload_AnonymousDuplicatePins_Deduplicates(t *test
 			{UserID: userID2}, // Duplicate
 			{UserID: userID3},
 		}
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return(pins, nil)
+		mockPinService.EXPECT().GetPinsByUploadID(mock.Anything, uploadID).Return(pins, nil)
 
 		limits := &testdata.TestUserLimits{
 			StorageLimit:       nil,
@@ -695,7 +695,7 @@ func TestUsageManager_RecordDownload_AnonymousDuplicatePins_Deduplicates(t *test
 		usageManager := NewUsageManager(ctx)
 
 		// Anonymous download - should deduplicate users correctly
-		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		err := usageManager.RecordDownload(ctx, 0, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify each unique user has exactly one usage record with correct shared bytes
@@ -721,12 +721,12 @@ func TestUsageManager_RecordDownload_AnonymousPinServiceError_ReturnsError(t *te
 		ip := "192.168.1.1"
 
 		mockPinService := core.GetService[*coreMocks.MockPinService](ctx, core.PIN_SERVICE)
-		mockPinService.On("GetPinsByUploadID", mock.Anything, uploadID).Return([]*models.Pin{}, fmt.Errorf("pin service error"))
+		mockPinService.EXPECT().GetPinsByUploadID(mock.Anything, uploadID).Return([]*models.Pin{}, fmt.Errorf("pin service error"))
 
 		usageManager := NewUsageManager(ctx)
 
 		// Anonymous download with pin service error - should return error
-		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		err := usageManager.RecordDownload(ctx, 0, uploadID, bytes, ip)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get pinned users")
 
@@ -746,7 +746,7 @@ func TestUsageManager_RecordDownload_AnonymousPinServiceUnavailable_ReturnsError
 		usageManager.pinService = nil
 
 		// Anonymous download with nil pin service - should return error
-		err := usageManager.RecordDownload(0, uploadID, bytes, ip)
+		err := usageManager.RecordDownload(ctx, 0, uploadID, bytes, ip)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "pin service not available")
 
@@ -775,7 +775,7 @@ func TestUsageManager_RecordStorageChange_ValidInput_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
+		err := usageManager.RecordStorageChange(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify the usage detail was recorded
@@ -822,7 +822,7 @@ func TestUsageManager_RecordStorageChange_Remove_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
+		err := usageManager.RecordStorageChange(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify the usage detail was recorded
@@ -954,7 +954,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 			wg.Add(1)
 			go func(goroutineID int) {
 				defer wg.Done()
-				err := usageManager.RecordUpload(userID, dataManager.NextUploadID(), bytesPerGoroutine, "192.168.1.1")
+				err := usageManager.RecordUpload(ctx, userID, dataManager.NextUploadID(), bytesPerGoroutine, "192.168.1.1")
 				mu.Lock()
 				errors = append(errors, err)
 				mu.Unlock()
@@ -969,7 +969,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		}
 
 		// Verify total bytes recorded
-		usage, err := usageManager.GetCurrentUsage(userID)
+		usage, err := usageManager.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, bytesPerGoroutine*uint64(numGoroutines), usage.BytesUploaded)
 
@@ -1009,7 +1009,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 			wg.Add(1)
 			go func(goroutineID int) {
 				defer wg.Done()
-				err := usageManager.RecordDownload(userID, dataManager.NextUploadID(), bytesPerGoroutine, "192.168.1.2")
+				err := usageManager.RecordDownload(ctx, userID, dataManager.NextUploadID(), bytesPerGoroutine, "192.168.1.2")
 				mu.Lock()
 				errors = append(errors, err)
 				mu.Unlock()
@@ -1024,7 +1024,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		}
 
 		// Verify total bytes recorded
-		usage, err := usageManager.GetCurrentUsage(userID)
+		usage, err := usageManager.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, bytesPerGoroutine*uint64(numGoroutines), usage.BytesDownloaded)
 
@@ -1058,7 +1058,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 			wg.Add(1)
 			go func(goroutineID int) {
 				defer wg.Done()
-				err := usageManager.RecordStorageChange(userID, dataManager.NextUploadID(), bytesPerGoroutine, "192.168.1.3")
+				err := usageManager.RecordStorageChange(ctx, userID, dataManager.NextUploadID(), bytesPerGoroutine, "192.168.1.3")
 				mu.Lock()
 				errors = append(errors, err)
 				mu.Unlock()
@@ -1073,7 +1073,7 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 		}
 
 		// Verify total bytes recorded
-		usage, err := usageManager.GetCurrentUsage(userID)
+		usage, err := usageManager.GetCurrentUsage(ctx, userID)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(bytesPerGoroutine)*uint64(numGoroutines), usage.BytesStored)
 
@@ -1148,7 +1148,7 @@ func TestUsageManager_RecordStorageChange_MinInt64(t *testing.T) {
 		bytes := int64(math.MinInt64)
 
 		// This should not cause an overflow panic when converting to uint64
-		err := usageManager.RecordStorageChange(userID, uploadID, bytes, ip)
+		err := usageManager.RecordStorageChange(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
 
 		// Verify that a record was created with the correct values

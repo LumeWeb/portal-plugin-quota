@@ -7,6 +7,7 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -23,9 +24,9 @@ func newHardLimitsTest(t *testing.T) (coreTesting.TestContext, *pluginCore.MockQ
 	qpm := pluginCore.NewMockQuotaPlanManager(t)
 	ua := pluginCore.NewMockUsageAggregator(t)
 
-	qs.On("GetUsageManager").Return(um).Maybe()
-	qs.On("GetQuotaPlanManager").Return(qpm).Maybe()
-	qs.On("GetUsageAggregator").Return(ua).Maybe()
+	qs.EXPECT().GetUsageManager().Return(um).Maybe()
+	qs.EXPECT().GetQuotaPlanManager().Return(qpm).Maybe()
+	qs.EXPECT().GetUsageAggregator().Return(ua).Maybe()
 
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, qs)
 	return ctx, qs, um, qpm, ua, enforcer
@@ -33,10 +34,10 @@ func newHardLimitsTest(t *testing.T) (coreTesting.TestContext, *pluginCore.MockQ
 
 // TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error tests upload with nil config
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error(t *testing.T) {
-	_, _, um, _, _, enforcer := newHardLimitsTest(t)
-	um.On("RecordUpload", uint(0), uint(0), uint64(0), "").Return(nil).Maybe()
+	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
+	um.EXPECT().RecordUpload(ctx, uint(0), uint(0), uint64(0), "").Return(nil).Maybe()
 
-	result, err := enforcer.CheckUploadQuota(nil, uint64(500))
+	result, err := enforcer.CheckUploadQuota(ctx, nil, uint64(500))
 	assert.Error(t, err)
 	assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
 }
@@ -55,16 +56,16 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allow
 		DownloadTotalLimit: lo.ToPtr(int64(10000)),
 	}
 
-	qs.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+	qs.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 		UserID:          userID,
 		BytesDownloaded: 500,
 	}, nil)
 
 	// Mock quota plan manager calls
-	qpm.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
-	ua.On("GetAggregatedUsageByType", userID, models.UsageTypeDownload).Return(uint64(500), nil)
+	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+	ua.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(500), nil)
 
-	result, err := enforcer.CheckDownloadQuota(config, uint64(1000))
+	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -88,15 +89,15 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Bl
 	}
 
 	// Mock service calls
-	qs.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+	qs.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 		UserID:          userID,
 		BytesDownloaded: 1800,
 	}, nil)
 
 	// Mock default quota plan lookup to return not found
-	qpm.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
+	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-	result, err := enforcer.CheckDownloadQuota(config, uint64(300))
+	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
@@ -116,7 +117,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *
 		DownloadTotalLimit: lo.ToPtr(int64(10000)),
 	}
 
-	result, err := enforcer.CheckDownloadQuota(config, uint64(0))
+	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(0))
 	assert.Error(t, err)
 	assert.Equal(t, models.ErrInvalidBytes, err)
 	assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
@@ -129,7 +130,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *tes
 	ctx, _, _, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
-	result, err := enforcer.CheckDownloadQuota(nil, uint64(500))
+	result, err := enforcer.CheckDownloadQuota(ctx, nil, uint64(500))
 	assert.Error(t, err)
 	assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
 
@@ -159,9 +160,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_
 		DownloadTotalLimit: 0, // zero means disabled
 	}
 
-	qpm.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(5000), *limits.StorageLimit)
 	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
@@ -195,9 +196,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Su
 		IsActive:           lo.ToPtr(true),
 	}
 
-	qpm.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(5000), *limits.StorageLimit)
 	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
@@ -232,9 +233,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Uni
 		DownloadTotalLimit: 20000,
 	}
 
-	qpm.On("GetQuotaPlanByID", planID).Return(plan, nil)
+	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(3000), *limits.StorageLimit)        // Custom value
 	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)    // Plan value
@@ -266,9 +267,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Succes
 	}
 
 	// Mock default quota plan lookup
-	qpm.On("GetDefaultQuotaPlan").Return(plan, nil)
+	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(plan, nil)
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(5000), *limits.StorageLimit)
 	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
@@ -297,9 +298,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Uni
 		IsActive:  lo.ToPtr(false),
 	}
 
-	qpm.On("GetDefaultQuotaPlan").Return(inactivePlan, nil)
+	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(inactivePlan, nil)
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.Error(t, err)
 	assert.Nil(t, limits)
 	assert.Contains(t, err.Error(), "quota plan is inactive")
@@ -318,9 +319,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 	}
 
-	qpm.On("GetDefaultQuotaPlan").Return(nil, errors.New("not found"))
+	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, errors.New("not found"))
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.Error(t, err)
 	assert.Nil(t, limits)
 	assert.Contains(t, err.Error(), "failed to retrieve default quota plan")
@@ -341,9 +342,9 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error
 		QuotaPlanID:       &planID,
 	}
 
-	qpm.On("GetQuotaPlanByID", planID).Return(nil, gorm.ErrRecordNotFound)
+	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(nil, gorm.ErrRecordNotFound)
 
-	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(config, models.EnforcementPolicyHardLimits)
+	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.Error(t, err)
 	assert.Nil(t, limits)
 	assert.Contains(t, err.Error(), "failed to retrieve quota plan")
@@ -365,9 +366,9 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error(t *te
 	}
 
 	// Mock quota plan manager to return not found
-	qpm.On("GetQuotaPlanByID", planID).Return(nil, gorm.ErrRecordNotFound)
+	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(nil, gorm.ErrRecordNotFound)
 
-	result, err := enforcer.CheckUploadQuota(config, uint64(500))
+	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to retrieve quota plan")
 	assert.Equal(t, pluginCore.QuotaCheckReason(""), result.Reason)
@@ -403,9 +404,9 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 		},
 	}
 
-	um.On("GetDetailedUsage", userID, start, end).Return(expectedDetails, nil)
+	um.EXPECT().GetDetailedUsage(mock.Anything, userID, start, end).Return(expectedDetails, nil)
 
-	details, err := enforcer.GetDetailedUsage(userID, start, end)
+	details, err := enforcer.GetDetailedUsage(ctx, userID, start, end)
 	assert.NoError(t, err)
 	assert.Len(t, details, 2)
 
@@ -430,9 +431,9 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
 		LastUpdated:     time.Now(),
 	}
 
-	um.On("GetCurrentUsage", userID).Return(expectedUsage, nil)
+	um.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(expectedUsage, nil)
 
-	usage, err := enforcer.GetCurrentUsage(userID)
+	usage, err := enforcer.GetCurrentUsage(ctx, userID)
 	assert.NoError(t, err)
 	assert.Equal(t, userID, usage.UserID)
 	assert.Equal(t, uint64(100), usage.BytesUploaded)
@@ -464,9 +465,9 @@ func TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success(t *testing.T) {
 		},
 	}
 
-	um.On("GetUsageHistory", userID, period, usageType).Return(expectedHistory, nil)
+	um.EXPECT().GetUsageHistory(mock.Anything, userID, period, usageType).Return(expectedHistory, nil)
 
-	history, err := enforcer.GetUsageHistory(userID, period, usageType)
+	history, err := enforcer.GetUsageHistory(ctx, userID, period, usageType)
 	assert.NoError(t, err)
 	assert.Len(t, history, 2)
 

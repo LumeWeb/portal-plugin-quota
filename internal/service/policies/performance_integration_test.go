@@ -43,14 +43,14 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 			mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
 
-			quotaService.On("GetUsageManager").Return(mockUsageManager)
-			quotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-			mockQuotaPlanManager.On("GetQuotaPlanByID", uint64(1)).Return(&models.QuotaPlan{
+			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, uint64(1)).Return(&models.QuotaPlan{
 				StorageLimit:       1000,
 				UploadDailyLimit:   1000,
 				DownloadDailyLimit: 1000,
 			}, nil)
-			mockUsageManager.On("GetUserQuotaConfig", userID).Return(&models.UserQuotaConfig{
+			mockUsageManager.EXPECT().GetUserQuotaConfig(ctx, userID).Return(&models.UserQuotaConfig{
 				UserID:            userID,
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
 				QuotaPlanID:       lo.ToPtr(uint64(1)),
@@ -58,10 +58,10 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			}, nil)
 
 			// GetUsageAggregator is called once by CheckUploadQuota and potentially by getEffectiveLimits
-			quotaService.On("GetUsageAggregator").Return(mockUsageAggregator).Maybe()
+			quotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator).Maybe()
 			// CheckUploadQuota calls GetAggregatedUsageByType once for upload total limit check
-			mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
-			quotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			mockUsageAggregator.EXPECT().GetAggregatedUsageByType(ctx, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+			quotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 				UserID:        userID,
 				BytesUploaded: uint64(largeValue/2) - 100, // Well within the limit
 			}, nil)
@@ -69,10 +69,10 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 
 			// Get existing config for the user
-			config, err := quotaService.GetUsageManager().GetUserQuotaConfig(userID)
+			config, err := quotaService.GetUsageManager().GetUserQuotaConfig(ctx, userID)
 			require.NoError(t, err)
 
-			result, err := enforcer.CheckUploadQuota(config, uint64(largeValue/2))
+			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(largeValue/2))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})
@@ -83,17 +83,17 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
-			quotaService.On("GetUsageManager").Return(mockUsageManager)
-			quotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound)
-			mockUsageManager.On("GetUserQuotaConfig", thresholdUserID2).Return(&models.UserQuotaConfig{
+			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+			mockUsageManager.EXPECT().GetUserQuotaConfig(ctx, thresholdUserID2).Return(&models.UserQuotaConfig{
 				UserID:            thresholdUserID2,
 				EnforcementPolicy: models.EnforcementPolicyThreshold,
 				UploadDailyLimit:  &largeValue,
 				UploadThreshold:   &thresholdValue,
 			}, nil)
 
-			quotaService.On("GetTodayUsage", thresholdUserID2).Return(&pluginCore.Usage{
+			quotaService.EXPECT().GetTodayUsage(mock.Anything, thresholdUserID2).Return(&pluginCore.Usage{
 				UserID:        thresholdUserID2,
 				BytesUploaded: uint64(thresholdValue/2) - 100, // Well within the threshold
 			}, nil).Maybe()
@@ -101,7 +101,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			enforcer := NewThresholdPolicyEnforcer(ctx, quotaService)
 
 			// Get existing config for the user
-			config, err := quotaService.GetUsageManager().GetUserQuotaConfig(thresholdUserID2)
+			config, err := quotaService.GetUsageManager().GetUserQuotaConfig(ctx, thresholdUserID2)
 			require.NoError(t, err)
 
 			// Update the config with required limits by first deleting any existing record
@@ -125,7 +125,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			result, err := enforcer.CheckUploadQuota(config, uint64(thresholdValue/2))
+			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(thresholdValue/2))
 			require.NoError(t, err)
 			assert.True(t, result.Allowed)
 		})
@@ -151,20 +151,20 @@ func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 			mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
 
-			quotaService.On("GetUsageManager").Return(mockUsageManager)
-			quotaService.On("GetQuotaPlanManager").Return(mockQuotaPlanManager)
-			quotaService.On("GetUsageAggregator").Return(mockUsageAggregator).Maybe()
+			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			quotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator).Maybe()
 
 			// Setup mocks that will be called multiple times
-			mockQuotaPlanManager.On("GetDefaultQuotaPlan").Return(nil, gorm.ErrRecordNotFound).Maybe()
-			mockUsageAggregator.On("GetAggregatedUsageByType", userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
-			quotaService.On("GetTodayUsage", userID).Return(&pluginCore.Usage{
+			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+			mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+			quotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 				UserID:        userID,
 				BytesUploaded: 0,
 			}, nil).Maybe()
 
 			// Setup config mock to handle multiple calls
-			mockUsageManager.On("GetUserQuotaConfig", userID).Return(&models.UserQuotaConfig{
+			mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(&models.UserQuotaConfig{
 				UserID:            userID,
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
 				UploadDailyLimit:  &uploadDailyLimit,
@@ -173,24 +173,24 @@ func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 
 			// Record multiple uploads rapidly
-			mockUsageManager.On("RecordUpload", userID, mock.AnythingOfType("uint"), uint64(10), "127.0.0.1").
+			mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, mock.AnythingOfType("uint"), uint64(10), "127.0.0.1").
 				Return(nil).
 				Times(100)
 
 			// Execute the uploads
 			for i := 1; i <= 100; i++ {
-				err := enforcer.RecordUpload(userID, dataManager.NextUploadID(), 10, "127.0.0.1")
+				err := enforcer.RecordUpload(ctx, userID, dataManager.NextUploadID(), 10, "127.0.0.1")
 				assert.NoError(t, err)
 			}
 
 			// Verify total usage through GetCurrentUsage
-			mockUsageManager.On("GetCurrentUsage", userID).Return(&pluginCore.Usage{
+			mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 				UserID:        userID,
 				BytesUploaded: uint64(1000),
 			}, nil).Once()
 
 			// Verify total usage
-			usage, err := enforcer.GetCurrentUsage(userID)
+			usage, err := enforcer.GetCurrentUsage(ctx, userID)
 			require.NoError(t, err)
 			assert.Equal(t, uint64(1000), usage.BytesUploaded) // 100 uploads * 10 bytes each
 		})
@@ -212,16 +212,16 @@ func TestPerformance_HistoricalData(t *testing.T) {
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 
 			// GetUsageManager is called twice - once by constructor and once by GetUsageHistory
-			quotaService.On("GetUsageManager").Return(mockUsageManager).Twice()
+			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Twice()
 
 			// Mock GetUsageHistory which is called once by the test
-			mockUsageManager.On("GetUsageHistory", userID, 365, models.UsageTypeUpload).
+			mockUsageManager.EXPECT().GetUsageHistory(mock.Anything, userID, 365, models.UsageTypeUpload).
 				Return(make([]*pluginCore.UsagePoint, 365), nil).Once()
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 
 			// Get usage history for a long period
-			history, err := enforcer.GetUsageHistory(userID, 365, models.UsageTypeUpload)
+			history, err := enforcer.GetUsageHistory(ctx, userID, 365, models.UsageTypeUpload)
 			require.NoError(t, err)
 			assert.Len(t, history, 365)
 		})
@@ -242,7 +242,7 @@ func TestPerformance_TimezoneBoundaries(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 
-			quotaService.On("GetUsageManager").Return(mockUsageManager)
+			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 			now := time.Now()
@@ -276,12 +276,12 @@ func TestPerformance_TimezoneBoundaries(t *testing.T) {
 			start := endOfDay.Add(-time.Hour)
 			end := startOfNextDay.Add(time.Hour)
 
-			mockUsageManager.On("GetDetailedUsage", userID, start, end).Return([]*models.UserUsageDetail{
+			mockUsageManager.EXPECT().GetDetailedUsage(mock.Anything, userID, start, end).Return([]*models.UserUsageDetail{
 				&detail,
 				detail2,
 			}, nil)
 
-			details, err := enforcer.GetDetailedUsage(userID, start, end)
+			details, err := enforcer.GetDetailedUsage(ctx, userID, start, end)
 			assert.NoError(t, err)
 			assert.Len(t, details, 2)
 		})

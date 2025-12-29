@@ -1,35 +1,42 @@
 package policies
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // QuotaPlanManagerDefault implements QuotaPlanManager interface
 type QuotaPlanManagerDefault struct {
+	ctx    core.Context
 	db     *gorm.DB
 	logger *core.Logger
 }
 
 // NewQuotaPlanManager creates a new quota plan manager default implementation
-func NewQuotaPlanManager(db *gorm.DB, logger *core.Logger) *QuotaPlanManagerDefault {
+func NewQuotaPlanManager(ctx core.Context, db *gorm.DB, logger *core.Logger) *QuotaPlanManagerDefault {
 	return &QuotaPlanManagerDefault{
+		ctx:    ctx,
 		db:     db,
 		logger: logger,
 	}
 }
 
 // GetQuotaPlanByID retrieves a quota plan by its ID
-func (q *QuotaPlanManagerDefault) GetQuotaPlanByID(id uint64) (*models.QuotaPlan, error) {
+func (q *QuotaPlanManagerDefault) GetQuotaPlanByID(ctx context.Context, id uint64) (*models.QuotaPlan, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaPlanManagerDefault.GetQuotaPlanByID")
+	defer span.End()
+
 	q.logger.Debug("GetQuotaPlanByID: retrieving quota plan by ID", zap.Uint64("id", id))
 
 	var plan models.QuotaPlan
-	err := q.db.First(&plan, id).Error
+	err := q.db.WithContext(ctx).First(&plan, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			q.logger.Debug("GetQuotaPlanByID: quota plan not found", zap.Uint64("id", id))
@@ -49,21 +56,26 @@ func (q *QuotaPlanManagerDefault) GetQuotaPlanByID(id uint64) (*models.QuotaPlan
 }
 
 // GetDefaultQuotaPlan retrieves the default active quota plan
-func (q *QuotaPlanManagerDefault) GetDefaultQuotaPlan() (*models.QuotaPlan, error) {
-	q.logger.Debug("GetDefaultQuotaPlan: retrieving default active quota plan")
+func (q *QuotaPlanManagerDefault) GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaPlanManagerDefault.GetDefaultQuotaPlan")
+	defer span.End()
+
+	q.logger.Debug("GetDefaultQuotaPlan: retrieving default quota plan")
 
 	var plan models.QuotaPlan
-	err := q.db.Where("is_default = true AND is_active = true").First(&plan).Error
+	err := db.RetryableTransaction(ctx, q.db, func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("is_default = ?", true).First(&plan)
+	})
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			q.logger.Debug("GetDefaultQuotaPlan: default active quota plan not found")
+			q.logger.Debug("GetDefaultQuotaPlan: default quota plan not found")
 			return nil, models.ErrQuotaPlanNotFound
 		}
-		q.logger.Error("GetDefaultQuotaPlan: failed to retrieve default active quota plan", zap.Error(err))
+		q.logger.Error("GetDefaultQuotaPlan: failed to retrieve default quota plan", zap.Error(err))
 		return nil, fmt.Errorf("failed to retrieve default quota plan: %w", err)
 	}
 
-	q.logger.Debug("GetDefaultQuotaPlan: default active quota plan retrieved successfully",
+	q.logger.Debug("GetDefaultQuotaPlan: default quota plan retrieved successfully",
 		zap.Uint("id", plan.ID),
 		zap.String("name", plan.Name))
 

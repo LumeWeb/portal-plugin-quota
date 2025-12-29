@@ -5,6 +5,8 @@
 package core
 
 import (
+	"context"
+
 	mock "github.com/stretchr/testify/mock"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
@@ -37,14 +39,14 @@ func (_m *MockLimitResolver) EXPECT() *MockLimitResolver_Expecter {
 }
 
 // ApplyLimit provides a mock function for the type MockLimitResolver
-func (_mock *MockLimitResolver) ApplyLimit(dest **uint64, source int64, limitName string, options ...LimitOption) error {
+func (_mock *MockLimitResolver) ApplyLimit(ctx context.Context, dest **uint64, source int64, limitName string, options ...LimitOption) error {
 	// LimitOption
 	_va := make([]interface{}, len(options))
 	for _i := range options {
 		_va[_i] = options[_i]
 	}
 	var _ca []interface{}
-	_ca = append(_ca, dest, source, limitName)
+	_ca = append(_ca, ctx, dest, source, limitName)
 	_ca = append(_ca, _va...)
 	ret := _mock.Called(_ca...)
 
@@ -53,8 +55,8 @@ func (_mock *MockLimitResolver) ApplyLimit(dest **uint64, source int64, limitNam
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(**uint64, int64, string, ...LimitOption) error); ok {
-		r0 = returnFunc(dest, source, limitName, options...)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, **uint64, int64, string, ...LimitOption) error); ok {
+		r0 = returnFunc(ctx, dest, source, limitName, options...)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -67,42 +69,48 @@ type MockLimitResolver_ApplyLimit_Call struct {
 }
 
 // ApplyLimit is a helper method to define mock.On call
+//   - ctx context.Context
 //   - dest **uint64
 //   - source int64
 //   - limitName string
 //   - options ...LimitOption
-func (_e *MockLimitResolver_Expecter) ApplyLimit(dest interface{}, source interface{}, limitName interface{}, options ...interface{}) *MockLimitResolver_ApplyLimit_Call {
+func (_e *MockLimitResolver_Expecter) ApplyLimit(ctx interface{}, dest interface{}, source interface{}, limitName interface{}, options ...interface{}) *MockLimitResolver_ApplyLimit_Call {
 	return &MockLimitResolver_ApplyLimit_Call{Call: _e.mock.On("ApplyLimit",
-		append([]interface{}{dest, source, limitName}, options...)...)}
+		append([]interface{}{ctx, dest, source, limitName}, options...)...)}
 }
 
-func (_c *MockLimitResolver_ApplyLimit_Call) Run(run func(dest **uint64, source int64, limitName string, options ...LimitOption)) *MockLimitResolver_ApplyLimit_Call {
+func (_c *MockLimitResolver_ApplyLimit_Call) Run(run func(ctx context.Context, dest **uint64, source int64, limitName string, options ...LimitOption)) *MockLimitResolver_ApplyLimit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 **uint64
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(**uint64)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 int64
+		var arg1 **uint64
 		if args[1] != nil {
-			arg1 = args[1].(int64)
+			arg1 = args[1].(**uint64)
 		}
-		var arg2 string
+		var arg2 int64
 		if args[2] != nil {
-			arg2 = args[2].(string)
+			arg2 = args[2].(int64)
 		}
-		var arg3 []LimitOption
-		variadicArgs := make([]LimitOption, len(args)-3)
-		for i, a := range args[3:] {
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 []LimitOption
+		variadicArgs := make([]LimitOption, len(args)-4)
+		for i, a := range args[4:] {
 			if a != nil {
 				variadicArgs[i] = a.(LimitOption)
 			}
 		}
-		arg3 = variadicArgs
+		arg4 = variadicArgs
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3...,
+			arg3,
+			arg4...,
 		)
 	})
 	return _c
@@ -113,14 +121,14 @@ func (_c *MockLimitResolver_ApplyLimit_Call) Return(err error) *MockLimitResolve
 	return _c
 }
 
-func (_c *MockLimitResolver_ApplyLimit_Call) RunAndReturn(run func(dest **uint64, source int64, limitName string, options ...LimitOption) error) *MockLimitResolver_ApplyLimit_Call {
+func (_c *MockLimitResolver_ApplyLimit_Call) RunAndReturn(run func(ctx context.Context, dest **uint64, source int64, limitName string, options ...LimitOption) error) *MockLimitResolver_ApplyLimit_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ResolveEffectiveLimits provides a mock function for the type MockLimitResolver
-func (_mock *MockLimitResolver) ResolveEffectiveLimits(config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*EffectiveLimits, error) {
-	ret := _mock.Called(config, policy)
+func (_mock *MockLimitResolver) ResolveEffectiveLimits(ctx context.Context, config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*EffectiveLimits, error) {
+	ret := _mock.Called(ctx, config, policy)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ResolveEffectiveLimits")
@@ -128,18 +136,18 @@ func (_mock *MockLimitResolver) ResolveEffectiveLimits(config *models.UserQuotaC
 
 	var r0 *EffectiveLimits
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*models.UserQuotaConfig, models.EnforcementPolicy) (*EffectiveLimits, error)); ok {
-		return returnFunc(config, policy)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *models.UserQuotaConfig, models.EnforcementPolicy) (*EffectiveLimits, error)); ok {
+		return returnFunc(ctx, config, policy)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*models.UserQuotaConfig, models.EnforcementPolicy) *EffectiveLimits); ok {
-		r0 = returnFunc(config, policy)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *models.UserQuotaConfig, models.EnforcementPolicy) *EffectiveLimits); ok {
+		r0 = returnFunc(ctx, config, policy)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*EffectiveLimits)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(*models.UserQuotaConfig, models.EnforcementPolicy) error); ok {
-		r1 = returnFunc(config, policy)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *models.UserQuotaConfig, models.EnforcementPolicy) error); ok {
+		r1 = returnFunc(ctx, config, policy)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -152,25 +160,31 @@ type MockLimitResolver_ResolveEffectiveLimits_Call struct {
 }
 
 // ResolveEffectiveLimits is a helper method to define mock.On call
+//   - ctx context.Context
 //   - config *models.UserQuotaConfig
 //   - policy models.EnforcementPolicy
-func (_e *MockLimitResolver_Expecter) ResolveEffectiveLimits(config interface{}, policy interface{}) *MockLimitResolver_ResolveEffectiveLimits_Call {
-	return &MockLimitResolver_ResolveEffectiveLimits_Call{Call: _e.mock.On("ResolveEffectiveLimits", config, policy)}
+func (_e *MockLimitResolver_Expecter) ResolveEffectiveLimits(ctx interface{}, config interface{}, policy interface{}) *MockLimitResolver_ResolveEffectiveLimits_Call {
+	return &MockLimitResolver_ResolveEffectiveLimits_Call{Call: _e.mock.On("ResolveEffectiveLimits", ctx, config, policy)}
 }
 
-func (_c *MockLimitResolver_ResolveEffectiveLimits_Call) Run(run func(config *models.UserQuotaConfig, policy models.EnforcementPolicy)) *MockLimitResolver_ResolveEffectiveLimits_Call {
+func (_c *MockLimitResolver_ResolveEffectiveLimits_Call) Run(run func(ctx context.Context, config *models.UserQuotaConfig, policy models.EnforcementPolicy)) *MockLimitResolver_ResolveEffectiveLimits_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *models.UserQuotaConfig
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(*models.UserQuotaConfig)
+			arg0 = args[0].(context.Context)
 		}
-		var arg1 models.EnforcementPolicy
+		var arg1 *models.UserQuotaConfig
 		if args[1] != nil {
-			arg1 = args[1].(models.EnforcementPolicy)
+			arg1 = args[1].(*models.UserQuotaConfig)
+		}
+		var arg2 models.EnforcementPolicy
+		if args[2] != nil {
+			arg2 = args[2].(models.EnforcementPolicy)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -181,22 +195,22 @@ func (_c *MockLimitResolver_ResolveEffectiveLimits_Call) Return(effectiveLimits 
 	return _c
 }
 
-func (_c *MockLimitResolver_ResolveEffectiveLimits_Call) RunAndReturn(run func(config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*EffectiveLimits, error)) *MockLimitResolver_ResolveEffectiveLimits_Call {
+func (_c *MockLimitResolver_ResolveEffectiveLimits_Call) RunAndReturn(run func(ctx context.Context, config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*EffectiveLimits, error)) *MockLimitResolver_ResolveEffectiveLimits_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ValidateThresholdValue provides a mock function for the type MockLimitResolver
-func (_mock *MockLimitResolver) ValidateThresholdValue(thresholdValue int64, thresholdType string) error {
-	ret := _mock.Called(thresholdValue, thresholdType)
+func (_mock *MockLimitResolver) ValidateThresholdValue(ctx context.Context, thresholdValue int64, thresholdType string) error {
+	ret := _mock.Called(ctx, thresholdValue, thresholdType)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ValidateThresholdValue")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(int64, string) error); ok {
-		r0 = returnFunc(thresholdValue, thresholdType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string) error); ok {
+		r0 = returnFunc(ctx, thresholdValue, thresholdType)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -209,75 +223,18 @@ type MockLimitResolver_ValidateThresholdValue_Call struct {
 }
 
 // ValidateThresholdValue is a helper method to define mock.On call
+//   - ctx context.Context
 //   - thresholdValue int64
 //   - thresholdType string
-func (_e *MockLimitResolver_Expecter) ValidateThresholdValue(thresholdValue interface{}, thresholdType interface{}) *MockLimitResolver_ValidateThresholdValue_Call {
-	return &MockLimitResolver_ValidateThresholdValue_Call{Call: _e.mock.On("ValidateThresholdValue", thresholdValue, thresholdType)}
+func (_e *MockLimitResolver_Expecter) ValidateThresholdValue(ctx interface{}, thresholdValue interface{}, thresholdType interface{}) *MockLimitResolver_ValidateThresholdValue_Call {
+	return &MockLimitResolver_ValidateThresholdValue_Call{Call: _e.mock.On("ValidateThresholdValue", ctx, thresholdValue, thresholdType)}
 }
 
-func (_c *MockLimitResolver_ValidateThresholdValue_Call) Run(run func(thresholdValue int64, thresholdType string)) *MockLimitResolver_ValidateThresholdValue_Call {
+func (_c *MockLimitResolver_ValidateThresholdValue_Call) Run(run func(ctx context.Context, thresholdValue int64, thresholdType string)) *MockLimitResolver_ValidateThresholdValue_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 int64
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(int64)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockLimitResolver_ValidateThresholdValue_Call) Return(err error) *MockLimitResolver_ValidateThresholdValue_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockLimitResolver_ValidateThresholdValue_Call) RunAndReturn(run func(thresholdValue int64, thresholdType string) error) *MockLimitResolver_ValidateThresholdValue_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ValidateThresholdVsLimit provides a mock function for the type MockLimitResolver
-func (_mock *MockLimitResolver) ValidateThresholdVsLimit(thresholdValue int64, limitValue int64, thresholdType string) error {
-	ret := _mock.Called(thresholdValue, limitValue, thresholdType)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ValidateThresholdVsLimit")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(int64, int64, string) error); ok {
-		r0 = returnFunc(thresholdValue, limitValue, thresholdType)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockLimitResolver_ValidateThresholdVsLimit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ValidateThresholdVsLimit'
-type MockLimitResolver_ValidateThresholdVsLimit_Call struct {
-	*mock.Call
-}
-
-// ValidateThresholdVsLimit is a helper method to define mock.On call
-//   - thresholdValue int64
-//   - limitValue int64
-//   - thresholdType string
-func (_e *MockLimitResolver_Expecter) ValidateThresholdVsLimit(thresholdValue interface{}, limitValue interface{}, thresholdType interface{}) *MockLimitResolver_ValidateThresholdVsLimit_Call {
-	return &MockLimitResolver_ValidateThresholdVsLimit_Call{Call: _e.mock.On("ValidateThresholdVsLimit", thresholdValue, limitValue, thresholdType)}
-}
-
-func (_c *MockLimitResolver_ValidateThresholdVsLimit_Call) Run(run func(thresholdValue int64, limitValue int64, thresholdType string)) *MockLimitResolver_ValidateThresholdVsLimit_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 int64
-		if args[0] != nil {
-			arg0 = args[0].(int64)
+			arg0 = args[0].(context.Context)
 		}
 		var arg1 int64
 		if args[1] != nil {
@@ -296,12 +253,81 @@ func (_c *MockLimitResolver_ValidateThresholdVsLimit_Call) Run(run func(threshol
 	return _c
 }
 
+func (_c *MockLimitResolver_ValidateThresholdValue_Call) Return(err error) *MockLimitResolver_ValidateThresholdValue_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockLimitResolver_ValidateThresholdValue_Call) RunAndReturn(run func(ctx context.Context, thresholdValue int64, thresholdType string) error) *MockLimitResolver_ValidateThresholdValue_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ValidateThresholdVsLimit provides a mock function for the type MockLimitResolver
+func (_mock *MockLimitResolver) ValidateThresholdVsLimit(ctx context.Context, thresholdValue int64, limitValue int64, thresholdType string) error {
+	ret := _mock.Called(ctx, thresholdValue, limitValue, thresholdType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ValidateThresholdVsLimit")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, int64, string) error); ok {
+		r0 = returnFunc(ctx, thresholdValue, limitValue, thresholdType)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockLimitResolver_ValidateThresholdVsLimit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ValidateThresholdVsLimit'
+type MockLimitResolver_ValidateThresholdVsLimit_Call struct {
+	*mock.Call
+}
+
+// ValidateThresholdVsLimit is a helper method to define mock.On call
+//   - ctx context.Context
+//   - thresholdValue int64
+//   - limitValue int64
+//   - thresholdType string
+func (_e *MockLimitResolver_Expecter) ValidateThresholdVsLimit(ctx interface{}, thresholdValue interface{}, limitValue interface{}, thresholdType interface{}) *MockLimitResolver_ValidateThresholdVsLimit_Call {
+	return &MockLimitResolver_ValidateThresholdVsLimit_Call{Call: _e.mock.On("ValidateThresholdVsLimit", ctx, thresholdValue, limitValue, thresholdType)}
+}
+
+func (_c *MockLimitResolver_ValidateThresholdVsLimit_Call) Run(run func(ctx context.Context, thresholdValue int64, limitValue int64, thresholdType string)) *MockLimitResolver_ValidateThresholdVsLimit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
 func (_c *MockLimitResolver_ValidateThresholdVsLimit_Call) Return(err error) *MockLimitResolver_ValidateThresholdVsLimit_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockLimitResolver_ValidateThresholdVsLimit_Call) RunAndReturn(run func(thresholdValue int64, limitValue int64, thresholdType string) error) *MockLimitResolver_ValidateThresholdVsLimit_Call {
+func (_c *MockLimitResolver_ValidateThresholdVsLimit_Call) RunAndReturn(run func(ctx context.Context, thresholdValue int64, limitValue int64, thresholdType string) error) *MockLimitResolver_ValidateThresholdVsLimit_Call {
 	_c.Call.Return(run)
 	return _c
 }

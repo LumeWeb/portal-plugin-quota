@@ -1,6 +1,7 @@
 package managers
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -9,7 +10,8 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	portalCore "go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/portal/db"
 	portalModels "go.lumeweb.com/portal/db/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -18,29 +20,28 @@ import (
 // UsageManager handles centralized usage recording and shared usage calculations
 // Implements core.UsageManager interface
 type UsageManager struct {
-	ctx        portalCore.Context
-	db         *gorm.DB
-	logger     *portalCore.Logger
+	*core.BaseComponent
 	config     *config.QuotaConfig
-	pinService portalCore.PinService
+	pinService core.PinService
 }
 
 // NewUsageManager creates a new usage manager
-func NewUsageManager(ctx portalCore.Context) *UsageManager {
-	quotaConfig := portalCore.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
+func NewUsageManager(ctx core.Context) *UsageManager {
+	quotaConfig := core.GetServiceConfig[*config.QuotaConfig](ctx, pluginCore.QUOTA_SERVICE)
 
 	return &UsageManager{
-		ctx:        ctx,
-		db:         ctx.DB(),
-		logger:     ctx.NamedLogger("quota.UsageManager"),
-		config:     quotaConfig,
-		pinService: portalCore.GetService[portalCore.PinService](ctx, portalCore.PIN_SERVICE),
+		BaseComponent: core.NewBaseComponent(ctx),
+		config:        quotaConfig,
+		pinService:    core.GetService[core.PinService](ctx, core.PIN_SERVICE),
 	}
 }
 
 // RecordUpload records upload usage for a user
 // Implements core.UsageManager.RecordUpload
-func (um *UsageManager) RecordUpload(userID, uploadID uint, bytes uint64, ip string) error {
+func (um *UsageManager) RecordUpload(ctx context.Context, userID, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.RecordUpload")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return err
 	}
@@ -59,12 +60,12 @@ func (um *UsageManager) RecordUpload(userID, uploadID uint, bytes uint64, ip str
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := um.RecordUserUsageDetail(detail); err != nil {
+	if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
 		return fmt.Errorf("failed to record upload usage detail: %w", err)
 	}
 
 	// Update daily usage
-	if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeUpload, int64(bytes)); err != nil {
+	if err := um.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeUpload, int64(bytes)); err != nil {
 		return fmt.Errorf("failed to update daily upload usage: %w", err)
 	}
 
@@ -72,7 +73,10 @@ func (um *UsageManager) RecordUpload(userID, uploadID uint, bytes uint64, ip str
 }
 
 // GetUserQuotaConfig returns the quota configuration for a user
-func (um *UsageManager) GetUserQuotaConfig(userID uint) (*pluginModels.UserQuotaConfig, error) {
+func (um *UsageManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*pluginModels.UserQuotaConfig, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetUserQuotaConfig")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return nil, err
 	}
@@ -84,22 +88,26 @@ func (um *UsageManager) GetUserQuotaConfig(userID uint) (*pluginModels.UserQuota
 		EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
 	}
 
-	result := um.db.Where("user_id = ?", userID).FirstOrCreate(&cfg)
-	if result.Error != nil {
-		return nil, fmt.Errorf("failed to get or create user quota config: %w", result.Error)
+	if err := db.RetryableTransaction(ctx, um.DB(), func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("user_id = ?", userID).FirstOrCreate(&cfg)
+	}); err != nil {
+		return nil, fmt.Errorf("failed to get or create user quota config: %w", err)
 	}
 
 	return &cfg, nil
 }
 
 // GetAggregatedUsageByType returns the aggregated usage for a specific user and usage type
-func (um *UsageManager) GetAggregatedUsageByType(userID uint, usageType pluginCore.UsageType) (uint64, error) {
+func (um *UsageManager) GetAggregatedUsageByType(ctx context.Context, userID uint, usageType pluginCore.UsageType) (uint64, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetAggregatedUsageByType")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return 0, err
 	}
 
 	var total uint64
-	err := um.db.Model(&pluginModels.UserUsageDetail{}).
+	err := um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
 		Where("user_id = ? AND type = ?", userID, usageType).
 		Select("COALESCE(SUM(bytes), 0)").
 		Scan(&total).Error
@@ -112,7 +120,10 @@ func (um *UsageManager) GetAggregatedUsageByType(userID uint, usageType pluginCo
 }
 
 // GetUsageHistory returns usage history for a user
-func (um *UsageManager) GetUsageHistory(userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
+func (um *UsageManager) GetUsageHistory(ctx context.Context, userID uint, period int, usageType pluginCore.UsageType) ([]*pluginCore.UsagePoint, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetUsageHistory")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return nil, err
 	}
@@ -125,7 +136,7 @@ func (um *UsageManager) GetUsageHistory(userID uint, period int, usageType plugi
 	startDate := endDate.AddDate(0, 0, -period)
 
 	var usageDetails []pluginModels.UserUsageDetail
-	err := um.db.Where("user_id = ? AND type = ? AND timestamp BETWEEN ? AND ?",
+	err := um.DB().WithContext(ctx).Where("user_id = ? AND type = ? AND timestamp BETWEEN ? AND ?",
 		userID, pluginModels.UsageType(usageType), startDate, endDate).
 		Order("timestamp ASC").
 		Find(&usageDetails).Error
@@ -147,7 +158,10 @@ func (um *UsageManager) GetUsageHistory(userID uint, period int, usageType plugi
 }
 
 // GetDetailedUsage returns detailed usage records for a user within a time range
-func (um *UsageManager) GetDetailedUsage(userID uint, start, end time.Time) ([]*pluginCore.UserUsageDetail, error) {
+func (um *UsageManager) GetDetailedUsage(ctx context.Context, userID uint, start, end time.Time) ([]*pluginCore.UserUsageDetail, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetDetailedUsage")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return nil, err
 	}
@@ -157,7 +171,7 @@ func (um *UsageManager) GetDetailedUsage(userID uint, start, end time.Time) ([]*
 	}
 
 	var usageDetails []pluginModels.UserUsageDetail
-	err := um.db.Where("user_id = ? AND timestamp BETWEEN ? AND ?", userID, start, end).
+	err := um.DB().WithContext(ctx).Where("user_id = ? AND timestamp BETWEEN ? AND ?", userID, start, end).
 		Order("timestamp ASC").
 		Find(&usageDetails).Error
 	if err != nil {
@@ -187,13 +201,16 @@ func (um *UsageManager) GetDetailedUsage(userID uint, start, end time.Time) ([]*
 }
 
 // GetTotalBytesByType retrieves the total bytes consumed for a specific usage type across all time
-func (um *UsageManager) GetTotalBytesByType(userID uint, usageType pluginCore.UsageType) (uint64, error) {
+func (um *UsageManager) GetTotalBytesByType(ctx context.Context, userID uint, usageType pluginCore.UsageType) (uint64, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetTotalBytesByType")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return 0, err
 	}
 
 	var totalBytes uint64
-	err := um.db.Model(&pluginModels.UserUsageDetail{}).
+	err := um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
 		Where("user_id = ? AND type = ?", userID, pluginModels.UsageType(usageType)).
 		Select("COALESCE(SUM(bytes), 0)").
 		Scan(&totalBytes).Error
@@ -210,14 +227,17 @@ func (um *UsageManager) GetTotalBytesByType(userID uint, usageType pluginCore.Us
 // If userID == 0, the download is treated as anonymous and bytes are
 // distributed among all users who have pinned the upload (shared usage).
 // If userID > 0, the user pays the full download bytes.
-func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip string) error {
+func (um *UsageManager) RecordDownload(ctx context.Context, userID, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.RecordDownload")
+	defer span.End()
+
 	if err := um.validateBytes(bytes); err != nil {
 		return err
 	}
 
 	// Anonymous download (userID == 0) - distribute among pinners
 	if userID == 0 {
-		return um.recordAnonymousDownload(uploadID, bytes, ip)
+		return um.recordAnonymousDownload(ctx, uploadID, bytes, ip)
 	}
 
 	if err := um.validateUserID(userID); err != nil {
@@ -235,12 +255,12 @@ func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip s
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := um.RecordUserUsageDetail(detail); err != nil {
+	if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
 		return fmt.Errorf("failed to record download usage detail: %w", err)
 	}
 
 	// Update daily usage
-	if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(bytes)); err != nil {
+	if err := um.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeDownload, int64(bytes)); err != nil {
 		return fmt.Errorf("failed to update daily download usage: %w", err)
 	}
 
@@ -256,23 +276,26 @@ func (um *UsageManager) RecordDownload(userID, uploadID uint, bytes uint64, ip s
 // 3. Fair attribution distributes the cost among those who made content available
 //
 // When EnableSharedUsage = false, anonymous downloads are skipped (no quota tracking).
-func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip string) error {
+func (um *UsageManager) recordAnonymousDownload(ctx context.Context, uploadID uint, bytes uint64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.recordAnonymousDownload")
+	defer span.End()
+
 	// If shared usage is disabled, skip recording (no user to charge)
 	// Anonymous downloads become effectively free from a quota perspective
 	if um.config == nil || !um.config.EnableSharedUsage {
-		um.logger.Debug("Anonymous download not recorded (shared usage disabled)",
+		um.Logger().Debug("Anonymous download not recorded (shared usage disabled)",
 			zap.Uint("uploadID", uploadID), zap.Uint64("bytes", bytes))
 		return nil
 	}
 
 	// Get all users who have pinned this upload
-	pinnedUsers, err := um.getPinnedUsersForUpload(uploadID)
+	pinnedUsers, err := um.getPinnedUsersForUpload(ctx, uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to get pinned users: %w", err)
 	}
 
 	if len(pinnedUsers) == 0 {
-		um.logger.Debug("No pinned users for upload, skipping anonymous download recording",
+		um.Logger().Debug("No pinned users for upload, skipping anonymous download recording",
 			zap.Uint("uploadID", uploadID))
 		return nil
 	}
@@ -294,8 +317,8 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 			Timestamp:  time.Now().UTC(),
 		}
 
-		if err := um.RecordUserUsageDetail(detail); err != nil {
-			um.logger.Warn("Failed to record anonymous download usage for user",
+		if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
+			um.Logger().Warn("Failed to record anonymous download usage for user",
 				zap.Uint("userID", userID),
 				zap.Uint("uploadID", uploadID),
 				zap.Error(err))
@@ -304,8 +327,8 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 		}
 
 		// Update daily usage
-		if err := um.UpdateDailyUsage(userID, pluginModels.UsageTypeDownload, int64(sharedBytes)); err != nil {
-			um.logger.Warn("Failed to update daily download usage for user",
+		if err := um.UpdateDailyUsage(ctx, userID, pluginModels.UsageTypeDownload, int64(sharedBytes)); err != nil {
+			um.Logger().Warn("Failed to update daily download usage for user",
 				zap.Uint("userID", userID),
 				zap.Uint("uploadID", uploadID),
 				zap.Error(err))
@@ -314,7 +337,7 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 	}
 
 	if recordingFailures > 0 {
-		um.logger.Warn("Partial failure recording anonymous download",
+		um.Logger().Warn("Partial failure recording anonymous download",
 			zap.Uint("uploadID", uploadID),
 			zap.Uint64("bytes", bytes),
 			zap.Int("totalUsers", len(pinnedUsers)),
@@ -326,12 +349,15 @@ func (um *UsageManager) recordAnonymousDownload(uploadID uint, bytes uint64, ip 
 }
 
 // getPinnedUsersForUpload returns all user IDs that have pinned the given upload
-func (um *UsageManager) getPinnedUsersForUpload(uploadID uint) ([]uint, error) {
+func (um *UsageManager) getPinnedUsersForUpload(ctx context.Context, uploadID uint) ([]uint, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.getPinnedUsersForUpload")
+	defer span.End()
+
 	if um.pinService == nil {
 		return nil, fmt.Errorf("pin service not available")
 	}
 
-	pins, err := um.pinService.GetPinsByUploadID(um.ctx, uploadID)
+	pins, err := um.pinService.GetPinsByUploadID(ctx, uploadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pins for upload: %w", err)
 	}
@@ -343,7 +369,10 @@ func (um *UsageManager) getPinnedUsersForUpload(uploadID uint) ([]uint, error) {
 
 // RecordStorageChange records storage usage changes for a user
 // Implements core.UsageManager.RecordStorageChange
-func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, ip string) error {
+func (um *UsageManager) RecordStorageChange(ctx context.Context, userID, uploadID uint, bytes int64, ip string) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.RecordStorageChange")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return err
 	}
@@ -382,7 +411,7 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := um.RecordUserUsageDetail(detail); err != nil {
+	if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
 		return fmt.Errorf("failed to record storage usage detail: %w", err)
 	}
 
@@ -395,7 +424,7 @@ func (um *UsageManager) RecordStorageChange(userID, uploadID uint, bytes int64, 
 		dailyUsageBytes = int64(sharedBytes)
 	}
 
-	if err := um.UpdateDailyUsage(userID, usageType, dailyUsageBytes); err != nil {
+	if err := um.UpdateDailyUsage(ctx, userID, usageType, dailyUsageBytes); err != nil {
 		return fmt.Errorf("failed to update daily storage usage: %w", err)
 	}
 
@@ -430,18 +459,26 @@ func (um *UsageManager) calculateSharedBytes(totalBytes uint64, userCount uint, 
 }
 
 // RecordUserUsageDetail records a detailed usage record
-func (um *UsageManager) RecordUserUsageDetail(detail *pluginModels.UserUsageDetail) error {
-	return um.db.Create(detail).Error
+func (um *UsageManager) RecordUserUsageDetail(ctx context.Context, detail *pluginModels.UserUsageDetail) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.RecordUserUsageDetail")
+	defer span.End()
+
+	return db.RetryableTransaction(ctx, um.DB(), func(tx *gorm.DB) *gorm.DB {
+		return tx.Create(detail)
+	})
 }
 
 // UpdateDailyUsage updates the daily aggregated usage for a user
-func (um *UsageManager) UpdateDailyUsage(userID uint, usageType pluginModels.UsageType, bytes int64) error {
+func (um *UsageManager) UpdateDailyUsage(ctx context.Context, userID uint, usageType pluginModels.UsageType, bytes int64) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.UpdateDailyUsage")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return err
 	}
 
 	// Use the new upsert method that properly handles concurrent access
-	if err := pluginModels.UpsertDailyUsage(um.db, userID, usageType, bytes); err != nil {
+	if err := pluginModels.UpsertDailyUsage(um.DB().WithContext(ctx), userID, usageType, bytes); err != nil {
 		return fmt.Errorf("failed to update daily usage: %w", err)
 	}
 
@@ -488,7 +525,10 @@ func (um *UsageManager) isUniqueConstraintViolation(err error) bool {
 }
 
 // GetCurrentUsage retrieves the current daily usage for a user
-func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) {
+func (um *UsageManager) GetCurrentUsage(ctx context.Context, userID uint) (*pluginCore.Usage, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetCurrentUsage")
+	defer span.End()
+
 	if err := um.validateUserID(userID); err != nil {
 		return nil, err
 	}
@@ -498,7 +538,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 
 	// Get uploaded bytes for today
 	var bytesUploaded uint64
-	err := um.db.Model(&pluginModels.UserUsageDetail{}).
+	err := um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
 		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeUpload, today, tomorrow).
 		Select("COALESCE(SUM(bytes), 0)").
 		Scan(&bytesUploaded).Error
@@ -508,7 +548,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 
 	// Get downloaded bytes for today
 	var bytesDownloaded uint64
-	err = um.db.Model(&pluginModels.UserUsageDetail{}).
+	err = um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
 		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeDownload, today, tomorrow).
 		Select("COALESCE(SUM(bytes), 0)").
 		Scan(&bytesDownloaded).Error
@@ -518,7 +558,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 
 	// Get storage add bytes for today
 	var bytesStoredAdd uint64
-	err = um.db.Model(&pluginModels.UserUsageDetail{}).
+	err = um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
 		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeStorageAdd, today, tomorrow).
 		Select("COALESCE(SUM(bytes), 0)").
 		Scan(&bytesStoredAdd).Error
@@ -528,7 +568,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 
 	// Get storage remove bytes for today
 	var bytesStoredRemove uint64
-	err = um.db.Model(&pluginModels.UserUsageDetail{}).
+	err = um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
 		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", userID, pluginModels.UsageTypeStorageRemove, today, tomorrow).
 		Select("COALESCE(SUM(bytes), 0)").
 		Scan(&bytesStoredRemove).Error
@@ -552,7 +592,7 @@ func (um *UsageManager) GetCurrentUsage(userID uint) (*pluginCore.Usage, error) 
 	}
 
 	for _, usageType := range usageTypes {
-		bytes, err := um.GetAggregatedUsageByType(userID, pluginCore.UsageType(usageType))
+		bytes, err := um.GetAggregatedUsageByType(ctx, userID, pluginCore.UsageType(usageType))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get aggregated usage: %w", err)
 		}

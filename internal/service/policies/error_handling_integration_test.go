@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -19,14 +20,14 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 		t.Run("Zero user ID in quota check", func(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
-			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			config := &models.UserQuotaConfig{
 				UserID:            0,
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
 			}
 
-			_, err := enforcer.CheckUploadQuota(config, 100)
+			_, err := enforcer.CheckUploadQuota(ctx, config, 100)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, models.ErrInvalidUserID)
 		})
@@ -34,10 +35,10 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 		t.Run("Zero bytes in quota check", func(t *testing.T) {
 			userID := dataManager.NextUserID()
 			createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{})
-			
+
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
-			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			config := &models.UserQuotaConfig{
@@ -45,7 +46,7 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
 			}
 
-			_, err := enforcer.CheckUploadQuota(config, 0)
+			_, err := enforcer.CheckUploadQuota(ctx, config, 0)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, models.ErrInvalidBytes)
 		})
@@ -72,10 +73,10 @@ func TestErrorHandling_DatabaseFailures(t *testing.T) {
 
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
-			mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
-			mockUsageManager.On("GetCurrentUsage", userID).Return(nil, assert.AnError)
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(nil, assert.AnError)
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
-			_, err = enforcer.GetCurrentUsage(userID)
+			_, err = enforcer.GetCurrentUsage(ctx, userID)
 			assert.Error(t, err)
 		})
 	}, pluginTesting.TestOptions())

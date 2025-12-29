@@ -1,6 +1,8 @@
 package core
 
 import (
+	"context"
+
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
@@ -8,16 +10,16 @@ import (
 type LimitResolver interface {
 	// ResolveEffectiveLimits resolves the effective limits for a user based on their configuration
 	// This method consolidates the logic from getEffectiveLimits() and resolveEffectiveLimits()
-	ResolveEffectiveLimits(config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*EffectiveLimits, error)
+	ResolveEffectiveLimits(ctx context.Context, config *models.UserQuotaConfig, policy models.EnforcementPolicy) (*EffectiveLimits, error)
 
 	// ValidateThresholdVsLimit ensures threshold cannot exceed limit (for threshold policy)
-	ValidateThresholdVsLimit(thresholdValue, limitValue int64, thresholdType string) error
+	ValidateThresholdVsLimit(ctx context.Context, thresholdValue, limitValue int64, thresholdType string) error
 
 	// ValidateThresholdValue validates that a threshold value is reasonable
-	ValidateThresholdValue(thresholdValue int64, thresholdType string) error
+	ValidateThresholdValue(ctx context.Context, thresholdValue int64, thresholdType string) error
 
 	// ApplyLimit converts and validates database limit values to core limit values
-	ApplyLimit(dest **uint64, source int64, limitName string, options ...LimitOption) error
+	ApplyLimit(ctx context.Context, dest **uint64, source int64, limitName string, options ...LimitOption) error
 }
 
 // LimitOption provides configuration options for limit resolution

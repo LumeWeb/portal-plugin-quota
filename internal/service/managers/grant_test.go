@@ -33,7 +33,7 @@ func TestGrantManager_CreateAllowanceGrant_ValidInput_Success(t *testing.T) {
 			Bytes:  testGrantBytesLarge,
 		}
 
-		err := grantManager.CreateAllowanceGrant(userID, grant)
+		err := grantManager.CreateAllowanceGrant(ctx, userID, grant)
 		require.NoError(t, err)
 
 		// Verify the grant was created
@@ -86,7 +86,7 @@ func TestGrantManager_CreateAllowanceGrant_WithExpiryDate_Success(t *testing.T) 
 			ExpiryDate: &expiryDate,
 		}
 
-		err := grantManager.CreateAllowanceGrant(userID, grant)
+		err := grantManager.CreateAllowanceGrant(ctx, userID, grant)
 		require.NoError(t, err)
 
 		// Verify the grant was created with expiry date
@@ -117,7 +117,7 @@ func TestGrantManager_CreateAllowanceGrant_InvalidInput_Error(t *testing.T) {
 			Bytes:  testGrantBytesLarge,
 		}
 
-		err := grantManager.CreateAllowanceGrant(userID, grant)
+		err := grantManager.CreateAllowanceGrant(ctx, userID, grant)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, pluginModels.ErrInvalidUserID)
 
@@ -133,7 +133,7 @@ func TestGrantManager_CreateAllowanceGrant_InvalidInput_Error(t *testing.T) {
 			Bytes:  testGrantBytesLarge,
 		}
 
-		err := grantManager.CreateAllowanceGrant(userID, grant)
+		err := grantManager.CreateAllowanceGrant(ctx, userID, grant)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "grant type is invalid")
 
@@ -149,7 +149,7 @@ func TestGrantManager_CreateAllowanceGrant_InvalidInput_Error(t *testing.T) {
 			Bytes:  testGrantBytesLarge,
 		}
 
-		err := grantManager.CreateAllowanceGrant(userID, grant)
+		err := grantManager.CreateAllowanceGrant(ctx, userID, grant)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "grant source is invalid")
 
@@ -165,7 +165,7 @@ func TestGrantManager_CreateAllowanceGrant_InvalidInput_Error(t *testing.T) {
 			Bytes:  0, // Invalid bytes
 		}
 
-		err := grantManager.CreateAllowanceGrant(userID, grant)
+		err := grantManager.CreateAllowanceGrant(ctx, userID, grant)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "bytes must be greater than 0")
 
@@ -178,7 +178,7 @@ func TestGrantManager_GetActiveGrantsByType_NoGrants_ReturnsEmpty(t *testing.T) 
 		grantManager := NewGrantManager(ctx)
 		userID := uint(1)
 
-		grants, err := grantManager.GetActiveGrantsByType(userID, pluginCore.GrantTypeUpload)
+		grants, err := grantManager.GetActiveGrantsByType(ctx, userID, pluginCore.GrantTypeUpload)
 		require.NoError(t, err)
 		assert.Empty(t, grants)
 
@@ -223,7 +223,7 @@ func TestGrantManager_GetActiveGrantsByType_WithActiveGrants_ReturnsGrants(t *te
 		require.NoError(t, err)
 
 		// Get upload grants
-		grants, err := grantManager.GetActiveGrantsByType(userID, pluginCore.GrantTypeUpload)
+		grants, err := grantManager.GetActiveGrantsByType(ctx, userID, pluginCore.GrantTypeUpload)
 		require.NoError(t, err)
 		assert.Len(t, grants, 2)
 
@@ -262,7 +262,7 @@ func TestGrantManager_GetActiveGrantsByType_WithExpiredGrants_FiltersOutExpired(
 		require.NoError(t, result.Error)
 
 		// Get upload grants - should only return the active one
-		grants, err := grantManager.GetActiveGrantsByType(userID, pluginCore.GrantTypeUpload)
+		grants, err := grantManager.GetActiveGrantsByType(ctx, userID, pluginCore.GrantTypeUpload)
 		require.NoError(t, err)
 		assert.Len(t, grants, 1)
 		assert.Equal(t, pluginModels.GrantSourceBonus, grants[0].Source)
@@ -308,7 +308,7 @@ func TestGrantManager_GetActiveGrants_WithMultipleTypes_ReturnsAll(t *testing.T)
 		require.NoError(t, err)
 
 		// Get all active grants
-		grants, err := grantManager.GetActiveGrants(userID)
+		grants, err := grantManager.GetActiveGrants(ctx, userID)
 		require.NoError(t, err)
 		assert.Len(t, grants, 3)
 
@@ -395,7 +395,7 @@ func TestGrantManager_ConsumeFromGrants_SufficientAllowance_Success(t *testing.T
 		require.NoError(t, err)
 
 		// Consume bytes - should consume from highest priority grant first
-		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, testConsumptionBytes, usageDetail.ID, nil)
+		consumptions, err := grantManager.ConsumeFromGrants(ctx, userID, pluginModels.GrantTypeUpload, testConsumptionBytes, usageDetail.ID, nil)
 		require.NoError(t, err)
 		require.Len(t, consumptions, 1)
 		assert.Equal(t, grant2.ID, consumptions[0].GrantID)
@@ -449,7 +449,7 @@ func TestGrantManager_ConsumeFromGrants_InsufficientAllowance_Error(t *testing.T
 		require.NoError(t, err)
 
 		// Try to consume more bytes than available
-		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, testGrantBytesHuge, usageDetail.ID, nil)
+		consumptions, err := grantManager.ConsumeFromGrants(ctx, userID, pluginModels.GrantTypeUpload, testGrantBytesHuge, usageDetail.ID, nil)
 		assert.Error(t, err)
 		assert.Nil(t, consumptions)
 		assert.Equal(t, pluginModels.ErrInsufficientAllowance, err)
@@ -499,7 +499,7 @@ func TestGrantManager_ConsumeFromGrants_MultipleGrants_Success(t *testing.T) {
 		totalConsumption := uint64(testGrantBytesMedium + testConsumptionBytes) // 5000 + 1500 = 6500
 
 		// Consume from grants using the manager method
-		consumptions, err := grantManager.ConsumeFromGrants(userID, pluginModels.GrantTypeUpload, totalConsumption, usageDetail.ID, nil)
+		consumptions, err := grantManager.ConsumeFromGrants(ctx, userID, pluginModels.GrantTypeUpload, totalConsumption, usageDetail.ID, nil)
 		require.NoError(t, err)
 		require.Len(t, consumptions, 2)
 
@@ -547,7 +547,7 @@ func TestGrantManager_DeactivateGrant_ValidID_Success(t *testing.T) {
 		require.NoError(t, err)
 
 		// Deactivate the grant
-		err = grantManager.DeactivateGrant(grant.ID)
+		err = grantManager.DeactivateGrant(ctx, grant.ID)
 		require.NoError(t, err)
 
 		// Verify the grant was deactivated
@@ -565,7 +565,7 @@ func TestGrantManager_DeactivateGrant_InvalidID_Error(t *testing.T) {
 		grantManager := NewGrantManager(ctx)
 
 		// Try to deactivate a non-existent grant
-		err := grantManager.DeactivateGrant(999999)
+		err := grantManager.DeactivateGrant(ctx, 999999)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "grant not found")
 
@@ -575,7 +575,7 @@ func TestGrantManager_DeactivateGrant_InvalidID_Error(t *testing.T) {
 		grantManager := NewGrantManager(ctx)
 
 		// Try to deactivate with invalid ID (0)
-		err := grantManager.DeactivateGrant(0)
+		err := grantManager.DeactivateGrant(ctx, 0)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, pluginModels.ErrInvalidGrantID)
 
@@ -627,7 +627,7 @@ func TestGrantManager_GetExpiringGrants_WithExpiringGrants_ReturnsGrants(t *test
 		require.NoError(t, err)
 
 		// Get grants expiring within 3 days
-		grants, err := grantManager.GetExpiringGrants(72 * time.Hour)
+		grants, err := grantManager.GetExpiringGrants(ctx, 72*time.Hour)
 		require.NoError(t, err)
 		assert.Len(t, grants, 3)
 
@@ -685,7 +685,7 @@ func TestGrantManager_GetExpiringGrantsForUser_WithUserGrants_ReturnsGrants(t *t
 		require.NoError(t, err)
 
 		// Get expiring grants for the user within 3 days
-		grants, err := grantManager.GetExpiringGrantsForUser(userID, 72*time.Hour)
+		grants, err := grantManager.GetExpiringGrantsForUser(ctx, userID, 72*time.Hour)
 		require.NoError(t, err)
 		assert.Len(t, grants, 2)
 

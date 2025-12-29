@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -31,7 +32,7 @@ func setupUnlimitedTest(t *testing.T) *unlimitedTestSetup {
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 
 	// Setup mock expectations
-	mockQuotaService.On("GetUsageManager").Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
 	enforcer := NewUnlimitedPolicyEnforcer(ctx, mockQuotaService)
 
@@ -58,7 +59,7 @@ func TestUnlimitedPolicyEnforcer_CheckQuotaMethods_AllAllowed(t *testing.T) {
 	}
 
 	t.Run("CheckUploadQuota", func(t *testing.T) {
-		result, err := setup.enforcer.CheckUploadQuota(config, uint64(1000))
+		result, err := setup.enforcer.CheckUploadQuota(setup.ctx, config, uint64(1000))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -66,7 +67,7 @@ func TestUnlimitedPolicyEnforcer_CheckQuotaMethods_AllAllowed(t *testing.T) {
 	})
 
 	t.Run("CheckDownloadQuota", func(t *testing.T) {
-		result, err := setup.enforcer.CheckDownloadQuota(config, uint64(1000))
+		result, err := setup.enforcer.CheckDownloadQuota(setup.ctx, config, uint64(1000))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -74,7 +75,7 @@ func TestUnlimitedPolicyEnforcer_CheckQuotaMethods_AllAllowed(t *testing.T) {
 	})
 
 	t.Run("CheckStorageQuota", func(t *testing.T) {
-		result, err := setup.enforcer.CheckStorageQuota(config, uint64(1000))
+		result, err := setup.enforcer.CheckStorageQuota(setup.ctx, config, uint64(1000))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
@@ -92,11 +93,11 @@ func TestUnlimitedPolicyEnforcer_RecordUpload_Success(t *testing.T) {
 	bytes := uint64(500)
 	ip := "192.168.1.1"
 
-	setup.mockUsageManager.On("RecordUpload", userID, uploadID, bytes, ip).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-	err := setup.enforcer.RecordUpload(userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordUpload(setup.ctx, userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
-	setup.mockUsageManager.AssertCalled(t, "RecordUpload", userID, uploadID, bytes, ip)
+	setup.mockUsageManager.AssertCalled(t, "RecordUpload", mock.Anything, userID, uploadID, bytes, ip)
 }
 
 // TestUnlimitedPolicyEnforcer_RecordDownload tests the RecordDownload method
@@ -108,11 +109,11 @@ func TestUnlimitedPolicyEnforcer_RecordDownload_Success(t *testing.T) {
 	bytes := uint64(500)
 	ip := "192.168.1.1"
 
-	setup.mockUsageManager.On("RecordDownload", userID, uploadID, bytes, ip).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-	err := setup.enforcer.RecordDownload(userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordDownload(setup.ctx, userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
-	setup.mockUsageManager.AssertCalled(t, "RecordDownload", userID, uploadID, bytes, ip)
+	setup.mockUsageManager.AssertCalled(t, "RecordDownload", mock.Anything, userID, uploadID, bytes, ip)
 }
 
 // TestUnlimitedPolicyEnforcer_RecordStorageChange tests the RecordStorageChange method
@@ -124,11 +125,11 @@ func TestUnlimitedPolicyEnforcer_RecordStorageChange_Success(t *testing.T) {
 	bytes := int64(500)
 	ip := "192.168.1.1"
 
-	setup.mockUsageManager.On("RecordStorageChange", userID, uploadID, bytes, ip).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-	err := setup.enforcer.RecordStorageChange(userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordStorageChange(setup.ctx, userID, uploadID, bytes, ip)
 	assert.NoError(t, err)
-	setup.mockUsageManager.AssertCalled(t, "RecordStorageChange", userID, uploadID, bytes, ip)
+	setup.mockUsageManager.AssertCalled(t, "RecordStorageChange", mock.Anything, userID, uploadID, bytes, ip)
 }
 
 // TestUnlimitedPolicyEnforcer_UsageMethods tests usage-related methods
@@ -162,9 +163,9 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 			},
 		}
 
-		setup.mockUsageManager.On("GetDetailedUsage", userID, start, end).Return(expectedDetails, nil)
+		setup.mockUsageManager.EXPECT().GetDetailedUsage(mock.Anything, userID, start, end).Return(expectedDetails, nil)
 
-		details, err := setup.enforcer.GetDetailedUsage(userID, start, end)
+		details, err := setup.enforcer.GetDetailedUsage(setup.ctx, userID, start, end)
 		assert.NoError(t, err)
 		assert.Len(t, details, 2)
 
@@ -184,9 +185,9 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 			LastUpdated:     time.Now(),
 		}
 
-		setup.mockUsageManager.On("GetCurrentUsage", userID).Return(expectedUsage, nil)
+		setup.mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(expectedUsage, nil)
 
-		usage, err := setup.enforcer.GetCurrentUsage(userID)
+		usage, err := setup.enforcer.GetCurrentUsage(setup.ctx, userID)
 		assert.NoError(t, err)
 		assert.Equal(t, userID, usage.UserID)
 		assert.Equal(t, uint64(100), usage.BytesUploaded)
@@ -213,9 +214,9 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 			},
 		}
 
-		setup.mockUsageManager.On("GetUsageHistory", userID, period, usageType).Return(expectedHistory, nil)
+		setup.mockUsageManager.EXPECT().GetUsageHistory(mock.Anything, userID, period, usageType).Return(expectedHistory, nil)
 
-		history, err := setup.enforcer.GetUsageHistory(userID, period, usageType)
+		history, err := setup.enforcer.GetUsageHistory(setup.ctx, userID, period, usageType)
 		assert.NoError(t, err)
 		assert.Len(t, history, 2)
 	})

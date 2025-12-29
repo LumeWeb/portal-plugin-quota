@@ -58,7 +58,7 @@ func SetupMocks(t *testing.T) *MockSetup {
 	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
 
 	// Setup base mock expectations
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
+	mockQuotaService.On("GetUsageManager").Return(mockUsageManager).Maybe()
 
 	return &MockSetup{
 		QuotaService:     mockQuotaService,

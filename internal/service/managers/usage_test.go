@@ -396,7 +396,7 @@ func TestUsageManager_RecordUserUsageDetail_RecordDetail_Success(t *testing.T) {
 
 		usageManager := NewUsageManager(ctx)
 
-		err := usageManager.RecordUserUsageDetail(ctx, detail)
+		err := usageManager.RecordUserUsageDetail(ctx, detail, nil)
 		require.NoError(t, err)
 
 		// Verify the record was created

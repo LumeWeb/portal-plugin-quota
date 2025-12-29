@@ -10,6 +10,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"gorm.io/gorm"
 )
 
 // NewMockUsageManager creates a new instance of MockUsageManager. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -632,17 +633,86 @@ func (_c *MockUsageManager_RecordUpload_Call) RunAndReturn(run func(ctx context.
 	return _c
 }
 
+// RecordUsageAndConsume provides a mock function for the type MockUsageManager
+func (_mock *MockUsageManager) RecordUsageAndConsume(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64) error {
+	ret := _mock.Called(ctx, detail, grantType, bytes)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordUsageAndConsume")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *models.UserUsageDetail, models.GrantType, uint64) error); ok {
+		r0 = returnFunc(ctx, detail, grantType, bytes)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockUsageManager_RecordUsageAndConsume_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordUsageAndConsume'
+type MockUsageManager_RecordUsageAndConsume_Call struct {
+	*mock.Call
+}
+
+// RecordUsageAndConsume is a helper method to define mock.On call
+//   - ctx context.Context
+//   - detail *models.UserUsageDetail
+//   - grantType models.GrantType
+//   - bytes uint64
+func (_e *MockUsageManager_Expecter) RecordUsageAndConsume(ctx interface{}, detail interface{}, grantType interface{}, bytes interface{}) *MockUsageManager_RecordUsageAndConsume_Call {
+	return &MockUsageManager_RecordUsageAndConsume_Call{Call: _e.mock.On("RecordUsageAndConsume", ctx, detail, grantType, bytes)}
+}
+
+func (_c *MockUsageManager_RecordUsageAndConsume_Call) Run(run func(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64)) *MockUsageManager_RecordUsageAndConsume_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *models.UserUsageDetail
+		if args[1] != nil {
+			arg1 = args[1].(*models.UserUsageDetail)
+		}
+		var arg2 models.GrantType
+		if args[2] != nil {
+			arg2 = args[2].(models.GrantType)
+		}
+		var arg3 uint64
+		if args[3] != nil {
+			arg3 = args[3].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUsageManager_RecordUsageAndConsume_Call) Return(err error) *MockUsageManager_RecordUsageAndConsume_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockUsageManager_RecordUsageAndConsume_Call) RunAndReturn(run func(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64) error) *MockUsageManager_RecordUsageAndConsume_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RecordUserUsageDetail provides a mock function for the type MockUsageManager
-func (_mock *MockUsageManager) RecordUserUsageDetail(ctx context.Context, detail *UserUsageDetail) error {
-	ret := _mock.Called(ctx, detail)
+func (_mock *MockUsageManager) RecordUserUsageDetail(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB) error {
+	ret := _mock.Called(ctx, detail, tx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RecordUserUsageDetail")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserUsageDetail) error); ok {
-		r0 = returnFunc(ctx, detail)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *UserUsageDetail, *gorm.DB) error); ok {
+		r0 = returnFunc(ctx, detail, tx)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -657,11 +727,12 @@ type MockUsageManager_RecordUserUsageDetail_Call struct {
 // RecordUserUsageDetail is a helper method to define mock.On call
 //   - ctx context.Context
 //   - detail *UserUsageDetail
-func (_e *MockUsageManager_Expecter) RecordUserUsageDetail(ctx interface{}, detail interface{}) *MockUsageManager_RecordUserUsageDetail_Call {
-	return &MockUsageManager_RecordUserUsageDetail_Call{Call: _e.mock.On("RecordUserUsageDetail", ctx, detail)}
+//   - tx *gorm.DB
+func (_e *MockUsageManager_Expecter) RecordUserUsageDetail(ctx interface{}, detail interface{}, tx interface{}) *MockUsageManager_RecordUserUsageDetail_Call {
+	return &MockUsageManager_RecordUserUsageDetail_Call{Call: _e.mock.On("RecordUserUsageDetail", ctx, detail, tx)}
 }
 
-func (_c *MockUsageManager_RecordUserUsageDetail_Call) Run(run func(ctx context.Context, detail *UserUsageDetail)) *MockUsageManager_RecordUserUsageDetail_Call {
+func (_c *MockUsageManager_RecordUserUsageDetail_Call) Run(run func(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB)) *MockUsageManager_RecordUserUsageDetail_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -671,9 +742,14 @@ func (_c *MockUsageManager_RecordUserUsageDetail_Call) Run(run func(ctx context.
 		if args[1] != nil {
 			arg1 = args[1].(*UserUsageDetail)
 		}
+		var arg2 *gorm.DB
+		if args[2] != nil {
+			arg2 = args[2].(*gorm.DB)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -684,7 +760,7 @@ func (_c *MockUsageManager_RecordUserUsageDetail_Call) Return(err error) *MockUs
 	return _c
 }
 
-func (_c *MockUsageManager_RecordUserUsageDetail_Call) RunAndReturn(run func(ctx context.Context, detail *UserUsageDetail) error) *MockUsageManager_RecordUserUsageDetail_Call {
+func (_c *MockUsageManager_RecordUserUsageDetail_Call) RunAndReturn(run func(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB) error) *MockUsageManager_RecordUserUsageDetail_Call {
 	_c.Call.Return(run)
 	return _c
 }

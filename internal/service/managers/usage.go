@@ -2,6 +2,7 @@ package managers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -60,7 +61,7 @@ func (um *UsageManager) RecordUpload(ctx context.Context, userID, uploadID uint,
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
+	if err := um.RecordUserUsageDetail(ctx, detail, nil); err != nil {
 		return fmt.Errorf("failed to record upload usage detail: %w", err)
 	}
 
@@ -255,7 +256,7 @@ func (um *UsageManager) RecordDownload(ctx context.Context, userID, uploadID uin
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
+	if err := um.RecordUserUsageDetail(ctx, detail, nil); err != nil {
 		return fmt.Errorf("failed to record download usage detail: %w", err)
 	}
 
@@ -317,7 +318,7 @@ func (um *UsageManager) recordAnonymousDownload(ctx context.Context, uploadID ui
 			Timestamp:  time.Now().UTC(),
 		}
 
-		if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
+		if err := um.RecordUserUsageDetail(ctx, detail, nil); err != nil {
 			um.Logger().Warn("Failed to record anonymous download usage for user",
 				zap.Uint("userID", userID),
 				zap.Uint("uploadID", uploadID),
@@ -411,7 +412,7 @@ func (um *UsageManager) RecordStorageChange(ctx context.Context, userID, uploadI
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := um.RecordUserUsageDetail(ctx, detail); err != nil {
+	if err := um.RecordUserUsageDetail(ctx, detail, nil); err != nil {
 		return fmt.Errorf("failed to record storage usage detail: %w", err)
 	}
 
@@ -459,9 +460,14 @@ func (um *UsageManager) calculateSharedBytes(totalBytes uint64, userCount uint, 
 }
 
 // RecordUserUsageDetail records a detailed usage record
-func (um *UsageManager) RecordUserUsageDetail(ctx context.Context, detail *pluginModels.UserUsageDetail) error {
+// If tx is provided, it will be used instead of creating a new transaction
+func (um *UsageManager) RecordUserUsageDetail(ctx context.Context, detail *pluginModels.UserUsageDetail, tx *gorm.DB) error {
 	ctx, span := core.TraceMethod(ctx, "UsageManager.RecordUserUsageDetail")
 	defer span.End()
+
+	if tx != nil {
+		return tx.Create(detail).Error
+	}
 
 	return db.RetryableTransaction(ctx, um.DB(), func(tx *gorm.DB) *gorm.DB {
 		return tx.Create(detail)
@@ -617,4 +623,44 @@ func (um *UsageManager) validateBytes(bytes uint64) error {
 		return pluginModels.ErrInvalidBytes
 	}
 	return nil
+}
+
+// RecordUsageAndConsume records a usage detail and consumes from grants in a single transaction
+// This is used by allowance policy enforcers to atomically record usage and consume allowance
+func (um *UsageManager) RecordUsageAndConsume(ctx context.Context, detail *pluginModels.UserUsageDetail, grantType pluginModels.GrantType, bytes uint64) error {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.RecordUsageAndConsume")
+	defer span.End()
+
+	// Get the quota service from the service registry
+	quotaService := core.GetService[pluginCore.QuotaService](um.Context(), pluginCore.QUOTA_SERVICE)
+	if quotaService == nil {
+		return fmt.Errorf("quota service not available")
+	}
+
+	// Get the grant manager from the quota service
+	grantManager := quotaService.GetGrantManager()
+	if grantManager == nil {
+		return fmt.Errorf("grant manager not available")
+	}
+
+	return db.RetryableTransaction(ctx, um.DB(), func(tx *gorm.DB) *gorm.DB {
+		// Record the usage detail first
+		if err := um.RecordUserUsageDetail(ctx, detail, tx); err != nil {
+			_ = tx.AddError(fmt.Errorf("failed to record usage detail: %w", err))
+			return tx
+		}
+
+		// Consume from grants using the same transaction
+		_, err := grantManager.ConsumeFromGrants(ctx, detail.UserID, grantType, bytes, detail.ID, tx)
+		if err != nil {
+			if errors.Is(err, pluginModels.ErrInsufficientAllowance) {
+				_ = tx.AddError(fmt.Errorf("insufficient %s allowance", grantType))
+			} else {
+				_ = tx.AddError(fmt.Errorf("failed to consume from grants: %w", err))
+			}
+			return tx
+		}
+
+		return tx
+	})
 }

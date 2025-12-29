@@ -56,6 +56,9 @@ func TestConfigManager_ResolveEffectiveLimits_UserWithPlan_Success(t *testing.T)
 
 		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, userConfig, pluginModels.EnforcementPolicyHardLimits).Return(expectedLimits, nil)
 
+		// Setup mock expectation for GetDefaultQuotaPlan - return error since user config already exists
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
+
 		// Test
 		limits, err := configManager.ResolveEffectiveLimits(ctx, userID)
 		require.NoError(t, err)
@@ -102,6 +105,9 @@ func TestConfigManager_ResolveEffectiveLimits_UserWithoutPlan_Success(t *testing
 
 		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, userConfig, pluginModels.EnforcementPolicyHardLimits).Return(expectedLimits, nil)
 
+		// Setup mock expectation for GetDefaultQuotaPlan - return error since user config already exists
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
+
 		// Test
 		limits, err := configManager.ResolveEffectiveLimits(ctx, userID)
 		require.NoError(t, err)
@@ -137,6 +143,9 @@ func TestConfigManager_GetUserQuotaConfig_ExistingConfig_Success(t *testing.T) {
 
 		err := ctx.DB().Create(expectedConfig).Error
 		require.NoError(t, err)
+
+		// Setup mock expectation for GetDefaultQuotaPlan - return error since user config already exists
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
 
 		// Test
 		config, err := configManager.GetUserQuotaConfig(ctx, userID)
@@ -253,6 +262,9 @@ func TestConfigManager_GetPolicyEnforcer_ValidPolicy_Success(t *testing.T) {
 		err := ctx.DB().Create(userConfig).Error
 		require.NoError(t, err)
 
+		// Setup mock expectation for GetDefaultQuotaPlan - return error since user config already exists
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
+
 		// Test
 		enforcer, err := configManager.GetPolicyEnforcer(ctx, userID)
 		require.NoError(t, err)
@@ -282,6 +294,9 @@ func TestConfigManager_GetPolicyEnforcer_InvalidPolicy_Error(t *testing.T) {
 			VALUES (?, ?, ?, ?)`,
 			userID, "INVALID_POLICY", time.Now().UTC(), time.Now().UTC())
 		require.NoError(t, result.Error)
+
+		// Setup mock expectation for GetDefaultQuotaPlan - return error since user config already exists
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
 
 		// Test
 		enforcer, err := configManager.GetPolicyEnforcer(ctx, userID)
@@ -319,33 +334,70 @@ func TestConfigManager_GetUserAllowanceGrants_Success(t *testing.T) {
 		err := ctx.DB().Create(userConfig).Error
 		require.NoError(t, err)
 
-		// Create test grants
-		storageGrant := &pluginModels.AllowanceGrant{
-			UserID:   userID,
-			Type:     pluginModels.GrantTypeStorage,
-			Source:   pluginModels.GrantSourceBonus,
-			Bytes:    1000000,
-			IsActive: true,
+		now := time.Now().UTC()
+		futureDate := now.Add(30 * 24 * time.Hour)
+		pastDate := now.Add(-24 * time.Hour)
+
+		// Create active grants
+		activeGrant1 := &pluginModels.AllowanceGrant{
+			UserID:     userID,
+			Type:       pluginModels.GrantTypeStorage,
+			Source:     pluginModels.GrantSourceBonus,
+			Bytes:      1000000,
+			ExpiryDate: &futureDate,
+			IsActive:   true,
+		}
+		activeGrant2 := &pluginModels.AllowanceGrant{
+			UserID:     userID,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourceBonus,
+			Bytes:      500000,
+			ExpiryDate: nil,
+			IsActive:   true,
 		}
 
-		uploadGrant := &pluginModels.AllowanceGrant{
-			UserID:   userID,
-			Type:     pluginModels.GrantTypeUpload,
-			Source:   pluginModels.GrantSourceBonus,
-			Bytes:    500000,
-			IsActive: true,
+		// Create inactive grant
+		inactiveGrant := &pluginModels.AllowanceGrant{
+			UserID:     userID,
+			Type:       pluginModels.GrantTypeDownload,
+			Source:     pluginModels.GrantSourceBonus,
+			Bytes:      200000,
+			ExpiryDate: &futureDate,
+			IsActive:   false,
 		}
 
-		err = ctx.DB().Create(storageGrant).Error
-		require.NoError(t, err)
+		// Create expired grant with future date first (to pass validation), then update to past date
+		expiredGrant := &pluginModels.AllowanceGrant{
+			UserID:     userID,
+			Type:       pluginModels.GrantTypeStorage,
+			Source:     pluginModels.GrantSourceBonus,
+			Bytes:      300000,
+			ExpiryDate: &futureDate,
+			IsActive:   true,
+		}
 
-		err = ctx.DB().Create(uploadGrant).Error
-		require.NoError(t, err)
+		require.NoError(t, ctx.DB().Create(activeGrant1).Error)
+		require.NoError(t, ctx.DB().Create(activeGrant2).Error)
+		require.NoError(t, ctx.DB().Create(inactiveGrant).Error)
+		// Create expired grant with future date first (to pass validation), then update to past date
+		// Use raw SQL to bypass validation hooks
+		require.NoError(t, ctx.DB().Create(expiredGrant).Error)
+		require.NoError(t, ctx.DB().Exec("UPDATE allowance_grants SET expiry_date = ? WHERE id = ?", pastDate, expiredGrant.ID).Error)
 
 		// Test
 		grants, err := configManager.GetUserAllowanceGrants(ctx, userID)
 		require.NoError(t, err)
 		assert.Len(t, grants, 2)
+
+		// Should only return active, non-expired grants
+		grantIDs := lo.SliceToMap(grants, func(g *pluginModels.AllowanceGrant) (uint, bool) {
+			return g.ID, true
+		})
+
+		assert.Contains(t, grantIDs, activeGrant1.ID)
+		assert.Contains(t, grantIDs, activeGrant2.ID)
+		assert.NotContains(t, grantIDs, inactiveGrant.ID)
+		assert.NotContains(t, grantIDs, expiredGrant.ID)
 	}, pluginTesting.TestOptions())
 }
 

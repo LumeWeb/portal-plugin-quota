@@ -257,7 +257,7 @@ func (t *ThresholdPolicyEnforcer) CheckStorageQuota(ctx context.Context, config 
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get current usage
+		// Get today's usage
 		usage, err := t.quotaService.GetTodayUsage(ctx, config.UserID)
 		if err != nil {
 			return pluginCore.QuotaCheckResult{}, err

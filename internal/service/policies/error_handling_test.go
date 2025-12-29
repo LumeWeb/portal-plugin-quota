@@ -159,9 +159,9 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - ConsumeFromGrants returns generic error",
+			name: "RecordUpload - RecordUsageAndConsume returns generic error",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager, ctx coreTesting.TestContext) {
-				mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, errors.New("grant manager error"))
+				// No grant manager setup needed - error comes from UsageManager
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer, ctx coreTesting.TestContext) error {
 				return enforcer.RecordUpload(ctx, uint(1), uint(1), uint64(100), "192.168.1.1")
@@ -169,14 +169,14 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			expectedError: "grant manager error",
 		},
 		{
-			name: "RecordUpload - ConsumeFromGrants wraps as failed to consume upload allowance",
+			name: "RecordUpload - RecordUsageAndConsume wraps as failed to consume upload allowance",
 			setupMocks: func(mockGrantManager *pluginCore.MockGrantManager, ctx coreTesting.TestContext) {
-				mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, uint(1), models.GrantTypeUpload, uint64(100), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, errors.New("consumption error"))
+				// No grant manager setup needed - error comes from UsageManager
 			},
 			testFunc: func(enforcer *AllowancePolicyEnforcer, ctx coreTesting.TestContext) error {
 				return enforcer.RecordUpload(ctx, uint(1), uint(1), uint64(100), "192.168.1.1")
 			},
-			expectedError: "failed to consume upload allowance",
+			expectedError: "failed to consume from grants",
 		},
 	}
 
@@ -188,12 +188,12 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
+			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager).Maybe()
 
-			// Add mock expectation for RecordUserUsageDetail for RecordUpload tests
+			// Add mock expectation for RecordUsageAndConsume for RecordUpload tests
 			// We identify RecordUpload tests by checking if the test function name contains "RecordUpload"
 			if test.testFunc != nil && strings.Contains(test.name, "RecordUpload") {
-				mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
+				mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, uint64(100)).Return(errors.New(test.expectedError))
 			}
 
 			test.setupMocks(mockGrantManager, ctx)

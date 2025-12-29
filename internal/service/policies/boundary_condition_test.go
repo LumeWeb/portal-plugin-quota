@@ -441,8 +441,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_BoundaryConditions(t *testing.T) {
 			uploadID := dataManager.NextUploadID()
 
 			if !test.expectError {
-				mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.Anything).Return(nil)
-				mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, userID, models.GrantTypeUpload, test.bytes, mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil)
+				mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.Anything, models.GrantTypeUpload, test.bytes).Return(nil)
 				mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, test.bytes, test.ip).Return(nil)
 			}
 
@@ -537,9 +536,10 @@ func TestAllowancePolicyEnforcer_RecordStorageChange_BoundaryConditions(t *testi
 			uploadID := dataManager.NextUploadID()
 
 			if !test.expectError {
-				mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.Anything).Return(nil)
 				if test.bytes > 0 {
-					mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, userID, models.GrantTypeStorage, uint64(test.bytes), mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return([]*models.AllowanceConsumption{}, nil)
+					mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.Anything, models.GrantTypeStorage, uint64(test.bytes)).Return(nil)
+				} else {
+					mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.Anything, (*gorm.DB)(nil)).Return(nil)
 				}
 				mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uploadID, test.bytes, test.ip).Return(nil)
 			}

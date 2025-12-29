@@ -30,19 +30,19 @@ const (
 )
 
 var (
-	UploadChecked     prometheus.CounterVec
-	DownloadChecked   prometheus.CounterVec
-	StorageChecked    prometheus.CounterVec
-	UploadRecorded    prometheus.CounterVec
-	DownloadRecorded  prometheus.CounterVec
-	StorageRecorded   prometheus.CounterVec
-	AllowanceAdded    prometheus.CounterVec
-	AllowanceBalance  prometheus.GaugeVec
-	OperationDuration prometheus.HistogramVec
+	UploadChecked     *prometheus.CounterVec
+	DownloadChecked   *prometheus.CounterVec
+	StorageChecked    *prometheus.CounterVec
+	UploadRecorded    *prometheus.CounterVec
+	DownloadRecorded  *prometheus.CounterVec
+	StorageRecorded   *prometheus.CounterVec
+	AllowanceAdded    *prometheus.CounterVec
+	AllowanceBalance  *prometheus.GaugeVec
+	OperationDuration *prometheus.HistogramVec
 )
 
 func init() {
-	UploadChecked = *prometheus.NewCounterVec(
+	UploadChecked = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricUploadChecked,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -51,7 +51,7 @@ func init() {
 		[]string{"status"},
 	)
 
-	DownloadChecked = *prometheus.NewCounterVec(
+	DownloadChecked = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricDownloadChecked,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -60,7 +60,7 @@ func init() {
 		[]string{"status"},
 	)
 
-	StorageChecked = *prometheus.NewCounterVec(
+	StorageChecked = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricStorageChecked,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -69,7 +69,7 @@ func init() {
 		[]string{"status"},
 	)
 
-	UploadRecorded = *prometheus.NewCounterVec(
+	UploadRecorded = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricUploadRecorded,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -78,7 +78,7 @@ func init() {
 		[]string{"status"},
 	)
 
-	DownloadRecorded = *prometheus.NewCounterVec(
+	DownloadRecorded = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricDownloadRecorded,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -87,7 +87,7 @@ func init() {
 		[]string{"status"},
 	)
 
-	StorageRecorded = *prometheus.NewCounterVec(
+	StorageRecorded = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricStorageRecorded,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -96,7 +96,7 @@ func init() {
 		[]string{"status"},
 	)
 
-	AllowanceAdded = *prometheus.NewCounterVec(
+	AllowanceAdded = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricAllowanceAdded,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -105,7 +105,7 @@ func init() {
 		[]string{"source"},
 	)
 
-	AllowanceBalance = *prometheus.NewGaugeVec(
+	AllowanceBalance = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name:      MetricAllowanceBalance,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -114,7 +114,7 @@ func init() {
 		[]string{"type"},
 	)
 
-	OperationDuration = *prometheus.NewHistogramVec(
+	OperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:      MetricDuration,
 			Subsystem: pluginCore.QUOTA_SERVICE,
@@ -127,14 +127,14 @@ func init() {
 
 func GetCollectors() []prometheus.Collector {
 	return []prometheus.Collector{
-		&UploadChecked,
-		&DownloadChecked,
-		&StorageChecked,
-		&UploadRecorded,
-		&DownloadRecorded,
-		&StorageRecorded,
-		&AllowanceAdded,
-		&AllowanceBalance,
-		&OperationDuration,
+		UploadChecked,
+		DownloadChecked,
+		StorageChecked,
+		UploadRecorded,
+		DownloadRecorded,
+		StorageRecorded,
+		AllowanceAdded,
+		AllowanceBalance,
+		OperationDuration,
 	}
 }

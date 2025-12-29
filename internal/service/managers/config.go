@@ -70,32 +70,23 @@ func (cm *ConfigManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*
 
 	cm.Logger().Debug("Retrieving user quota config", zap.Uint("userID", userID))
 
-	var config pluginModels.UserQuotaConfig
-	err := db.RetryableTransaction(ctx, cm.DB(), func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("user_id = ?", userID).First(&config)
-	})
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			cm.Logger().Debug("User quota config not found, creating default", zap.Uint("userID", userID))
-			// Create default config if not found
-			defaultConfig, createErr := cm.createDefaultUserQuotaConfig(ctx, userID)
-			if createErr != nil {
-				return nil, fmt.Errorf("failed to create default user quota config: %w", createErr)
-			}
-
-			// Save the default config to the database
-			if err := db.RetryableTransaction(ctx, cm.DB(), func(tx *gorm.DB) *gorm.DB {
-				return tx.Create(defaultConfig)
-			}); err != nil {
-				return nil, fmt.Errorf("failed to save default user quota config: %w", err)
-			}
-
-			return defaultConfig, nil
-		}
-		return nil, fmt.Errorf("failed to retrieve user quota config: %w", err)
+	// Create default config if not found
+	defaultConfig, createErr := cm.createDefaultUserQuotaConfig(ctx, userID)
+	if createErr != nil {
+		return nil, fmt.Errorf("failed to create default user quota config: %w", createErr)
 	}
 
-	return &config, nil
+	// Use FirstOrCreate to atomically handle the get-or-create logic.
+	// This prevents a race condition where two concurrent requests for a new user
+	// both try to create the config, causing one to fail.
+	err := db.RetryableTransaction(ctx, cm.DB(), func(tx *gorm.DB) *gorm.DB {
+		return tx.Where(&pluginModels.UserQuotaConfig{UserID: userID}).FirstOrCreate(defaultConfig)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to find or create default user quota config: %w", err)
+	}
+
+	return defaultConfig, nil
 }
 
 // createDefaultUserQuotaConfig creates a default quota configuration for a user
@@ -162,7 +153,7 @@ func (cm *ConfigManager) GetUserAllowanceGrants(ctx context.Context, userID uint
 	}
 
 	var grants []*pluginModels.AllowanceGrant
-	err := cm.DB().WithContext(ctx).Where("user_id = ? AND is_active = true AND (expiry_date IS NULL OR expiry_date > ?)",
+	err := cm.DB().Where("user_id = ? AND is_active = true AND (expiry_date IS NULL OR expiry_date > ?)",
 		userID, time.Now().UTC()).Find(&grants).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve user allowance grants: %w", err)
@@ -184,7 +175,7 @@ func (cm *ConfigManager) GetUserAllowanceGrantsByType(ctx context.Context, userI
 	}
 
 	var grants []*pluginModels.AllowanceGrant
-	err := cm.DB().WithContext(ctx).Where("user_id = ? AND type = ? AND is_active = true AND (expiry_date IS NULL OR expiry_date > ?)",
+	err := cm.DB().Where("user_id = ? AND type = ? AND is_active = true AND (expiry_date IS NULL OR expiry_date > ?)",
 		userID, grantType, time.Now().UTC()).Find(&grants).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve user allowance grants by type: %w", err)

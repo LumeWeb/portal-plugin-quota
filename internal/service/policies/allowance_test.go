@@ -1,7 +1,6 @@
 package policies
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +10,6 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/testing/testdata"
 	coreTesting "go.lumeweb.com/portal/core/testing"
-	"gorm.io/gorm"
 )
 
 // TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed tests the CheckUploadQuota method with sufficient allowance
@@ -286,9 +284,6 @@ func TestAllowancePolicyEnforcer_RecordUpload_Success(t *testing.T) {
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-
 	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
@@ -296,12 +291,7 @@ func TestAllowancePolicyEnforcer_RecordUpload_Success(t *testing.T) {
 	bytes := uint64(1000)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
-	consumptions := []*models.AllowanceConsumption{}
-	mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, userID, models.GrantTypeUpload, bytes, mock.AnythingOfType("uint"), (*gorm.DB)(nil)).RunAndReturn(
-		func(ctx context.Context, userID uint, grantType models.GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*models.AllowanceConsumption, error) {
-			return consumptions, nil
-		}).Return(consumptions, nil)
+	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, bytes).Return(nil)
 	mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
 	err := enforcer.RecordUpload(ctx.GetContext(), userID, uploadID, bytes, ip)
@@ -318,9 +308,6 @@ func TestAllowancePolicyEnforcer_RecordUpload_InsufficientAllowance(t *testing.T
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-
 	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
@@ -328,12 +315,11 @@ func TestAllowancePolicyEnforcer_RecordUpload_InsufficientAllowance(t *testing.T
 	bytes := uint64(1000)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
-	mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, userID, models.GrantTypeUpload, bytes, mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, models.ErrInsufficientAllowance)
+	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, bytes).Return(models.ErrInsufficientAllowance)
 
 	err := enforcer.RecordUpload(ctx.GetContext(), userID, uploadID, bytes, ip)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "insufficient upload allowance")
+	assert.Contains(t, err.Error(), "insufficient allowance")
 
 	dataManager.Cleanup()
 }
@@ -346,9 +332,6 @@ func TestAllowancePolicyEnforcer_RecordDownload_Success(t *testing.T) {
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-
 	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
@@ -356,12 +339,7 @@ func TestAllowancePolicyEnforcer_RecordDownload_Success(t *testing.T) {
 	bytes := uint64(500)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
-	consumptions := []*models.AllowanceConsumption{}
-	mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, userID, models.GrantTypeDownload, bytes, mock.AnythingOfType("uint"), (*gorm.DB)(nil)).RunAndReturn(
-		func(ctx context.Context, userID uint, grantType models.GrantType, bytes uint64, usageDetailID uint, tx *gorm.DB) ([]*models.AllowanceConsumption, error) {
-			return consumptions, nil
-		}).Return(consumptions, nil)
+	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeDownload, bytes).Return(nil)
 	mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
 	err := enforcer.RecordDownload(ctx.GetContext(), userID, uploadID, bytes, ip)
@@ -378,9 +356,6 @@ func TestAllowancePolicyEnforcer_RecordDownload_InsufficientAllowance(t *testing
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-
 	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
 	userID := dataManager.NextUserID()
@@ -388,12 +363,11 @@ func TestAllowancePolicyEnforcer_RecordDownload_InsufficientAllowance(t *testing
 	bytes := uint64(500)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail")).Return(nil)
-	mockGrantManager.EXPECT().ConsumeFromGrants(mock.Anything, userID, models.GrantTypeDownload, bytes, mock.AnythingOfType("uint"), (*gorm.DB)(nil)).Return(nil, models.ErrInsufficientAllowance)
+	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeDownload, bytes).Return(models.ErrInsufficientAllowance)
 
 	err := enforcer.RecordDownload(ctx.GetContext(), userID, uploadID, bytes, ip)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "insufficient download allowance")
+	assert.Contains(t, err.Error(), "insufficient allowance")
 
 	dataManager.Cleanup()
 }

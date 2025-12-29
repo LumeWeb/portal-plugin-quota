@@ -175,7 +175,7 @@ func (a *AllowancePolicyEnforcer) RecordUpload(ctx context.Context, userID, uplo
 		return err
 	}
 
-	// Create usage detail record first
+	// Create usage detail record
 	usageDetail := &models.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
@@ -186,17 +186,9 @@ func (a *AllowancePolicyEnforcer) RecordUpload(ctx context.Context, userID, uplo
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(ctx, usageDetail); err != nil {
-		return fmt.Errorf("failed to record upload usage detail: %w", err)
-	}
-
-	// Consume allowance from grants, passing the usage detail ID
-	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(ctx, userID, models.GrantTypeUpload, bytes, usageDetail.ID, nil)
-	if err != nil {
-		if errors.Is(err, models.ErrInsufficientAllowance) {
-			return fmt.Errorf("upload blocked: insufficient upload allowance")
-		}
-		return fmt.Errorf("failed to consume upload allowance: %w", err)
+	// Record usage and consume allowance in a single transaction
+	if err := a.quotaService.GetUsageManager().RecordUsageAndConsume(ctx, usageDetail, models.GrantTypeUpload, bytes); err != nil {
+		return err
 	}
 
 	return a.delegateRecordUpload(ctx, userID, uploadID, bytes, ip)
@@ -211,7 +203,7 @@ func (a *AllowancePolicyEnforcer) RecordDownload(ctx context.Context, userID, up
 		return err
 	}
 
-	// Create usage detail record first
+	// Create usage detail record
 	usageDetail := &models.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
@@ -222,18 +214,9 @@ func (a *AllowancePolicyEnforcer) RecordDownload(ctx context.Context, userID, up
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(ctx, usageDetail); err != nil {
-		return fmt.Errorf("failed to record download usage detail: %w", err)
-	}
-
-	// Consume allowance from grants atomically, passing the usage detail ID
-	_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(ctx, userID, models.GrantTypeDownload, bytes, usageDetail.ID, nil)
-	if err != nil {
-		// Check if this is an insufficiency error
-		if errors.Is(err, models.ErrInsufficientAllowance) {
-			return fmt.Errorf("insufficient download allowance")
-		}
-		return fmt.Errorf("failed to consume download allowance: %w", err)
+	// Record usage and consume allowance in a single transaction
+	if err := a.quotaService.GetUsageManager().RecordUsageAndConsume(ctx, usageDetail, models.GrantTypeDownload, bytes); err != nil {
+		return err
 	}
 
 	return a.delegateRecordDownload(ctx, userID, uploadID, bytes, ip)
@@ -271,7 +254,7 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(ctx context.Context, userI
 		recordBytes = uint64(bytes)
 	}
 
-	// Create usage detail record first
+	// Create usage detail record
 	usageDetail := &models.UserUsageDetail{
 		UserID:     userID,
 		UploadID:   uploadID,
@@ -282,16 +265,16 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(ctx context.Context, userI
 		Timestamp:  time.Now().UTC(),
 	}
 
-	if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(ctx, usageDetail); err != nil {
-		return fmt.Errorf("failed to record storage usage detail: %w", err)
-	}
-
 	// For storage changes, we only consume allowance when adding storage (positive bytes)
 	if bytes > 0 {
-		// Consume allowance from grants, passing the usage detail ID
-		_, err := a.quotaService.GetGrantManager().ConsumeFromGrants(ctx, userID, models.GrantTypeStorage, uint64(bytes), usageDetail.ID, nil)
-		if err != nil {
-			return fmt.Errorf("failed to consume storage allowance: %w", err)
+		// Record usage and consume allowance in a single transaction
+		if err := a.quotaService.GetUsageManager().RecordUsageAndConsume(ctx, usageDetail, models.GrantTypeStorage, uint64(bytes)); err != nil {
+			return err
+		}
+	} else {
+		// For storage removal, just record the usage detail without consuming allowance
+		if err := a.quotaService.GetUsageManager().RecordUserUsageDetail(ctx, usageDetail, nil); err != nil {
+			return err
 		}
 	}
 

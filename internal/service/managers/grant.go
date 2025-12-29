@@ -246,6 +246,8 @@ func (gm *GrantManagerDefault) ConsumeFromGrants(ctx context.Context, userID uin
 	// Start a transaction if none was provided
 	if tx == nil {
 		err := db.RetryableTransaction(ctx, gm.db, func(tx *gorm.DB) *gorm.DB {
+			// Reset the slice for each attempt to avoid accumulating results from failed retries.
+			consumptions = []*pluginModels.AllowanceConsumption{}
 			if err := gm.consumeFromGrantsInTransaction(ctx, tx, userID, grantType, bytes, usageDetailID, &consumptions); err != nil {
 				_ = tx.AddError(err)
 			}

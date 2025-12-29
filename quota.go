@@ -8,7 +8,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/db/migrations"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/policies"
-	"go.lumeweb.com/portal-plugin-quota/internal/service/quota"
+	quota_service "go.lumeweb.com/portal-plugin-quota/internal/service/quota"
 	"go.lumeweb.com/portal/core"
 )
 
@@ -18,7 +18,7 @@ func init() {
 
 func GetPluginMetrics() []prometheus.Collector {
 	return append(
-		quota.GetCollectors(),
+		quota_service.GetCollectors(),
 		policies.GetCollectors()...,
 	)
 }
@@ -36,7 +36,7 @@ func GetPluginInfo() core.PluginInfo {
 		},
 		Services: func() ([]core.ServiceInfo, error) {
 			return []core.ServiceInfo{
-				{ID: internal.PLUGIN_NAME, Factory: quota.NewQuotaService},
+				{ID: internal.PLUGIN_NAME, Factory: quota_service.NewQuotaService},
 			}, nil
 		},
 		Metrics: GetPluginMetrics(),

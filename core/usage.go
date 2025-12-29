@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	"gorm.io/gorm"
 )
 
 // UsageManager defines the interface for usage recording and management
@@ -22,7 +23,8 @@ type UsageManager interface {
 	RecordStorageChange(ctx context.Context, userID, uploadID uint, bytes int64, ip string) error
 
 	// RecordUserUsageDetail records a detailed usage record
-	RecordUserUsageDetail(ctx context.Context, detail *UserUsageDetail) error
+	// If tx is provided, it will be used instead of creating a new transaction
+	RecordUserUsageDetail(ctx context.Context, detail *UserUsageDetail, tx *gorm.DB) error
 
 	// UpdateDailyUsage updates the daily aggregated usage for a user
 	UpdateDailyUsage(ctx context.Context, userID uint, usageType UsageType, bytes int64) error
@@ -42,6 +44,10 @@ type UsageManager interface {
 
 	// GetUserQuotaConfig returns the quota configuration for a user
 	GetUserQuotaConfig(ctx context.Context, userID uint) (*models.UserQuotaConfig, error)
+
+	// RecordUsageAndConsume records a usage detail and consumes from grants in a single transaction
+	// This is used by allowance policy enforcers to atomically record usage and consume allowance
+	RecordUsageAndConsume(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64) error
 }
 
 // UsageAggregator defines the interface for aggregating usage data

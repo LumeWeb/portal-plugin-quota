@@ -338,7 +338,7 @@ func TestDefaultLimitResolver_ErrorCases(t *testing.T) {
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 
 	t.Run("Nil config", func(t *testing.T) {
-		limits, err := resolver.ResolveEffectiveLimits(ctx, nil, models.EnforcementPolicyHardLimits)
+		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), nil, models.EnforcementPolicyHardLimits)
 		assert.Error(t, err)
 		assert.Nil(t, limits)
 		assert.Contains(t, err.Error(), "quota config is nil")

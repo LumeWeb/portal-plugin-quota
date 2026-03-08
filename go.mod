@@ -5,7 +5,8 @@ go 1.24.3
 require (
 	github.com/Oudwins/zog v0.21.6
 	github.com/docker/go-units v0.5.0
-	github.com/samber/lo v1.52.0
+	github.com/prometheus/client_golang v1.22.0
+	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
 	go.lumeweb.com/portal v0.4.2-0.20251228223532-c3e9447340bc
 	go.uber.org/zap v1.27.1
@@ -144,7 +145,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/pressly/goose/v3 v3.26.0 // indirect
-	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect

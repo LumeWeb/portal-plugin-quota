@@ -3,7 +3,7 @@ module go.lumeweb.com/portal-plugin-quota
 go 1.24.3
 
 require (
-	github.com/Oudwins/zog v0.21.6
+	github.com/Oudwins/zog v0.22.0
 	github.com/docker/go-units v0.5.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/samber/lo v1.53.0

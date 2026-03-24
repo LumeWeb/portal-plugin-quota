@@ -100,7 +100,14 @@ func (r *QuotaPlanResponse) FromModel(model *models.QuotaPlan) error {
 	return nil
 }
 
-// PlanListResponse represents a list of quota plans
+// PlanListResponse is a swagger-only DTO that represents the paginated response for quota plans.
+// It mirrors queryutil.Response[*dto.QuotaPlanResponse] for OpenAPI documentation.
+//
+// This struct exists due to a swagger documentation generation bug where queryutil.Response generics
+// are not getting detected properly as an array type. By providing a concrete struct, we ensure the
+// swagger docs correctly show the plans field as an array of QuotaPlanResponse items.
+//
+// Note: This struct is only used for swagger documentation, not for actual encoding.
 type PlanListResponse struct {
 	Plans []QuotaPlanResponse `json:"plans"`
 	Total int                 `json:"total"`
@@ -196,7 +203,14 @@ func (r *AllowanceGrantResponse) FromModel(model *models.AllowanceGrant) error {
 	return nil
 }
 
-// AllowanceListResponse represents a list of allowance grants
+// AllowanceListResponse is a swagger-only DTO that represents the paginated response for allowance grants.
+// It mirrors queryutil.Response[*dto.AllowanceGrantResponse] for OpenAPI documentation.
+//
+// This struct exists due to a swagger documentation generation bug where queryutil.Response generics
+// are not getting detected properly as an array type. By providing a concrete struct, we ensure the
+// swagger docs correctly show the grants field as an array of AllowanceGrantResponse items.
+//
+// Note: This struct is only used for swagger documentation, not for actual encoding.
 type AllowanceListResponse struct {
 	Grants []AllowanceGrantResponse `json:"grants"`
 	Total  int                      `json:"total"`

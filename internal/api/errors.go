@@ -12,7 +12,9 @@ const (
 	Namespace = "quota"
 
 	// Error keys for quota operations
-	ErrKeyPlanNotFound        core.ErrorType = "PLAN_NOT_FOUND"
+	ErrKeyQuotaFetchFailed     core.ErrorType = "QUOTA_FETCH_FAILED"
+	ErrKeyHistoryFetchFailed   core.ErrorType = "HISTORY_FETCH_FAILED"
+	ErrKeyPlanNotFound         core.ErrorType = "PLAN_NOT_FOUND"
 	ErrKeyGrantNotFound       core.ErrorType = "GRANT_NOT_FOUND"
 	ErrKeyInvalidPlanID       core.ErrorType = "INVALID_PLAN_ID"
 	ErrKeyInvalidGrantID      core.ErrorType = "INVALID_GRANT_ID"
@@ -92,8 +94,10 @@ func (e *QuotaError) Unwrap() error {
 func init() {
 	core.MustRegisterNamespace(Namespace)
 	core.MustRegisterDefaultErrorMessages(Namespace, map[core.ErrorType]core.ErrorDefinition{
-		ErrKeyPlanNotFound:        {Key: ErrKeyPlanNotFound, Message: "Quota plan not found"},
-		ErrKeyGrantNotFound:       {Key: ErrKeyGrantNotFound, Message: "Allowance grant not found"},
+		ErrKeyQuotaFetchFailed:   {Key: ErrKeyQuotaFetchFailed, Message: "Failed to fetch quota status"},
+		ErrKeyHistoryFetchFailed: {Key: ErrKeyHistoryFetchFailed, Message: "Failed to fetch quota history"},
+		ErrKeyPlanNotFound:       {Key: ErrKeyPlanNotFound, Message: "Quota plan not found"},
+		ErrKeyGrantNotFound:      {Key: ErrKeyGrantNotFound, Message: "Allowance grant not found"},
 		ErrKeyInvalidPlanID:       {Key: ErrKeyInvalidPlanID, Message: "Invalid plan ID format"},
 		ErrKeyInvalidGrantID:      {Key: ErrKeyInvalidGrantID, Message: "Invalid grant ID format"},
 		ErrKeyPlanCreateFailed:    {Key: ErrKeyPlanCreateFailed, Message: "Failed to create quota plan"},
@@ -115,9 +119,11 @@ func init() {
 	})
 
 	core.MustRegisterErrorCodes(Namespace, map[core.ErrorType]int{
-		ErrKeyPlanNotFound:        http.StatusNotFound,
-		ErrKeyGrantNotFound:       http.StatusNotFound,
-		ErrKeyInvalidPlanID:       http.StatusBadRequest,
+		ErrKeyQuotaFetchFailed:    http.StatusInternalServerError,
+		ErrKeyHistoryFetchFailed:  http.StatusInternalServerError,
+		ErrKeyPlanNotFound:         http.StatusNotFound,
+		ErrKeyGrantNotFound:        http.StatusNotFound,
+		ErrKeyInvalidPlanID:        http.StatusBadRequest,
 		ErrKeyInvalidGrantID:      http.StatusBadRequest,
 		ErrKeyPlanCreateFailed:    http.StatusInternalServerError,
 		ErrKeyPlanUpdateFailed:    http.StatusInternalServerError,

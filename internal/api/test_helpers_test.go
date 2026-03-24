@@ -5,40 +5,43 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	quotaCore "go.lumeweb.com/portal-plugin-quota/core"
-	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal"
 	quotaModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	quota_testing "go.lumeweb.com/portal-plugin-quota/internal/testing"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
-// AdminTestOptions provides test configuration for admin extension tests
-var AdminTestOptions = coreTesting.CombineOptions(
-	coreTesting.WithMockServiceFactory(quotaCore.QUOTA_SERVICE, quotaCore.NewMockQuotaService),
-	coreTesting.WithAPIExtension(NewQuotaAdminExtension()),
-	coreTesting.WithAPIID("admin"),
-	// Setup QuotaService GetConfig mock after context creation
-	setupQuotaServiceMocks,
+// baseTestOptions provides common test configuration for all quota extension tests
+var baseTestOptions = coreTesting.CombineOptions(
+	// Use the base test options from internal/testing which includes service factory and mocks
+	quota_testing.TestOptions(),
 )
 
-// setupQuotaServiceMocks creates a TestContextBuilderOption that sets up
-// common mock expectations for QuotaService
-func setupQuotaServiceMocks(ctx coreTesting.TestContext) (coreTesting.TestContext, error) {
-	mockQuotaService := core.GetService[*quotaCore.MockQuotaService](ctx, internal.PluginName)
-	
-	// Setup framework-required methods that will be called during context initialization
-	// These MUST use Maybe() because they may be called multiple times
-	mockQuotaService.EXPECT().GetConfig().Return(&config.QuotaConfig{}, nil).Maybe()
-	
-	return ctx, nil
-}
+// AdminTestOptions provides test configuration for admin extension tests
+var AdminTestOptions = coreTesting.CombineOptions(
+	baseTestOptions,
+	coreTesting.WithAPIExtension(NewQuotaAdminExtension()),
+	coreTesting.WithAPIID("admin"),
+)
+
+// QuotaTestOptions provides test configuration for user quota extension tests
+var QuotaTestOptions = coreTesting.CombineOptions(
+	baseTestOptions,
+	coreTesting.WithAPIExtension(NewQuotaExtension()),
+	coreTesting.WithAPIID("dashboard"),
+	coreTesting.WithConfig("plugin.dashboard.api.subdomain", "account"),
+)
+
 
 // QuotaTestHelper provides common test utilities for quota admin API tests
 type QuotaTestHelper struct {
-	t   *testing.T
-	tb  coreTesting.TB
-	ctx coreTesting.TestContext
+	t         *testing.T
+	tb        coreTesting.TB
+	ctx       coreTesting.TestContext
+	authToken string
 }
 
 // NewQuotaTestHelper creates a new test helper for quota admin tests
@@ -64,7 +67,22 @@ func (h *QuotaTestHelper) SetupGrantManagerMock() *quotaCore.MockGrantManager {
 
 // NewAuthorizedRequest creates a new authorized API request
 func (h *QuotaTestHelper) NewAuthorizedRequest(method, url string, body []byte) *http.Request {
-	return h.ctx.NewAPIRequest(method, url, body)
+	req := h.ctx.NewAPIRequest(method, url, body)
+	if h.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+h.authToken)
+	}
+	return req
+}
+
+// SetupAuth sets up authentication with a default user for testing
+func (h *QuotaTestHelper) SetupAuth() {
+	mockAuthService := core.GetService[*coreTesting.MockAuthService](h.ctx, core.AUTH_SERVICE)
+	userService := mockAuthService.GetUserService()
+	userService.UserExists(1)
+	jwtHelper := coreTesting.NewJWTHelper(h.ctx)
+	token, err := jwtHelper.CreateLoginToken(1)
+	require.NoError(h.t, err)
+	h.authToken = token
 }
 
 // ExecuteRequest executes an API request and records the response
@@ -78,7 +96,7 @@ func (h *QuotaTestHelper) ExecuteRequest(method, url string, body []byte) *httpt
 // createMockQuotaPlan creates a standardized mock quota plan
 func createMockQuotaPlan(id uint) *quotaModels.QuotaPlan {
 	return &quotaModels.QuotaPlan{
-		
+
 		Name:               "Test Basic Plan",
 		Description:        "Basic quota plan for testing",
 		StorageLimit:       10737418240, // 10GB
@@ -100,10 +118,9 @@ func createMockAllowanceGrant(id, userID uint) *quotaModels.AllowanceGrant {
 		UserID:         userID,
 		Type:           quotaModels.GrantTypeStorage,
 		Source:         quotaModels.GrantSourceSubscription,
-		Bytes:         10737418240, // 10GB
-		BytesUsed:     536870912,   // 512MB used
-		BytesRemaining: 10200547328,  // ~9.5GB remaining
-		IsActive:      true,
+		Bytes:          10737418240, // 10GB
+		BytesUsed:      536870912,   // 512MB used
+		BytesRemaining: 10200547328, // ~9.5GB remaining
+		IsActive:       true,
 	}
 }
-

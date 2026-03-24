@@ -9,7 +9,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
 	"go.lumeweb.com/portal-middleware/middleware"
-	"go.lumeweb.com/portal/config"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/httputil"
 	"go.lumeweb.com/queryutil"
@@ -24,9 +23,7 @@ import (
 )
 
 type QuotaAdminExtension struct {
-	ctx          core.Context
-	logger       *core.Logger
-	config       config.Manager
+	*core.BaseComponent
 	quotaService quotaCore.QuotaService
 }
 
@@ -36,9 +33,6 @@ func NewQuotaAdminExtension() core.APIExtensionFactory {
 
 		return ext, core.ContextOptions(
 			core.ContextWithStartupFunc(func(ctx core.Context) error {
-				ext.ctx = ctx
-				ext.logger = ctx.NamedLogger("quota.api_admin_extension")
-				ext.config = ctx.Config()
 				ext.quotaService = core.GetService[quotaCore.QuotaService](ctx, internal.PluginName)
 				return nil
 			}),
@@ -51,49 +45,14 @@ func (e *QuotaAdminExtension) TargetAPI() string {
 	return "admin"
 }
 
-// Config returns the config manager
-func (e *QuotaAdminExtension) Config() config.Manager {
-	return e.config
-}
-
-// SetConfig sets the config manager
-func (e *QuotaAdminExtension) SetConfig(cfg config.Manager) {
-	e.config = cfg
-}
-
-// Context returns the core context
-func (e *QuotaAdminExtension) Context() core.Context {
-	return e.ctx
-}
-
-// SetContext sets the core context
-func (e *QuotaAdminExtension) SetContext(ctx core.Context) {
-	e.ctx = ctx
-}
-
-// Logger returns the logger
-func (e *QuotaAdminExtension) Logger() *core.Logger {
-	return e.logger
-}
-
-// SetLogger sets the logger
-func (e *QuotaAdminExtension) SetLogger(logger *core.Logger) {
-	e.logger = logger
+// Name returns the extension name
+func (e *QuotaAdminExtension) Name() string {
+	return internal.PluginName
 }
 
 // ID returns the extension ID
 func (e *QuotaAdminExtension) ID() string {
-	return "quota.admin_extension"
-}
-
-// DB returns the database connection
-func (e *QuotaAdminExtension) DB() *gorm.DB {
-	return e.ctx.DB()
-}
-
-// SetDB sets the database connection
-func (e *QuotaAdminExtension) SetDB(db *gorm.DB) {
-	// Extensions get their DB from context, no-op here
+	return e.Name()
 }
 
 // Configure adds routes to the Admin API
@@ -101,7 +60,7 @@ func (e *QuotaAdminExtension) Configure(gRouter router.Router, accessSvc core.Ac
 	// Create a subrouter for quota admin routes
 	quotaRouter, err := gRouter.Group("/api/quota")
 	if err != nil {
-		e.logger.Error("Failed to create quota router group", zap.Error(err))
+		e.Logger().Error("Failed to create quota router group", zap.Error(err))
 		return err
 	}
 
@@ -118,34 +77,42 @@ func (e *QuotaAdminExtension) registerQuotaHandlers(gRouter router.Router, acces
 	routes := e.buildRoutes()
 	apiGroup := internal.ProtocolName
 	
-	e.logger.Info("Registering admin extension routes", 
+	e.Logger().Info("Registering admin extension routes", 
 		zap.String("group", apiGroup),
 		zap.Int("routes", len(routes)))
 	
 	if err := router.RegisterRoutes(gRouter, accessSvc, apiGroup, routes); err != nil {
-		e.logger.Error("Failed to register routes", zap.Error(err))
+		e.Logger().Error("Failed to register routes", zap.Error(err))
 		return err
 	}
 	
-	e.logger.Info("Successfully registered admin extension routes")
+	e.Logger().Info("Successfully registered admin extension routes")
 	
 	return nil
 }
 
 func (e *QuotaAdminExtension) buildRoutes() []router.Route {
+	// Create reusable schema for QuotaPlanResponse
+	planSchema := queryutil.NewSchemaProvider().ForType(&dto.QuotaPlanResponse{})
+
+	// Create reusable schema for AllowanceGrantResponse
+	grantSchema := queryutil.NewSchemaProvider().ForType(&dto.AllowanceGrantResponse{})
+
 	return []router.Route{
 		// Quota Plan Management
 		e.newRoute(http.MethodGet, "/plans", e.handleListPlans,
 			router.WithSummary("List quota plans"),
 			router.WithDescription("Get a paginated list of all quota plans"),
 			router.WithTags("quota", "plans"),
-			router.WithPaginationParams(),
+			router.WithSchema(planSchema),
+			router.WithFilterParamsFromSchema(planSchema),
 		),
 		e.newRoute(http.MethodPost, "/plans", e.handleCreatePlan,
 			router.WithSummary("Create quota plan"),
 			router.WithDescription("Create a new quota plan with specified limits"),
 			router.WithTags("quota", "plans"),
 			router.WithRequestBody(&dto.QuotaPlanRequest{}, "Quota plan configuration", true),
+			router.WithSuccessResponse(http.StatusCreated, "Plan created successfully", router.WithJSONContent(&dto.QuotaPlanResponse{})),
 		),
 		e.newRoute(http.MethodGet, "/plans/:planID", e.handleGetPlan,
 			router.WithSummary("Get quota plan"),
@@ -157,11 +124,13 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Update an existing quota plan"),
 			router.WithTags("quota", "plans"),
 			router.WithRequestBody(&dto.QuotaPlanRequest{}, "Quota plan configuration", true),
+			router.WithSuccessResponse(http.StatusOK, "Plan updated successfully", router.WithJSONContent(&dto.QuotaPlanResponse{})),
 		),
 		e.newRoute(http.MethodDelete, "/plans/:planID", e.handleDeletePlan,
 			router.WithSummary("Delete quota plan"),
 			router.WithDescription("Delete a quota plan by ID"),
 			router.WithTags("quota", "plans"),
+			router.WithSuccessResponse(http.StatusNoContent, "Plan deleted successfully"),
 		),
 		e.newRoute(http.MethodPost, "/plans/:planID/default", e.handleSetDefaultPlan,
 			router.WithSummary("Set default quota plan"),
@@ -174,7 +143,8 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithSummary("List allowance grants"),
 			router.WithDescription("Get a paginated list of all allowance grants"),
 			router.WithTags("quota", "grants"),
-			router.WithPaginationParams(),
+			router.WithSchema(grantSchema),
+			router.WithFilterParamsFromSchema(grantSchema),
 		),
 		e.newRoute(http.MethodPost, "/allowances", e.handleCreateGrant,
 			router.WithSummary("Create allowance grant"),
@@ -227,8 +197,8 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 }
 
 func (e *QuotaAdminExtension) buildMiddlewares() []echo.MiddlewareFunc {
-	authMw := middleware.AuthMiddleware(e.ctx, middleware.WithAuthPurpose(jwt.PurposeLogin))
-	accessMw := middleware.AccessMiddleware(e.ctx)
+	authMw := middleware.AuthMiddleware(e.Context(), middleware.WithAuthPurpose(jwt.PurposeLogin))
+	accessMw := middleware.AccessMiddleware(e.Context())
 	return []echo.MiddlewareFunc{authMw, accessMw}
 }
 
@@ -298,7 +268,7 @@ func (e *QuotaAdminExtension) handleCreatePlan(c echo.Context) error {
 	}
 
 	if err := e.quotaService.CreateQuotaPlan(reqCtx, plan); err != nil {
-		e.logger.Error("failed to create quota plan", zap.Error(err))
+		e.Logger().Error("failed to create quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyPlanCreateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -326,7 +296,7 @@ func (e *QuotaAdminExtension) handleGetPlan(c echo.Context) error {
 			apiErr := NewError(ErrKeyPlanNotFound, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		e.logger.Error("failed to get quota plan", zap.Error(err))
+		e.Logger().Error("failed to get quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyConfigFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -356,7 +326,7 @@ func (e *QuotaAdminExtension) handleUpdatePlan(c echo.Context) error {
 			apiErr := NewError(ErrKeyPlanNotFound, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		e.logger.Error("failed to get quota plan", zap.Error(err))
+		e.Logger().Error("failed to get quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyConfigFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -374,7 +344,7 @@ func (e *QuotaAdminExtension) handleUpdatePlan(c echo.Context) error {
 	plan.IsActive = req.IsActive
 
 	if err := e.quotaService.UpdateQuotaPlan(reqCtx, planID, plan); err != nil {
-		e.logger.Error("failed to update quota plan", zap.Error(err))
+		e.Logger().Error("failed to update quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyPlanUpdateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -397,7 +367,7 @@ func (e *QuotaAdminExtension) handleDeletePlan(c echo.Context) error {
 			apiErr := NewError(ErrKeyPlanNotFound, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		e.logger.Error("failed to delete quota plan", zap.Error(err))
+		e.Logger().Error("failed to delete quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyPlanDeleteFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -420,7 +390,7 @@ func (e *QuotaAdminExtension) handleSetDefaultPlan(c echo.Context) error {
 			apiErr := NewError(ErrKeyPlanNotFound, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
-		e.logger.Error("failed to set default quota plan", zap.Error(err))
+		e.Logger().Error("failed to set default quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyConfigUpdateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -481,7 +451,7 @@ func (e *QuotaAdminExtension) handleCreateGrant(c echo.Context) error {
 
 	grantManager := e.quotaService.GetGrantManager()
 	if err := grantManager.CreateAllowanceGrant(reqCtx, req.UserID, grant); err != nil {
-		e.logger.Error("failed to create allowance grant", zap.Error(err))
+		e.Logger().Error("failed to create allowance grant", zap.Error(err))
 		apiErr := NewError(ErrKeyGrantCreateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -513,7 +483,7 @@ func (e *QuotaAdminExtension) handleUpdateGrant(c echo.Context) error {
 
 	targetGrant, err := grantManager.GetGrantByID(reqCtx, grantID)
 	if err != nil {
-		e.logger.Error("failed to get grant", zap.Error(err))
+		e.Logger().Error("failed to get grant", zap.Error(err))
 		apiErr := NewError(ErrKeyGrantFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -535,7 +505,7 @@ func (e *QuotaAdminExtension) handleUpdateGrant(c echo.Context) error {
 	}
 
 	if err := grantManager.UpdateAllowanceGrant(reqCtx, targetGrant); err != nil {
-		e.logger.Error("failed to update grant", zap.Error(err))
+		e.Logger().Error("failed to update grant", zap.Error(err))
 		apiErr := NewError(ErrKeyUpdateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -555,7 +525,7 @@ func (e *QuotaAdminExtension) handleDeleteGrant(c echo.Context) error {
 
 	grantManager := e.quotaService.GetGrantManager()
 	if err := grantManager.DeactivateGrant(reqCtx, grantID); err != nil {
-		e.logger.Error("failed to deactivate grant", zap.Error(err))
+		e.Logger().Error("failed to deactivate grant", zap.Error(err))
 		apiErr := NewError(ErrKeyGrantDeleteFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -570,7 +540,7 @@ func (e *QuotaAdminExtension) handleSystemStats(c echo.Context) error {
 
 	stats, err := e.quotaService.GetSystemStats(reqCtx)
 	if err != nil {
-		e.logger.Error("failed to get system stats", zap.Error(err))
+		e.Logger().Error("failed to get system stats", zap.Error(err))
 		apiErr := NewError(ErrKeyConfigFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -604,7 +574,7 @@ func (e *QuotaAdminExtension) handleReconcile(c echo.Context) error {
 	}
 
 	if err := e.quotaService.Reconcile(reqCtx); err != nil {
-		e.logger.Error("failed to reconcile quota", zap.Error(err))
+		e.Logger().Error("failed to reconcile quota", zap.Error(err))
 		apiErr := NewError(ErrKeyReconcilationFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -635,7 +605,7 @@ func (e *QuotaAdminExtension) handleCleanup(c echo.Context) error {
 
 	deletedCount, err := e.quotaService.CleanupOldRecords(reqCtx, req.RetentionDays)
 	if err != nil {
-		e.logger.Error("failed to cleanup old records", zap.Error(err))
+		e.Logger().Error("failed to cleanup old records", zap.Error(err))
 		apiErr := NewError(ErrKeyCleanupFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
@@ -685,7 +655,7 @@ func (e *QuotaAdminExtension) handleUpdateSystemConfig(c echo.Context) error {
 
 	if req.DefaultPlanID != nil {
 		if err := e.quotaService.SetDefaultQuotaPlan(reqCtx, *req.DefaultPlanID); err != nil {
-			e.logger.Error("failed to set default plan", zap.Error(err))
+			e.Logger().Error("failed to set default plan", zap.Error(err))
 			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
@@ -693,7 +663,7 @@ func (e *QuotaAdminExtension) handleUpdateSystemConfig(c echo.Context) error {
 
 	if req.EnableQuotaEnforcement != nil {
 		if err := e.quotaService.SetQuotaEnforcement(reqCtx, *req.EnableQuotaEnforcement); err != nil {
-			e.logger.Error("failed to set quota enforcement", zap.Error(err))
+			e.Logger().Error("failed to set quota enforcement", zap.Error(err))
 			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
@@ -701,7 +671,7 @@ func (e *QuotaAdminExtension) handleUpdateSystemConfig(c echo.Context) error {
 
 	if req.StorageRetentionDays != nil {
 		if err := e.quotaService.SetStorageRetentionDays(reqCtx, *req.StorageRetentionDays); err != nil {
-			e.logger.Error("failed to set storage retention days", zap.Error(err))
+			e.Logger().Error("failed to set storage retention days", zap.Error(err))
 			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}

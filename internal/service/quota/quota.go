@@ -26,6 +26,10 @@ type QuotaServiceDefault struct {
 	planManager     pluginCore.QuotaPlanManager
 	limitResolver   pluginCore.LimitResolver
 	usageAggregator pluginCore.UsageAggregator
+
+	// System-level configuration (in-memory for now, should be database-backed in production)
+	enableQuotaEnforcement bool
+	storageRetentionDays   int
 }
 
 var _ pluginCore.QuotaService = (*QuotaServiceDefault)(nil)
@@ -820,22 +824,40 @@ func (s *QuotaServiceDefault) GetSystemStats(ctx context.Context) (*pluginCore.S
 
 	// Count users
 	db := s.DB()
-	db.Model(&models.UserQuotaConfig{}).Count(&totalUsers)
-	db.Model(&models.UserQuotaConfig{}).Where("id > 0").Count(&activeUsers)
+	if err := db.Model(&models.UserQuotaConfig{}).Count(&totalUsers).Error; err != nil {
+		return nil, fmt.Errorf("failed to count total users: %w", err)
+	}
+	if err := db.Model(&models.UserQuotaConfig{}).Where("id > 0").Count(&activeUsers).Error; err != nil {
+		return nil, fmt.Errorf("failed to count active users: %w", err)
+	}
 
 	// Count plans
-	db.Model(&models.QuotaPlan{}).Count(&totalPlans)
-	db.Model(&models.QuotaPlan{}).Where("is_active = ?", true).Count(&activePlans)
+	if err := db.Model(&models.QuotaPlan{}).Count(&totalPlans).Error; err != nil {
+		return nil, fmt.Errorf("failed to count total plans: %w", err)
+	}
+	if err := db.Model(&models.QuotaPlan{}).Where("is_active = ?", true).Count(&activePlans).Error; err != nil {
+		return nil, fmt.Errorf("failed to count active plans: %w", err)
+	}
 
 	// Count grants
-	db.Model(&models.AllowanceGrant{}).Count(&totalGrants)
-	db.Model(&models.AllowanceGrant{}).Where("is_active = ?", true).Count(&activeGrants)
+	if err := db.Model(&models.AllowanceGrant{}).Count(&totalGrants).Error; err != nil {
+		return nil, fmt.Errorf("failed to count total grants: %w", err)
+	}
+	if err := db.Model(&models.AllowanceGrant{}).Where("is_active = ?", true).Count(&activeGrants).Error; err != nil {
+		return nil, fmt.Errorf("failed to count active grants: %w", err)
+	}
 
 	// Calculate current usage
 	var storageUsage, uploadUsage, downloadUsage int64
-	db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_uploaded), 0)").Scan(&uploadUsage)
-	db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_downloaded), 0)").Scan(&downloadUsage)
-	db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_stored), 0)").Scan(&storageUsage)
+	if err := db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_uploaded), 0)").Scan(&uploadUsage).Error; err != nil {
+		return nil, fmt.Errorf("failed to sum upload usage: %w", err)
+	}
+	if err := db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_downloaded), 0)").Scan(&downloadUsage).Error; err != nil {
+		return nil, fmt.Errorf("failed to sum download usage: %w", err)
+	}
+	if err := db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_stored), 0)").Scan(&storageUsage).Error; err != nil {
+		return nil, fmt.Errorf("failed to sum storage usage: %w", err)
+	}
 
 	stats := &pluginCore.SystemStats{
 		TotalUsers:   totalUsers,
@@ -855,6 +877,37 @@ func (s *QuotaServiceDefault) GetSystemStats(ctx context.Context) (*pluginCore.S
 	return stats, nil
 }
 
+// SetQuotaEnforcement sets whether quota enforcement is enabled system-wide
+func (s *QuotaServiceDefault) SetQuotaEnforcement(ctx context.Context, enabled bool) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.SetQuotaEnforcement")
+	defer span.End()
+
+	s.enableQuotaEnforcement = enabled
+	s.Logger().Info("Quota enforcement setting updated", zap.Bool("enabled", enabled))
+
+	return nil
+}
+
+// SetStorageRetentionDays sets the number of days to retain storage usage records
+func (s *QuotaServiceDefault) SetStorageRetentionDays(ctx context.Context, days int) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.SetStorageRetentionDays")
+	defer span.End()
+
+	if days < 1 || days > 36500 {
+		return fmt.Errorf("storage retention days must be between 1 and 36500")
+	}
+
+	s.storageRetentionDays = days
+	s.Logger().Info("Storage retention days setting updated", zap.Int("days", days))
+
+	return nil
+}
+
+// GetSystemConfig returns the current system configuration
+func (s *QuotaServiceDefault) GetSystemConfig(ctx context.Context) (enableEnforcement bool, retentionDays int) {
+	return s.enableQuotaEnforcement, s.storageRetentionDays
+}
+
 // TODO: Implement reconciliation logic
 func (s *QuotaServiceDefault) Reconcile(ctx context.Context) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.Reconcile")
@@ -872,32 +925,42 @@ func (s *QuotaServiceDefault) Reconcile(ctx context.Context) error {
 	return nil
 }
 
-func (s *QuotaServiceDefault) CleanupOldRecords(ctx context.Context, retentionDays int) error {
+func (s *QuotaServiceDefault) CleanupOldRecords(ctx context.Context, retentionDays int) (int64, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CleanupOldRecords")
 	defer span.End()
 
 	if s.DB() == nil {
-		return fmt.Errorf("database not initialized")
+		return 0, fmt.Errorf("database not initialized")
 	}
 
 	cutoffDate := time.Now().UTC().AddDate(0, 0, -retentionDays)
 
+	var totalDeleted int64
+
 	// Delete old usage details
+	usageDeleted := int64(0)
 	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("timestamp < ?", cutoffDate).Delete(&models.UserUsageDetail{})
+		result := tx.Where("timestamp < ?", cutoffDate).Delete(&models.UserUsageDetail{})
+		usageDeleted = result.RowsAffected
+		return tx
 	}); err != nil {
-		return fmt.Errorf("failed to cleanup old usage details: %w", err)
+		return 0, fmt.Errorf("failed to cleanup old usage details: %w", err)
 	}
+	totalDeleted += usageDeleted
 
 	// Delete old allowance consumptions
+	consumptionDeleted := int64(0)
 	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("consumption_date < ?", cutoffDate).Delete(&models.AllowanceConsumption{})
+		result := tx.Where("consumption_date < ?", cutoffDate).Delete(&models.AllowanceConsumption{})
+		consumptionDeleted = result.RowsAffected
+		return tx
 	}); err != nil {
-		return fmt.Errorf("failed to cleanup old allowance consumptions: %w", err)
+		return 0, fmt.Errorf("failed to cleanup old allowance consumptions: %w", err)
 	}
+	totalDeleted += consumptionDeleted
 
-	s.Logger().Info("Old records cleanup completed", zap.Int("retentionDays", retentionDays))
-	return nil
+	s.Logger().Info("Old records cleanup completed", zap.Int("retentionDays", retentionDays), zap.Int64("totalDeleted", totalDeleted))
+	return totalDeleted, nil
 }
 
 // Manager Getters

@@ -810,6 +810,74 @@ func (_c *MockGrantManager_GetExpiringGrantsForUser_Call) RunAndReturn(run func(
 	return _c
 }
 
+// GetGrantByID provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) GetGrantByID(ctx context.Context, grantID uint) (*AllowanceGrant, error) {
+	ret := _mock.Called(ctx, grantID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGrantByID")
+	}
+
+	var r0 *AllowanceGrant
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) (*AllowanceGrant, error)); ok {
+		return returnFunc(ctx, grantID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) *AllowanceGrant); ok {
+		r0 = returnFunc(ctx, grantID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*AllowanceGrant)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint) error); ok {
+		r1 = returnFunc(ctx, grantID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockGrantManager_GetGrantByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetGrantByID'
+type MockGrantManager_GetGrantByID_Call struct {
+	*mock.Call
+}
+
+// GetGrantByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - grantID uint
+func (_e *MockGrantManager_Expecter) GetGrantByID(ctx interface{}, grantID interface{}) *MockGrantManager_GetGrantByID_Call {
+	return &MockGrantManager_GetGrantByID_Call{Call: _e.mock.On("GetGrantByID", ctx, grantID)}
+}
+
+func (_c *MockGrantManager_GetGrantByID_Call) Run(run func(ctx context.Context, grantID uint)) *MockGrantManager_GetGrantByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_GetGrantByID_Call) Return(v *AllowanceGrant, err error) *MockGrantManager_GetGrantByID_Call {
+	_c.Call.Return(v, err)
+	return _c
+}
+
+func (_c *MockGrantManager_GetGrantByID_Call) RunAndReturn(run func(ctx context.Context, grantID uint) (*AllowanceGrant, error)) *MockGrantManager_GetGrantByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListGrants provides a mock function for the type MockGrantManager
 func (_mock *MockGrantManager) ListGrants(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*AllowanceGrant, int64, error) {
 	ret := _mock.Called(ctx, filters, sorts, pagination)
@@ -892,6 +960,63 @@ func (_c *MockGrantManager_ListGrants_Call) Return(vs []*AllowanceGrant, n int64
 }
 
 func (_c *MockGrantManager_ListGrants_Call) RunAndReturn(run func(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*AllowanceGrant, int64, error)) *MockGrantManager_ListGrants_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateAllowanceGrant provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) UpdateAllowanceGrant(ctx context.Context, grant *AllowanceGrant) error {
+	ret := _mock.Called(ctx, grant)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateAllowanceGrant")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *AllowanceGrant) error); ok {
+		r0 = returnFunc(ctx, grant)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockGrantManager_UpdateAllowanceGrant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAllowanceGrant'
+type MockGrantManager_UpdateAllowanceGrant_Call struct {
+	*mock.Call
+}
+
+// UpdateAllowanceGrant is a helper method to define mock.On call
+//   - ctx context.Context
+//   - grant *AllowanceGrant
+func (_e *MockGrantManager_Expecter) UpdateAllowanceGrant(ctx interface{}, grant interface{}) *MockGrantManager_UpdateAllowanceGrant_Call {
+	return &MockGrantManager_UpdateAllowanceGrant_Call{Call: _e.mock.On("UpdateAllowanceGrant", ctx, grant)}
+}
+
+func (_c *MockGrantManager_UpdateAllowanceGrant_Call) Run(run func(ctx context.Context, grant *AllowanceGrant)) *MockGrantManager_UpdateAllowanceGrant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *AllowanceGrant
+		if args[1] != nil {
+			arg1 = args[1].(*AllowanceGrant)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_UpdateAllowanceGrant_Call) Return(err error) *MockGrantManager_UpdateAllowanceGrant_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockGrantManager_UpdateAllowanceGrant_Call) RunAndReturn(run func(ctx context.Context, grant *AllowanceGrant) error) *MockGrantManager_UpdateAllowanceGrant_Call {
 	_c.Call.Return(run)
 	return _c
 }

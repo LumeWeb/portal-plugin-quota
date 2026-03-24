@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
@@ -446,7 +445,7 @@ func (e *QuotaAdminExtension) handleListAllowances(c echo.Context) error {
 			return dto.AllowanceGrantResponse{
 				ID:             grant.ID,
 				UserID:         grant.UserID,
-				Type:           grantTypeToString(grant.Type),
+				Type:           grant.Type.String(),
 				Source:         string(grant.Source),
 				Bytes:          grant.Bytes,
 				BytesUsed:      grant.BytesUsed,
@@ -512,19 +511,11 @@ func (e *QuotaAdminExtension) handleUpdateGrant(c echo.Context) error {
 
 	grantManager := e.quotaService.GetGrantManager()
 
-	grants, err := grantManager.GetExpiringGrantsForUser(reqCtx, req.UserID, 365*24*time.Hour)
+	targetGrant, err := grantManager.GetGrantByID(reqCtx, grantID)
 	if err != nil {
-		e.logger.Error("failed to get grants", zap.Error(err))
+		e.logger.Error("failed to get grant", zap.Error(err))
 		apiErr := NewError(ErrKeyGrantFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
-	}
-
-	var targetGrant *models.AllowanceGrant
-	for _, g := range grants {
-		if g.ID == grantID {
-			targetGrant = g
-			break
-		}
 	}
 
 	if targetGrant == nil {
@@ -539,8 +530,11 @@ func (e *QuotaAdminExtension) handleUpdateGrant(c echo.Context) error {
 	}
 
 	targetGrant.Bytes = totalBytes
+	if req.ExpiryDate != nil {
+		targetGrant.ExpiryDate = req.ExpiryDate
+	}
 
-	if err := grantManager.CreateAllowanceGrant(reqCtx, req.UserID, targetGrant); err != nil {
+	if err := grantManager.UpdateAllowanceGrant(reqCtx, targetGrant); err != nil {
 		e.logger.Error("failed to update grant", zap.Error(err))
 		apiErr := NewError(ErrKeyUpdateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
@@ -639,14 +633,15 @@ func (e *QuotaAdminExtension) handleCleanup(c echo.Context) error {
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	if err := e.quotaService.CleanupOldRecords(reqCtx, req.RetentionDays); err != nil {
+	deletedCount, err := e.quotaService.CleanupOldRecords(reqCtx, req.RetentionDays)
+	if err != nil {
 		e.logger.Error("failed to cleanup old records", zap.Error(err))
 		apiErr := NewError(ErrKeyCleanupFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	response := dto.CleanupResponse{
-		RecordsDeleted: 0,
+		RecordsDeleted: deletedCount,
 	}
 
 	return httputil.EncodeResponse(ctx, response, response)
@@ -666,11 +661,13 @@ func (e *QuotaAdminExtension) handleGetSystemConfig(c echo.Context) error {
 		planName = defaultPlan.Name
 	}
 
+	enableEnforcement, retentionDays := e.quotaService.GetSystemConfig(reqCtx)
+
 	response := dto.QuotaConfigResponse{
 		DefaultPlanID:         planID,
 		DefaultPlanName:       planName,
-		EnableQuotaEnforcement: true,
-		StorageRetentionDays:  30,
+		EnableQuotaEnforcement: enableEnforcement,
+		StorageRetentionDays:  retentionDays,
 	}
 
 	return httputil.EncodeResponse(ctx, response, response)
@@ -689,6 +686,22 @@ func (e *QuotaAdminExtension) handleUpdateSystemConfig(c echo.Context) error {
 	if req.DefaultPlanID != nil {
 		if err := e.quotaService.SetDefaultQuotaPlan(reqCtx, *req.DefaultPlanID); err != nil {
 			e.logger.Error("failed to set default plan", zap.Error(err))
+			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+	}
+
+	if req.EnableQuotaEnforcement != nil {
+		if err := e.quotaService.SetQuotaEnforcement(reqCtx, *req.EnableQuotaEnforcement); err != nil {
+			e.logger.Error("failed to set quota enforcement", zap.Error(err))
+			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+	}
+
+	if req.StorageRetentionDays != nil {
+		if err := e.quotaService.SetStorageRetentionDays(reqCtx, *req.StorageRetentionDays); err != nil {
+			e.logger.Error("failed to set storage retention days", zap.Error(err))
 			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
@@ -742,18 +755,5 @@ func parseGrantType(s string) (models.GrantType, error) {
 		return models.GrantTypeDownload, nil
 	default:
 		return "", fmt.Errorf("invalid grant type: %s", s)
-	}
-}
-
-func grantTypeToString(gt models.GrantType) string {
-	switch gt {
-	case models.GrantTypeStorage:
-		return "storage"
-	case models.GrantTypeUpload:
-		return "upload"
-	case models.GrantTypeDownload:
-		return "download"
-	default:
-		return "unknown"
 	}
 }

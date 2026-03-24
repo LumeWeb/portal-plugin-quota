@@ -698,20 +698,29 @@ func (_c *MockQuotaService_CheckUploadQuota_Call) RunAndReturn(run func(ctx cont
 }
 
 // CleanupOldRecords provides a mock function for the type MockQuotaService
-func (_mock *MockQuotaService) CleanupOldRecords(ctx context.Context, retentionDays int) error {
+func (_mock *MockQuotaService) CleanupOldRecords(ctx context.Context, retentionDays int) (int64, error) {
 	ret := _mock.Called(ctx, retentionDays)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CleanupOldRecords")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int) error); ok {
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) (int64, error)); ok {
+		return returnFunc(ctx, retentionDays)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) int64); ok {
 		r0 = returnFunc(ctx, retentionDays)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(int64)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = returnFunc(ctx, retentionDays)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockQuotaService_CleanupOldRecords_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CleanupOldRecords'
@@ -744,12 +753,12 @@ func (_c *MockQuotaService_CleanupOldRecords_Call) Run(run func(ctx context.Cont
 	return _c
 }
 
-func (_c *MockQuotaService_CleanupOldRecords_Call) Return(err error) *MockQuotaService_CleanupOldRecords_Call {
-	_c.Call.Return(err)
+func (_c *MockQuotaService_CleanupOldRecords_Call) Return(n int64, err error) *MockQuotaService_CleanupOldRecords_Call {
+	_c.Call.Return(n, err)
 	return _c
 }
 
-func (_c *MockQuotaService_CleanupOldRecords_Call) RunAndReturn(run func(ctx context.Context, retentionDays int) error) *MockQuotaService_CleanupOldRecords_Call {
+func (_c *MockQuotaService_CleanupOldRecords_Call) RunAndReturn(run func(ctx context.Context, retentionDays int) (int64, error)) *MockQuotaService_CleanupOldRecords_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2832,6 +2841,120 @@ func (_c *MockQuotaService_SetQuotaConfig_Call) Return(err error) *MockQuotaServ
 }
 
 func (_c *MockQuotaService_SetQuotaConfig_Call) RunAndReturn(run func(ctx context.Context, userID uint, config1 *UserQuotaConfig) error) *MockQuotaService_SetQuotaConfig_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetQuotaEnforcement provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) SetQuotaEnforcement(ctx context.Context, enabled bool) error {
+	ret := _mock.Called(ctx, enabled)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetQuotaEnforcement")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) error); ok {
+		r0 = returnFunc(ctx, enabled)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_SetQuotaEnforcement_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetQuotaEnforcement'
+type MockQuotaService_SetQuotaEnforcement_Call struct {
+	*mock.Call
+}
+
+// SetQuotaEnforcement is a helper method to define mock.On call
+//   - ctx context.Context
+//   - enabled bool
+func (_e *MockQuotaService_Expecter) SetQuotaEnforcement(ctx interface{}, enabled interface{}) *MockQuotaService_SetQuotaEnforcement_Call {
+	return &MockQuotaService_SetQuotaEnforcement_Call{Call: _e.mock.On("SetQuotaEnforcement", ctx, enabled)}
+}
+
+func (_c *MockQuotaService_SetQuotaEnforcement_Call) Run(run func(ctx context.Context, enabled bool)) *MockQuotaService_SetQuotaEnforcement_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bool
+		if args[1] != nil {
+			arg1 = args[1].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_SetQuotaEnforcement_Call) Return(err error) *MockQuotaService_SetQuotaEnforcement_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_SetQuotaEnforcement_Call) RunAndReturn(run func(ctx context.Context, enabled bool) error) *MockQuotaService_SetQuotaEnforcement_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetStorageRetentionDays provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) SetStorageRetentionDays(ctx context.Context, days int) error {
+	ret := _mock.Called(ctx, days)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetStorageRetentionDays")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) error); ok {
+		r0 = returnFunc(ctx, days)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_SetStorageRetentionDays_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetStorageRetentionDays'
+type MockQuotaService_SetStorageRetentionDays_Call struct {
+	*mock.Call
+}
+
+// SetStorageRetentionDays is a helper method to define mock.On call
+//   - ctx context.Context
+//   - days int
+func (_e *MockQuotaService_Expecter) SetStorageRetentionDays(ctx interface{}, days interface{}) *MockQuotaService_SetStorageRetentionDays_Call {
+	return &MockQuotaService_SetStorageRetentionDays_Call{Call: _e.mock.On("SetStorageRetentionDays", ctx, days)}
+}
+
+func (_c *MockQuotaService_SetStorageRetentionDays_Call) Run(run func(ctx context.Context, days int)) *MockQuotaService_SetStorageRetentionDays_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_SetStorageRetentionDays_Call) Return(err error) *MockQuotaService_SetStorageRetentionDays_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_SetStorageRetentionDays_Call) RunAndReturn(run func(ctx context.Context, days int) error) *MockQuotaService_SetStorageRetentionDays_Call {
 	_c.Call.Return(run)
 	return _c
 }

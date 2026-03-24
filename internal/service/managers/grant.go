@@ -411,7 +411,7 @@ func (gm *GrantManagerDefault) ListGrants(ctx context.Context, filters []queryut
 	var grants []*pluginModels.AllowanceGrant
 	var total int64
 
-	query := gm.db.Model(&pluginModels.AllowanceGrant{})
+	query := gm.db.WithContext(ctx).Model(&pluginModels.AllowanceGrant{})
 
 	// Apply filters, sorts and pagination using queryutil helpers
 	query = queryutil.ApplyFilters(query, filters, nil)
@@ -455,4 +455,53 @@ func (gm *GrantManagerDefault) GetExpiringGrantsForUser(ctx context.Context, use
 	}
 
 	return grants, nil
+}
+
+// GetGrantByID retrieves a grant by its ID
+func (gm *GrantManagerDefault) GetGrantByID(ctx context.Context, grantID uint) (*pluginModels.AllowanceGrant, error) {
+	ctx, span := core.TraceMethod(ctx, "GrantManagerDefault.GetGrantByID")
+	defer span.End()
+
+	if grantID == 0 {
+		return nil, pluginModels.ErrInvalidGrantID
+	}
+
+	var grant pluginModels.AllowanceGrant
+	err := gm.db.WithContext(ctx).Where("id = ?", grantID).First(&grant).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("grant not found: %d", grantID)
+		}
+		return nil, fmt.Errorf("failed to get grant: %w", err)
+	}
+
+	return &grant, nil
+}
+
+// UpdateAllowanceGrant updates an existing grant
+func (gm *GrantManagerDefault) UpdateAllowanceGrant(ctx context.Context, grant *pluginModels.AllowanceGrant) error {
+	ctx, span := core.TraceMethod(ctx, "GrantManagerDefault.UpdateAllowanceGrant")
+	defer span.End()
+
+	if grant == nil {
+		return fmt.Errorf("grant cannot be nil")
+	}
+
+	if grant.ID == 0 {
+		return pluginModels.ErrInvalidGrantID
+	}
+
+	result := gm.db.WithContext(ctx).Model(&pluginModels.AllowanceGrant{}).
+		Where("id = ?", grant.ID).
+		Updates(grant)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to update grant: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("grant not found: %d", grant.ID)
+	}
+
+	return nil
 }

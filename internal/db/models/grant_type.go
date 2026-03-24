@@ -28,9 +28,18 @@ func (g GrantType) IsValid() bool {
 	}
 }
 
-// String returns the string representation of the grant type
+// String returns the lowercase string representation of the grant type for API responses
 func (g GrantType) String() string {
-	return string(g)
+	switch g {
+	case GrantTypeStorage:
+		return "storage"
+	case GrantTypeUpload:
+		return "upload"
+	case GrantTypeDownload:
+		return "download"
+	default:
+		return "unknown"
+	}
 }
 
 // TableName sets the table name for GrantType

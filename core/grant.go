@@ -45,4 +45,10 @@ type GrantManager interface {
 
 	// ListGrants retrieves a paginated and filtered list of grants
 	ListGrants(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*AllowanceGrant, int64, error)
+
+	// GetGrantByID retrieves a grant by its ID
+	GetGrantByID(ctx context.Context, grantID uint) (*AllowanceGrant, error)
+
+	// UpdateAllowanceGrant updates an existing grant
+	UpdateAllowanceGrant(ctx context.Context, grant *AllowanceGrant) error
 }

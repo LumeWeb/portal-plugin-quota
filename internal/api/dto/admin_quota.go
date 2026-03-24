@@ -3,7 +3,6 @@ package dto
 import (
 	"time"
 
-	quotaCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal/config"
 	z "github.com/Oudwins/zog"
 	"go.lumeweb.com/httputil"
@@ -110,7 +109,7 @@ type PlanListResponse struct {
 // AllowanceGrantRequest represents a request to create/update a grant
 type AllowanceGrantRequest struct {
 	UserID     uint               `json:"user_id"`
-	Type       quotaCore.GrantType `json:"type"`
+	Type       models.GrantType `json:"type"`
 	Source     models.GrantSource  `json:"source"`
 	Storage    uint64             `json:"storage"`
 	Upload     uint64             `json:"upload"`
@@ -185,7 +184,7 @@ func (r *AllowanceGrantResponse) FromModel(model *models.AllowanceGrant) error {
 	}
 	r.ID = model.ID
 	r.UserID = model.UserID
-	r.Type = grantTypeToString(model.Type)
+	r.Type = model.Type.String()
 	r.Source = string(model.Source)
 	r.Bytes = model.Bytes
 	r.BytesUsed = model.BytesUsed
@@ -304,19 +303,4 @@ type Usage struct {
 	StorageBytes  uint64 `json:"storage_bytes"`
 	UploadBytes   uint64 `json:"upload_bytes"`
 	DownloadBytes uint64 `json:"download_bytes"`
-}
-
-// Helper functions for type conversions
-
-func grantTypeToString(gt models.GrantType) string {
-	switch gt {
-	case models.GrantTypeStorage:
-		return "storage"
-	case models.GrantTypeUpload:
-		return "upload"
-	case models.GrantTypeDownload:
-		return "download"
-	default:
-		return "unknown"
-	}
 }

@@ -59,7 +59,7 @@ type QuotaService interface {
 	// System Management
 	GetSystemStats(ctx context.Context) (*SystemStats, error)
 	Reconcile(ctx context.Context) error
-	CleanupOldRecords(ctx context.Context, retentionDays int) error
+	CleanupOldRecords(ctx context.Context, retentionDays int) (int64, error)
 
 	// Usage Manager getter
 	GetUsageManager() UsageManager
@@ -75,6 +75,11 @@ type QuotaService interface {
 
 	// Config Manager getter
 	GetConfigManager() ConfigManager
+
+	// System Configuration getters/setters
+	SetQuotaEnforcement(ctx context.Context, enabled bool) error
+	SetStorageRetentionDays(ctx context.Context, days int) error
+	GetSystemConfig(ctx context.Context) (enableEnforcement bool, retentionDays int)
 }
 
 // QuotaPlanManager abstracts database operations related to quota plans

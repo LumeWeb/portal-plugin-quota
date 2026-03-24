@@ -1697,6 +1697,66 @@ func (_c *MockQuotaService_GetQuotaPlanManager_Call) RunAndReturn(run func() Quo
 	return _c
 }
 
+// GetSystemConfig provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetSystemConfig(ctx context.Context) (bool, int) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSystemConfig")
+	}
+
+	var r0 bool
+	var r1 int
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (bool, int)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) bool); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) int); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+	return r0, r1
+}
+
+// MockQuotaService_GetSystemConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSystemConfig'
+type MockQuotaService_GetSystemConfig_Call struct {
+	*mock.Call
+}
+
+// GetSystemConfig is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockQuotaService_Expecter) GetSystemConfig(ctx interface{}) *MockQuotaService_GetSystemConfig_Call {
+	return &MockQuotaService_GetSystemConfig_Call{Call: _e.mock.On("GetSystemConfig", ctx)}
+}
+
+func (_c *MockQuotaService_GetSystemConfig_Call) Run(run func(ctx context.Context)) *MockQuotaService_GetSystemConfig_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetSystemConfig_Call) Return(enableEnforcement bool, retentionDays int) *MockQuotaService_GetSystemConfig_Call {
+	_c.Call.Return(enableEnforcement, retentionDays)
+	return _c
+}
+
+func (_c *MockQuotaService_GetSystemConfig_Call) RunAndReturn(run func(ctx context.Context) (bool, int)) *MockQuotaService_GetSystemConfig_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSystemStats provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetSystemStats(ctx context.Context) (*SystemStats, error) {
 	ret := _mock.Called(ctx)
@@ -1949,6 +2009,92 @@ func (_c *MockQuotaService_GetUsageHistory_Call) Return(usagePoints []*UsagePoin
 }
 
 func (_c *MockQuotaService_GetUsageHistory_Call) RunAndReturn(run func(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error)) *MockQuotaService_GetUsageHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetUsageHistoryDateRange provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetUsageHistoryDateRange(ctx context.Context, userID uint, usageType UsageType, startTime time.Time, endTime time.Time) ([]*UsagePoint, error) {
+	ret := _mock.Called(ctx, userID, usageType, startTime, endTime)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUsageHistoryDateRange")
+	}
+
+	var r0 []*UsagePoint
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType, time.Time, time.Time) ([]*UsagePoint, error)); ok {
+		return returnFunc(ctx, userID, usageType, startTime, endTime)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType, time.Time, time.Time) []*UsagePoint); ok {
+		r0 = returnFunc(ctx, userID, usageType, startTime, endTime)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*UsagePoint)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, UsageType, time.Time, time.Time) error); ok {
+		r1 = returnFunc(ctx, userID, usageType, startTime, endTime)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQuotaService_GetUsageHistoryDateRange_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageHistoryDateRange'
+type MockQuotaService_GetUsageHistoryDateRange_Call struct {
+	*mock.Call
+}
+
+// GetUsageHistoryDateRange is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - usageType UsageType
+//   - startTime time.Time
+//   - endTime time.Time
+func (_e *MockQuotaService_Expecter) GetUsageHistoryDateRange(ctx interface{}, userID interface{}, usageType interface{}, startTime interface{}, endTime interface{}) *MockQuotaService_GetUsageHistoryDateRange_Call {
+	return &MockQuotaService_GetUsageHistoryDateRange_Call{Call: _e.mock.On("GetUsageHistoryDateRange", ctx, userID, usageType, startTime, endTime)}
+}
+
+func (_c *MockQuotaService_GetUsageHistoryDateRange_Call) Run(run func(ctx context.Context, userID uint, usageType UsageType, startTime time.Time, endTime time.Time)) *MockQuotaService_GetUsageHistoryDateRange_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 UsageType
+		if args[2] != nil {
+			arg2 = args[2].(UsageType)
+		}
+		var arg3 time.Time
+		if args[3] != nil {
+			arg3 = args[3].(time.Time)
+		}
+		var arg4 time.Time
+		if args[4] != nil {
+			arg4 = args[4].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetUsageHistoryDateRange_Call) Return(usagePoints []*UsagePoint, err error) *MockQuotaService_GetUsageHistoryDateRange_Call {
+	_c.Call.Return(usagePoints, err)
+	return _c
+}
+
+func (_c *MockQuotaService_GetUsageHistoryDateRange_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType, startTime time.Time, endTime time.Time) ([]*UsagePoint, error)) *MockQuotaService_GetUsageHistoryDateRange_Call {
 	_c.Call.Return(run)
 	return _c
 }

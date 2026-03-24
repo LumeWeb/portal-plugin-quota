@@ -278,6 +278,17 @@ func (s *QuotaServiceDefault) GetUsageHistory(ctx context.Context, userID uint, 
 	return s.usageManager.GetUsageHistory(ctx, userID, period, usageType)
 }
 
+func (s *QuotaServiceDefault) GetUsageHistoryDateRange(ctx context.Context, userID uint, usageType pluginCore.UsageType, startTime, endTime time.Time) ([]*pluginCore.UsagePoint, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.GetUsageHistoryDateRange")
+	defer span.End()
+
+	if s.usageManager == nil {
+		return nil, fmt.Errorf("usage manager not initialized")
+	}
+
+	return s.usageManager.GetUsageHistoryDateRange(ctx, userID, usageType, startTime, endTime)
+}
+
 func (s *QuotaServiceDefault) GetDetailedUsage(ctx context.Context, userID uint, start, end time.Time) ([]*pluginCore.UserUsageDetail, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.GetDetailedUsage")
 	defer span.End()

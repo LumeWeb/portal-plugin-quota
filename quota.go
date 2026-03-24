@@ -28,7 +28,7 @@ func GetPluginInfo() core.PluginInfo {
 	return core.PluginInfo{
 		ID:      internal.PluginName,
 		Version: build.GetInfo(),
-		Depends: []string{},
+		Depends: []string{"dashboard"},
 		Meta: func(ctx core.Context, builder core.PortalMetaBuilder) error {
 			return nil
 		},
@@ -43,6 +43,7 @@ func GetPluginInfo() core.PluginInfo {
 		APIExtensions: func(core.Context) ([]core.APIExtensionFactory, error) {
 			return []core.APIExtensionFactory{
 				api.NewQuotaAdminExtension(),
+				api.NewQuotaExtension(),
 			}, nil
 		},
 		Metrics: GetPluginMetrics(),

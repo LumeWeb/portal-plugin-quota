@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	quotaCore "go.lumeweb.com/portal-plugin-quota/core"
+	quotaDTO "go.lumeweb.com/portal-plugin-quota/internal/api/dto"
+	quotaModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	coreTesting "go.lumeweb.com/portal/core/testing"
 	"go.lumeweb.com/queryutil"
-	quotaModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	quotaDTO "go.lumeweb.com/portal-plugin-quota/internal/api/dto"
 	"gorm.io/gorm"
 )
 
@@ -37,12 +37,12 @@ func TestQuotaAdminExtension_ListPlans_Success(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		mockPlans := []*quotaModels.QuotaPlan{
 			createMockQuotaPlan(1),
 			createMockQuotaPlan(2),
 		}
-		
+
 		quotaService.EXPECT().
 			ListQuotaPlans(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(mockPlans, int64(2), nil)
@@ -52,7 +52,7 @@ func TestQuotaAdminExtension_ListPlans_Success(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusOK, rec.Code)
-		
+
 		var response queryutil.Response[[]quotaDTO.QuotaPlanResponse]
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -66,7 +66,7 @@ func TestQuotaAdminExtension_ListPlans_Empty(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		quotaService.EXPECT().
 			ListQuotaPlans(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return([]*quotaModels.QuotaPlan{}, int64(0), nil)
@@ -76,7 +76,7 @@ func TestQuotaAdminExtension_ListPlans_Empty(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusOK, rec.Code)
-		
+
 		var response queryutil.Response[[]quotaDTO.QuotaPlanResponse]
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -90,7 +90,7 @@ func TestQuotaAdminExtension_ListPlans_WithError(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		quotaService.EXPECT().
 			ListQuotaPlans(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return([]*quotaModels.QuotaPlan{}, int64(0), assert.AnError)
@@ -109,9 +109,9 @@ func TestQuotaAdminExtension_CreatePlan_Success(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		_ = createMockQuotaPlan(1)
-		
+
 		quotaService.EXPECT().
 			CreateQuotaPlan(mock.Anything, mock.AnythingOfType("*models.QuotaPlan")).
 			Return(nil).
@@ -135,7 +135,7 @@ func TestQuotaAdminExtension_CreatePlan_Success(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusCreated, rec.Code)
-		
+
 		var response quotaDTO.QuotaPlanResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -148,7 +148,7 @@ func TestQuotaAdminExtension_CreatePlan_ValidationError(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
+
 		// Invalid request - missing required name field
 		body := map[string]interface{}{
 			"storage_limit": 10737418240,
@@ -169,11 +169,11 @@ func TestQuotaAdminExtension_GetPlan_Success(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		plan := createMockQuotaPlan(1)
 		plan.CreatedAt = time.Now()
 		plan.UpdatedAt = time.Now()
-		
+
 		plan.ID = 1
 		quotaService.EXPECT().
 			GetQuotaPlan(mock.Anything, uint(1)).
@@ -184,7 +184,7 @@ func TestQuotaAdminExtension_GetPlan_Success(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusOK, rec.Code)
-		
+
 		var response quotaDTO.QuotaPlanResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -198,7 +198,7 @@ func TestQuotaAdminExtension_GetPlan_NotFound(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		quotaService.EXPECT().
 			GetQuotaPlan(mock.Anything, uint(999)).
 			Return(nil, gorm.ErrRecordNotFound)
@@ -230,15 +230,15 @@ func TestQuotaAdminExtension_UpdatePlan_Success(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		existingPlan := createMockQuotaPlan(1)
 		existingPlan.CreatedAt = time.Now()
 		existingPlan.UpdatedAt = time.Now()
-		
+
 		quotaService.EXPECT().
 			GetQuotaPlan(mock.Anything, uint(1)).
 			Return(existingPlan, nil)
-		
+
 		quotaService.EXPECT().
 			UpdateQuotaPlan(mock.Anything, uint(1), mock.AnythingOfType("*models.QuotaPlan")).
 			Return(nil).
@@ -248,9 +248,9 @@ func TestQuotaAdminExtension_UpdatePlan_Success(t *testing.T) {
 			})
 
 		body := map[string]interface{}{
-			"name":                 "Updated Plan Name",
-			"storage_limit":        21474836480,
-			"is_active":            true,
+			"name":          "Updated Plan Name",
+			"storage_limit": 21474836480,
+			"is_active":     true,
 		}
 		jsonBody, _ := json.Marshal(body)
 
@@ -259,7 +259,7 @@ func TestQuotaAdminExtension_UpdatePlan_Success(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusOK, rec.Code)
-		
+
 		var response quotaDTO.QuotaPlanResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -273,11 +273,11 @@ func TestQuotaAdminExtension_UpdatePlan_NotFound(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		quotaService.EXPECT().
 			GetQuotaPlan(mock.Anything, uint(999)).
 			Return(nil, gorm.ErrRecordNotFound)
-		
+
 		body := map[string]interface{}{
 			"name": "Updated Name",
 		}
@@ -299,7 +299,7 @@ func TestQuotaAdminExtension_DeletePlan_Success(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		quotaService.EXPECT().
 			DeleteQuotaPlan(mock.Anything, uint(1)).
 			Return(nil)
@@ -331,7 +331,7 @@ func TestQuotaAdminExtension_SetDefaultPlan_Success(t *testing.T) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		quotaService := helper.GetQuotaService()
-		
+
 		quotaService.EXPECT().
 			SetDefaultQuotaPlan(mock.Anything, uint(1)).
 			Return(nil)
@@ -349,14 +349,14 @@ func TestQuotaAdminExtension_ListAllowances_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
+
 		mockGrants := []*quotaModels.AllowanceGrant{
 			createMockAllowanceGrant(1, 1),
 			createMockAllowanceGrant(2, 2),
 		}
-		
+
 		grantManager := helper.SetupGrantManagerMock()
-		
+
 		grantManager.EXPECT().
 			ListGrants(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(mockGrants, int64(2), nil)
@@ -366,7 +366,7 @@ func TestQuotaAdminExtension_ListAllowances_Success(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusOK, rec.Code)
-		
+
 		var response queryutil.Response[[]quotaDTO.AllowanceGrantResponse]
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -380,13 +380,13 @@ func TestQuotaAdminExtension_CreateGrant_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
+
 		grant := createMockAllowanceGrant(1, 1)
 		grant.CreatedAt = time.Now()
 		grant.UpdatedAt = time.Now()
-		
+
 		grantManager := helper.SetupGrantManagerMock()
-		
+
 		grantManager.EXPECT().
 			CreateAllowanceGrant(mock.Anything, uint(1), mock.AnythingOfType("*models.AllowanceGrant")).
 			Return(nil).
@@ -397,9 +397,9 @@ func TestQuotaAdminExtension_CreateGrant_Success(t *testing.T) {
 			})
 
 		body := map[string]interface{}{
-			"user_id":  1,
-			"type":     "STORAGE",
-			"source":   "SUBSCRIPTION",
+			"user_id": 1,
+			"type":    "STORAGE",
+			"source":  "SUBSCRIPTION",
 		}
 		jsonBody, _ := json.Marshal(body)
 
@@ -408,7 +408,7 @@ func TestQuotaAdminExtension_CreateGrant_Success(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusCreated, rec.Code)
-		
+
 		var response quotaDTO.AllowanceGrantResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -421,7 +421,7 @@ func TestQuotaAdminExtension_CreateGrant_ValidationError(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
+
 		// Invalid request - missing required user_id and type
 		body := map[string]interface{}{
 			"storage": 10737418240,
@@ -438,7 +438,7 @@ func TestQuotaAdminExtension_CreateGrant_ValidationError(t *testing.T) {
 
 // Tests for handleDeleteGrant
 func TestQuotaAdminExtension_DeleteGrant_Success(t *testing.T) {
-		coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
 		mockGrantManager := helper.SetupGrantManagerMock()
@@ -480,9 +480,9 @@ func TestQuotaAdminExtension_SystemStats_Success(t *testing.T) {
 			ActiveGrants: 45,
 			CurrentUsage: quotaCore.Usage{
 				UserID:          0,
-				BytesUploaded:   1073741824,  // 1GB
-				BytesDownloaded: 536870912,   // 512MB
-				BytesStored:     2147483648,  // 2GB
+				BytesUploaded:   1073741824, // 1GB
+				BytesDownloaded: 536870912,  // 512MB
+				BytesStored:     2147483648, // 2GB
 			},
 			TotalUsageBytes: 3760699264, // Sum of all usage
 		}
@@ -517,19 +517,20 @@ func TestQuotaAdminExtension_GetSystemConfig_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
+
 		defaultPlan := &quotaModels.QuotaPlan{
-			Model:  gorm.Model{ID: 1},
-			Name:   "Test Plan",
+			Model: gorm.Model{ID: 1},
+			Name:  "Test Plan",
 		}
 		helper.GetQuotaService().EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(defaultPlan, nil)
+		helper.GetQuotaService().EXPECT().GetSystemConfig(mock.Anything).Return(false, 0).Maybe()
 
 		// Act
 		rec := helper.ExecuteRequest(http.MethodGet, "/api/quota/system/config", nil)
 
 		// Assert
 		assert.Equal(t, http.StatusOK, rec.Code)
-		
+
 		var response quotaDTO.QuotaConfigResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -543,13 +544,15 @@ func TestQuotaAdminExtension_UpdateSystemConfig_Success(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
-		helper.GetQuotaService().EXPECT().SetDefaultQuotaPlan(mock.Anything, uint(1)).Return(nil)
-		
+
+		helper.GetQuotaService().EXPECT().SetDefaultQuotaPlan(mock.Anything, uint(1)).Return(nil).Maybe()
+		helper.GetQuotaService().EXPECT().SetQuotaEnforcement(mock.Anything, true).Return(nil).Maybe()
+		helper.GetQuotaService().EXPECT().SetStorageRetentionDays(mock.Anything, int(90)).Return(nil).Maybe()
+
 		body := map[string]interface{}{
-			"default_plan_id":             1,
-			"enable_quota_enforcement":    true,
-			"storage_retention_days":      90,
+			"default_plan_id":          1,
+			"enable_quota_enforcement": true,
+			"storage_retention_days":   90,
 		}
 		jsonBody, _ := json.Marshal(body)
 
@@ -565,10 +568,10 @@ func TestQuotaAdminExtension_UpdateSystemConfig_ValidationError(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Arrange
 		helper := NewQuotaTestHelper(t, ctx)
-		
+
 		body := map[string]interface{}{
-			"default_plan_id":             1,
-			"storage_retention_days":      -1, // Invalid - must be positive
+			"default_plan_id":        1,
+			"storage_retention_days": -1, // Invalid - must be positive
 		}
 		jsonBody, _ := json.Marshal(body)
 

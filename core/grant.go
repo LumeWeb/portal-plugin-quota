@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.lumeweb.com/queryutil"
 	"gorm.io/gorm"
 )
 
@@ -41,4 +42,7 @@ type GrantManager interface {
 
 	// GetExpiringGrantsForUser gets grants expiring within a time window for a specific user
 	GetExpiringGrantsForUser(ctx context.Context, userID uint, window time.Duration) ([]*AllowanceGrant, error)
+
+	// ListGrants retrieves a paginated and filtered list of grants
+	ListGrants(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*AllowanceGrant, int64, error)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.lumeweb.com/queryutil"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -428,22 +429,35 @@ func (s *QuotaServiceDefault) GetQuotaPlan(ctx context.Context, planID uint) (*m
 	return result, err
 }
 
-func (s *QuotaServiceDefault) ListQuotaPlans(ctx context.Context) ([]*models.QuotaPlan, error) {
+// ListQuotaPlans retrieves a paginated and filtered list of quota plans
+func (s *QuotaServiceDefault) ListQuotaPlans(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.QuotaPlan, int64, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.ListQuotaPlans")
 	defer span.End()
 
 	if s.DB() == nil {
-		return nil, fmt.Errorf("database not initialized")
+		return nil, 0, fmt.Errorf("database not initialized")
 	}
 
 	var plans []*models.QuotaPlan
-	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		return tx.Find(&plans)
-	}); err != nil {
-		return nil, fmt.Errorf("failed to list quota plans: %w", err)
+	var total int64
+
+	query := s.DB().Model(&models.QuotaPlan{})
+
+	// Apply filters, sorts and pagination using queryutil helpers
+	query = queryutil.ApplyFilters(query, filters, nil)
+	query = queryutil.ApplySort(query, sorts)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count quota plans: %w", err)
 	}
 
-	return plans, nil
+	query = queryutil.ApplyPagination(query, pagination)
+
+	if err := query.Find(&plans).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch quota plans: %w", err)
+	}
+
+	return plans, total, nil
 }
 
 func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID uint) error {
@@ -794,6 +808,53 @@ func (s *QuotaServiceDefault) ResetAllowance(ctx context.Context, userID uint) e
 }
 
 // System Management
+func (s *QuotaServiceDefault) GetSystemStats(ctx context.Context) (*pluginCore.SystemStats, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.GetSystemStats")
+	defer span.End()
+
+	if s.DB() == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	var totalUsers, activeUsers, totalPlans, activePlans, totalGrants, activeGrants int64
+
+	// Count users
+	db := s.DB()
+	db.Model(&models.UserQuotaConfig{}).Count(&totalUsers)
+	db.Model(&models.UserQuotaConfig{}).Where("id > 0").Count(&activeUsers)
+
+	// Count plans
+	db.Model(&models.QuotaPlan{}).Count(&totalPlans)
+	db.Model(&models.QuotaPlan{}).Where("is_active = ?", true).Count(&activePlans)
+
+	// Count grants
+	db.Model(&models.AllowanceGrant{}).Count(&totalGrants)
+	db.Model(&models.AllowanceGrant{}).Where("is_active = ?", true).Count(&activeGrants)
+
+	// Calculate current usage
+	var storageUsage, uploadUsage, downloadUsage int64
+	db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_uploaded), 0)").Scan(&uploadUsage)
+	db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_downloaded), 0)").Scan(&downloadUsage)
+	db.Model(&models.UserQuota{}).Select("COALESCE(SUM(bytes_stored), 0)").Scan(&storageUsage)
+
+	stats := &pluginCore.SystemStats{
+		TotalUsers:   totalUsers,
+		ActiveUsers:  activeUsers,
+		TotalPlans:   totalPlans,
+		ActivePlans:  activePlans,
+		TotalGrants:  totalGrants,
+		ActiveGrants: activeGrants,
+		CurrentUsage: pluginCore.Usage{
+			BytesUploaded:   uint64(uploadUsage),
+			BytesDownloaded: uint64(downloadUsage),
+			BytesStored:     uint64(storageUsage),
+		},
+		TotalUsageBytes: uint64(storageUsage) + uint64(uploadUsage) + uint64(downloadUsage),
+	}
+
+	return stats, nil
+}
+
 // TODO: Implement reconciliation logic
 func (s *QuotaServiceDefault) Reconcile(ctx context.Context) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.Reconcile")

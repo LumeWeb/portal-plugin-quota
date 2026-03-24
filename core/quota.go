@@ -6,6 +6,7 @@ import (
 
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
+	"go.lumeweb.com/queryutil"
 )
 
 const QUOTA_SERVICE = "quota"
@@ -39,7 +40,7 @@ type QuotaService interface {
 	UpdateQuotaPlan(ctx context.Context, planID uint, plan *models.QuotaPlan) error
 	DeleteQuotaPlan(ctx context.Context, planID uint) error
 	GetQuotaPlan(ctx context.Context, planID uint) (*models.QuotaPlan, error)
-	ListQuotaPlans(ctx context.Context) ([]*models.QuotaPlan, error)
+	ListQuotaPlans(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.QuotaPlan, int64, error)
 	SetDefaultQuotaPlan(ctx context.Context, planID uint) error
 	GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error)
 	AssignUserToPlan(ctx context.Context, userID uint, planID uint) error
@@ -56,6 +57,7 @@ type QuotaService interface {
 	ResetAllowance(ctx context.Context, userID uint) error
 
 	// System Management
+	GetSystemStats(ctx context.Context) (*SystemStats, error)
 	Reconcile(ctx context.Context) error
 	CleanupOldRecords(ctx context.Context, retentionDays int) error
 

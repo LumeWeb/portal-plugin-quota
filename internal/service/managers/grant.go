@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/samber/lo"
+	"go.lumeweb.com/queryutil"
+	"go.uber.org/zap"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
@@ -399,6 +401,35 @@ func (gm *GrantManagerDefault) GetExpiringGrants(ctx context.Context, expiryWind
 	}
 
 	return grants, nil
+}
+
+// ListGrants retrieves a paginated and filtered list of grants
+func (gm *GrantManagerDefault) ListGrants(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*pluginModels.AllowanceGrant, int64, error) {
+	ctx, span := core.TraceMethod(ctx, "GrantManagerDefault.ListGrants")
+	defer span.End()
+
+	var grants []*pluginModels.AllowanceGrant
+	var total int64
+
+	query := gm.db.Model(&pluginModels.AllowanceGrant{})
+
+	// Apply filters, sorts and pagination using queryutil helpers
+	query = queryutil.ApplyFilters(query, filters, nil)
+	query = queryutil.ApplySort(query, sorts)
+
+	if err := query.Count(&total).Error; err != nil {
+		gm.logger.Error("failed to count grants", zap.Error(err))
+		return nil, 0, fmt.Errorf("failed to count grants: %w", err)
+	}
+
+	query = queryutil.ApplyPagination(query, pagination)
+
+	if err := query.Find(&grants).Error; err != nil {
+		gm.logger.Error("failed to fetch grants", zap.Error(err))
+		return nil, 0, fmt.Errorf("failed to fetch grants: %w", err)
+	}
+
+	return grants, total, nil
 }
 
 // GetExpiringGrantsForUser gets grants expiring within a time window for a specific user

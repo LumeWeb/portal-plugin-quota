@@ -1,0 +1,322 @@
+package dto
+
+import (
+	"time"
+
+	quotaCore "go.lumeweb.com/portal-plugin-quota/core"
+	"go.lumeweb.com/portal/config"
+	z "github.com/Oudwins/zog"
+	"go.lumeweb.com/httputil"
+	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+)
+
+var (
+	_ httputil.DTOValidator = (*QuotaPlanRequest)(nil)
+	_ httputil.DTORequest[*QuotaPlanRequest] = (*QuotaPlanRequest)(nil)
+	_ httputil.DTOValidator = (*AllowanceGrantRequest)(nil)
+	_ httputil.DTORequest[*AllowanceGrantRequest] = (*AllowanceGrantRequest)(nil)
+	_ httputil.DTOValidator = (*AllowanceListRequest)(nil)
+	_ httputil.DTORequest[*AllowanceListRequest] = (*AllowanceListRequest)(nil)
+	_ httputil.DTOValidator = (*ReconcileRequest)(nil)
+	_ httputil.DTORequest[*ReconcileRequest] = (*ReconcileRequest)(nil)
+	_ httputil.DTOValidator = (*CleanupRequest)(nil)
+	_ httputil.DTORequest[*CleanupRequest] = (*CleanupRequest)(nil)
+	_ httputil.DTOValidator = (*QuotaConfigUpdateRequest)(nil)
+	_ httputil.DTORequest[*QuotaConfigUpdateRequest] = (*QuotaConfigUpdateRequest)(nil)
+)
+
+// QuotaPlanRequest describes a quota plan for creation/update
+type QuotaPlanRequest struct {
+	Name               string  `json:"name"`
+	Description        string  `json:"description"`
+	StorageLimit       *int64  `json:"storage_limit"`
+	UploadDailyLimit   *int64  `json:"upload_daily_limit"`
+	DownloadDailyLimit *int64  `json:"download_daily_limit"`
+	UploadTotalLimit   *int64  `json:"upload_total_limit"`
+	DownloadTotalLimit *int64  `json:"download_total_limit"`
+	StorageThreshold   *int64  `json:"storage_threshold"`
+	UploadThreshold    *int64  `json:"upload_threshold"`
+	DownloadThreshold  *int64  `json:"download_threshold"`
+	IsActive           *bool   `json:"is_active"`
+}
+
+func (r *QuotaPlanRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"Name":               z.String().Required().Min(1),
+		"Description":        z.String().Optional(),
+		"StorageLimit":       z.Ptr(z.Int64().GTE(0)),
+		"UploadDailyLimit":   z.Ptr(z.Int64().GTE(0)),
+		"DownloadDailyLimit": z.Ptr(z.Int64().GTE(0)),
+		"UploadTotalLimit":   z.Ptr(z.Int64().GTE(0)),
+		"DownloadTotalLimit": z.Ptr(z.Int64().GTE(0)),
+		"StorageThreshold":   z.Ptr(z.Int64().GTE(0)),
+		"UploadThreshold":    z.Ptr(z.Int64().GTE(0)),
+		"DownloadThreshold":  z.Ptr(z.Int64().GTE(0)),
+		"IsActive":           z.Ptr(z.Bool()),
+	})
+}
+
+func (r *QuotaPlanRequest) ToModel() (*QuotaPlanRequest, error) {
+	return r, nil
+}
+
+// QuotaPlanResponse represents a quota plan
+type QuotaPlanResponse struct {
+	ID                 uint      `json:"id"`
+	Name               string    `json:"name"`
+	Description        string    `json:"description"`
+	StorageLimit       *int64    `json:"storage_limit"`
+	UploadDailyLimit   *int64    `json:"upload_daily_limit"`
+	DownloadDailyLimit *int64    `json:"download_daily_limit"`
+	UploadTotalLimit   *int64    `json:"upload_total_limit"`
+	DownloadTotalLimit *int64    `json:"download_total_limit"`
+	StorageThreshold   *int64    `json:"storage_threshold"`
+	UploadThreshold    *int64    `json:"upload_threshold"`
+	DownloadThreshold  *int64    `json:"download_threshold"`
+	IsDefault          bool      `json:"is_default"`
+	IsActive           bool      `json:"is_active"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+func (r *QuotaPlanResponse) FromModel(model *models.QuotaPlan) error {
+	if model == nil {
+		return nil
+	}
+	r.ID = model.ID
+	r.Name = model.Name
+	r.Description = model.Description
+	r.StorageLimit = &model.StorageLimit
+	r.UploadDailyLimit = &model.UploadDailyLimit
+	r.DownloadDailyLimit = &model.DownloadDailyLimit
+	r.UploadTotalLimit = &model.UploadTotalLimit
+	r.DownloadTotalLimit = &model.DownloadTotalLimit
+	r.StorageThreshold = model.StorageThreshold
+	r.UploadThreshold = model.UploadThreshold
+	r.DownloadThreshold = model.DownloadThreshold
+	r.IsDefault = model.IsDefault
+	r.IsActive = model.IsActive != nil && *model.IsActive
+	r.CreatedAt = model.CreatedAt
+	r.UpdatedAt = model.UpdatedAt
+	return nil
+}
+
+// PlanListResponse represents a list of quota plans
+type PlanListResponse struct {
+	Plans []QuotaPlanResponse `json:"plans"`
+	Total int                 `json:"total"`
+}
+
+// AllowanceGrantRequest represents a request to create/update a grant
+type AllowanceGrantRequest struct {
+	UserID     uint               `json:"user_id"`
+	Type       quotaCore.GrantType `json:"type"`
+	Source     models.GrantSource  `json:"source"`
+	Storage    uint64             `json:"storage"`
+	Upload     uint64             `json:"upload"`
+	Download   uint64             `json:"download"`
+	ExpiryDate *time.Time         `json:"expiry_date"`
+}
+
+func (r *AllowanceGrantRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"UserID": z.UintLike[uint]().Required(),
+		"Type": config.ZogStringLike[models.GrantType]().OneOf([]models.GrantType{
+			models.GrantTypeStorage,
+			models.GrantTypeUpload,
+			models.GrantTypeDownload,
+		}).Required(),
+		"Source": config.ZogStringLike[models.GrantSource]().OneOf([]models.GrantSource{
+			models.GrantSourceSubscription,
+			models.GrantSourcePAYGAddon,
+			models.GrantSourceBonus,
+			models.GrantSourcePromo,
+		}).Required(),
+		"Storage":   z.UintLike[uint64](),
+		"Upload":    z.UintLike[uint64](),
+		"Download":  z.UintLike[uint64](),
+		"ExpiryDate": z.Ptr(z.Time()),
+	})
+}
+
+func (r *AllowanceGrantRequest) ToModel() (*AllowanceGrantRequest, error) {
+	return r, nil
+}
+
+// AllowanceListRequest represents query parameters for listing allowance grants
+type AllowanceListRequest struct {
+	UserID *uint            `query:"user_id" json:"user_id"`
+	Type   models.GrantType `query:"type" json:"type"`
+}
+
+func (r *AllowanceListRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"UserID": z.Ptr(z.UintLike[uint]()),
+		"Type": config.ZogStringLike[models.GrantType]().OneOf([]models.GrantType{
+			models.GrantTypeStorage,
+			models.GrantTypeUpload,
+			models.GrantTypeDownload,
+		}),
+	})
+}
+
+func (r *AllowanceListRequest) ToModel() (*AllowanceListRequest, error) {
+	return r, nil
+}
+
+// AllowanceGrantResponse represents an allowance grant
+type AllowanceGrantResponse struct {
+	ID             uint       `json:"id"`
+	UserID         uint       `json:"user_id"`
+	Type           string     `json:"type"`
+	Source         string     `json:"source"`
+	Bytes          uint64     `json:"bytes"`
+	BytesUsed      uint64     `json:"bytes_used"`
+	BytesRemaining uint64     `json:"bytes_remaining"`
+	ExpiryDate     *time.Time `json:"expiry_date"`
+	IsActive       bool       `json:"is_active"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+func (r *AllowanceGrantResponse) FromModel(model *models.AllowanceGrant) error {
+	if model == nil {
+		return nil
+	}
+	r.ID = model.ID
+	r.UserID = model.UserID
+	r.Type = grantTypeToString(model.Type)
+	r.Source = string(model.Source)
+	r.Bytes = model.Bytes
+	r.BytesUsed = model.BytesUsed
+	r.BytesRemaining = model.BytesRemaining
+	r.ExpiryDate = model.ExpiryDate
+	r.IsActive = model.IsActive
+	r.CreatedAt = model.CreatedAt
+	r.UpdatedAt = model.UpdatedAt
+	return nil
+}
+
+// AllowanceListResponse represents a list of allowance grants
+type AllowanceListResponse struct {
+	Grants []AllowanceGrantResponse `json:"grants"`
+	Total  int                      `json:"total"`
+}
+
+// QuotaConfigUpdateRequest represents a request to update system quota configuration
+type QuotaConfigUpdateRequest struct {
+	DefaultPlanID          *uint `json:"default_plan_id"`
+	EnableQuotaEnforcement *bool `json:"enable_quota_enforcement"`
+	StorageRetentionDays   *int  `json:"storage_retention_days"`
+}
+
+func (r *QuotaConfigUpdateRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"DefaultPlanID":          z.Ptr(z.UintLike[uint]()),
+		"EnableQuotaEnforcement": z.Ptr(z.Bool()),
+		"StorageRetentionDays":   z.Ptr(z.IntLike[int]().GTE(1).LTE(36500)),
+	})
+}
+
+func (r *QuotaConfigUpdateRequest) ToModel() (*QuotaConfigUpdateRequest, error) {
+	return r, nil
+}
+
+// QuotaConfigResponse represents system quota configuration
+type QuotaConfigResponse struct {
+	DefaultPlanID         *uint  `json:"default_plan_id"`
+	DefaultPlanName       string `json:"default_plan_name,omitempty"`
+	EnableQuotaEnforcement bool   `json:"enable_quota_enforcement"`
+	StorageRetentionDays  int    `json:"storage_retention_days"`
+}
+
+func (r QuotaConfigResponse) FromModel(_ QuotaConfigResponse) error {
+	return nil
+}
+
+// CleanupRequest represents a request for cleanup operation
+type CleanupRequest struct {
+	RetentionDays int `json:"retention_days"`
+}
+
+func (r *CleanupRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"RetentionDays": z.IntLike[int]().GTE(1).LTE(36500),
+	})
+}
+
+func (r *CleanupRequest) ToModel() (*CleanupRequest, error) {
+	return r, nil
+}
+
+// CleanupResponse represents the result of a cleanup operation
+type CleanupResponse struct {
+	RecordsDeleted int64 `json:"records_deleted"`
+}
+
+func (r CleanupResponse) FromModel(_ CleanupResponse) error {
+	return nil
+}
+
+// ReconcileRequest represents a request for reconciliation (optional user_id)
+type ReconcileRequest struct {
+	UserID *uint `json:"user_id,omitempty"`
+}
+
+func (r *ReconcileRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"UserID": z.Ptr(z.UintLike[uint]()),
+	})
+}
+
+func (r *ReconcileRequest) ToModel() (*ReconcileRequest, error) {
+	return r, nil
+}
+
+// ReconcileResponse represents the result of a reconciliation operation
+type ReconcileResponse struct {
+	UsersProcessed int    `json:"users_processed"`
+	Message        string `json:"message"`
+}
+
+func (r ReconcileResponse) FromModel(_ ReconcileResponse) error {
+	return nil
+}
+
+// SystemStatsResponse represents system-wide quota statistics
+type SystemStatsResponse struct {
+	TotalUsers      int64 `json:"total_users"`
+	ActiveUsers     int64 `json:"active_users"`
+	TotalPlans      int64 `json:"total_plans"`
+	ActivePlans     int64 `json:"total_active_plans"`
+	TotalGrants     int64 `json:"total_grants"`
+	ActiveGrants    int64 `json:"total_active_grants"`
+	CurrentUsage    Usage `json:"current_usage"`
+	TotalUsageBytes uint64 `json:"total_usage_bytes"`
+}
+
+func (r SystemStatsResponse) FromModel(_ SystemStatsResponse) error {
+	return nil
+}
+
+// Usage represents aggregated usage statistics
+type Usage struct {
+	StorageBytes  uint64 `json:"storage_bytes"`
+	UploadBytes   uint64 `json:"upload_bytes"`
+	DownloadBytes uint64 `json:"download_bytes"`
+}
+
+// Helper functions for type conversions
+
+func grantTypeToString(gt models.GrantType) string {
+	switch gt {
+	case models.GrantTypeStorage:
+		return "storage"
+	case models.GrantTypeUpload:
+		return "upload"
+	case models.GrantTypeDownload:
+		return "download"
+	default:
+		return "unknown"
+	}
+}

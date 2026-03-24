@@ -86,7 +86,9 @@ func TestHandleQuotaHistory_Success(t *testing.T) {
 		startDate := "2024-01-01T00:00:00Z"
 		endDate := "2024-01-31T23:59:59Z"
 		usageType := quotaCore.UsageTypeDownload
-		quotaSvc.EXPECT().GetUsageHistory(mock.Anything, uint(1), 0, usageType).
+		startTime := parseTime(t, startDate)
+		endTime := parseTime(t, endDate)
+		quotaSvc.EXPECT().GetUsageHistoryDateRange(mock.Anything, uint(1), usageType, startTime, endTime).
 			Return([]*quotaCore.UsagePoint{
 				{
 					Date:  parseTime(t, "2024-01-15T12:00:00Z"),

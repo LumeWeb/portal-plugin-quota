@@ -158,6 +158,37 @@ func (um *UsageManager) GetUsageHistory(ctx context.Context, userID uint, period
 	return usagePoints, nil
 }
 
+// GetUsageHistoryDateRange returns usage history for a user within a specific date range
+func (um *UsageManager) GetUsageHistoryDateRange(ctx context.Context, userID uint, usageType pluginCore.UsageType, startTime, endTime time.Time) ([]*pluginCore.UsagePoint, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetUsageHistoryDateRange")
+	defer span.End()
+
+	if err := um.validateUserID(userID); err != nil {
+		return nil, err
+	}
+
+	var usageDetails []pluginModels.UserUsageDetail
+	err := um.DB().WithContext(ctx).Where("user_id = ? AND type = ? AND timestamp BETWEEN ? AND ?",
+		userID, pluginModels.UsageType(usageType), startTime, endTime).
+		Order("timestamp ASC").
+		Find(&usageDetails).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get usage history date range: %w", err)
+	}
+
+	var usagePoints []*pluginCore.UsagePoint
+	for _, detail := range usageDetails {
+		usagePoints = append(usagePoints, &pluginCore.UsagePoint{
+			Date:   detail.Timestamp,
+			Bytes:  detail.Bytes,
+			Type:   pluginCore.UsageType(usageType),
+			UserID: userID,
+		})
+	}
+
+	return usagePoints, nil
+}
+
 // GetDetailedUsage returns detailed usage records for a user within a time range
 func (um *UsageManager) GetDetailedUsage(ctx context.Context, userID uint, start, end time.Time) ([]*pluginCore.UserUsageDetail, error) {
 	ctx, span := core.TraceMethod(ctx, "UsageManager.GetDetailedUsage")

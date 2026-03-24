@@ -28,6 +28,7 @@ type QuotaService interface {
 	// Usage Analytics
 	GetCurrentUsage(ctx context.Context, userID uint) (*Usage, error)
 	GetUsageHistory(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error)
+	GetUsageHistoryDateRange(ctx context.Context, userID uint, usageType UsageType, startTime, endTime time.Time) ([]*UsagePoint, error)
 	GetDetailedUsage(ctx context.Context, userID uint, start, end time.Time) ([]*UserUsageDetail, error)
 	GetTodayUsage(ctx context.Context, userID uint) (*Usage, error)
 

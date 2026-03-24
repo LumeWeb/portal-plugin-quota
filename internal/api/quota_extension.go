@@ -56,18 +56,22 @@ func (e *QuotaExtension) ID() string {
 
 // Configure adds routes to the Dashboard API
 func (e *QuotaExtension) Configure(gRouter router.Router, accessSvc core.AccessService) error {
-	authMw := middleware.AuthMiddleware(e.Context(), middleware.WithAuthPurpose(jwt.PurposeLogin))
-	accessMw := middleware.AccessMiddleware(e.Context())
+	middlewares := e.buildMiddlewares()
 
 	routes := []router.Route{
 		router.NewRoute(http.MethodGet, "/api/account/quota", e.handleQuotaStatus,
 			router.WithAccess(core.ACCESS_USER_ROLE),
-			router.WithMiddlewares(authMw, accessMw),
+			router.WithMiddlewares(middlewares...),
 			router.WithCors(),
+			router.WithSwaggerOptions(
+				router.WithSummary("Get current quota status"),
+				router.WithDescription("Retrieve the current quota status including upload and download usage, limits, and remaining allowance for the authenticated user."),
+				router.WithTags("quota", "status"),
+			),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/quota/history", e.handleQuotaHistory,
 			router.WithAccess(core.ACCESS_USER_ROLE),
-			router.WithMiddlewares(authMw, accessMw),
+			router.WithMiddlewares(middlewares...),
 			router.WithCors(),
 			router.WithSwaggerOptions(
 				router.WithSummary("Get quota usage history"),
@@ -80,6 +84,13 @@ func (e *QuotaExtension) Configure(gRouter router.Router, accessSvc core.AccessS
 	}
 
 	return router.RegisterRoutes(gRouter, accessSvc, core.GetAPI(e.TargetAPI()).Subdomain(), routes)
+}
+
+// buildMiddlewares builds common middleware for quota extension routes
+func (e *QuotaExtension) buildMiddlewares() []echo.MiddlewareFunc {
+	authMw := middleware.AuthMiddleware(e.Context(), middleware.WithAuthPurpose(jwt.PurposeLogin))
+	accessMw := middleware.AccessMiddleware(e.Context())
+	return []echo.MiddlewareFunc{authMw, accessMw}
 }
 
 func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
@@ -125,13 +136,13 @@ func (e *QuotaExtension) handleQuotaHistory(c echo.Context) error {
 	}
 
 	// Parse and validate dates
-	_, err := time.Parse(time.RFC3339, startDate)
+	startTime, err := time.Parse(time.RFC3339, startDate)
 	if err != nil {
 		apiErr := NewError(ErrKeyInvalidRequest, fmt.Errorf("invalid startDate format: %w", err))
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	_, err = time.Parse(time.RFC3339, endDate)
+	endTime, err := time.Parse(time.RFC3339, endDate)
 	if err != nil {
 		apiErr := NewError(ErrKeyInvalidRequest, fmt.Errorf("invalid endDate format: %w", err))
 		return ctx.Error(apiErr, apiErr.HttpStatus())
@@ -146,7 +157,7 @@ func (e *QuotaExtension) handleQuotaHistory(c echo.Context) error {
 		usageType = quotaCore.UsageTypeDownload
 	}
 
-	usagePoints, err := e.quotaService.GetUsageHistory(ctx.Request().Context(), userID, 0, usageType)
+	usagePoints, err := e.quotaService.GetUsageHistoryDateRange(ctx.Request().Context(), userID, usageType, startTime, endTime)
 	if err != nil {
 		e.Logger().Error("failed to get quota history", zap.Error(err))
 		apiErr := NewError(ErrKeyHistoryFetchFailed, err)

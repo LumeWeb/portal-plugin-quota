@@ -36,6 +36,9 @@ type UsageManager interface {
 	// period is in days (24-hour periods from now)
 	GetUsageHistory(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error)
 
+	// GetUsageHistoryDateRange returns usage history for a user within a specific date range
+	GetUsageHistoryDateRange(ctx context.Context, userID uint, usageType UsageType, startTime, endTime time.Time) ([]*UsagePoint, error)
+
 	// GetDetailedUsage returns detailed usage records for a user within a time range
 	GetDetailedUsage(ctx context.Context, userID uint, start, end time.Time) ([]*UserUsageDetail, error)
 

@@ -30,10 +30,10 @@ const (
 
 // testOptions creates test options without mocking the quota service itself
 func testOptions() coreTesting.TestContextBuilderOption {
-	return coreTesting.CombineOptions(coreTesting.NewMockPluginBuilder(internal.PLUGIN_NAME).
+	return coreTesting.CombineOptions(coreTesting.NewMockPluginBuilder(internal.PluginName).
 		WithMigrations(core.DBMigration{core.DB_TYPE_SQLITE: migrations.GetSQLite()}).
 		WithService(pluginCore.QUOTA_SERVICE, NewQuotaService).BuilderOption(),
-		coreTesting.WithServiceConfig(internal.PLUGIN_NAME, pluginCore.QUOTA_SERVICE, &config.QuotaConfig{
+		coreTesting.WithServiceConfig(internal.PluginName, pluginCore.QUOTA_SERVICE, &config.QuotaConfig{
 			SharedUsagePrecision: 2,
 		}),
 	)
@@ -284,3 +284,168 @@ func TestQuotaServiceDefault_GetQuotaPlan_Success(t *testing.T) {
 		assert.Equal(t, plan.Description, retrievedPlan.Description)
 	}, testOptions())
 }
+
+// TestQuotaServiceDefault_GetSystemStats_Success tests successful system stats retrieval
+func TestQuotaServiceDefault_GetSystemStats_Success(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+		db := ctx.DB()
+
+		// Create test data: users
+		var userConfigs []*pluginModels.UserQuotaConfig
+		for i := 1; i <= 5; i++ {
+			config := &pluginModels.UserQuotaConfig{
+				UserID:            uint(i),
+				EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+			}
+			err := db.Create(config).Error
+			require.NoError(t, err)
+			userConfigs = append(userConfigs, config)
+		}
+
+		today := time.Now().UTC().Truncate(24 * time.Hour)
+
+		// Create test data: quota plans
+		plans := []*pluginModels.QuotaPlan{
+			{Name: "Plan 1", Description: "Test Plan 1", IsDefault: false, IsActive: &[]bool{true}[0]},
+			{Name: "Plan 2", Description: "Test Plan 2", IsDefault: true, IsActive: &[]bool{true}[0]},
+			{Name: "Plan 3", Description: "Test Plan 3", IsDefault: false, IsActive: &[]bool{false}[0]},
+		}
+		for _, plan := range plans {
+			err := db.Create(plan).Error
+			require.NoError(t, err)
+		}
+
+		// Create test data: grants
+		grants := []*pluginModels.AllowanceGrant{
+			{UserID: 1, Type: pluginModels.GrantTypeStorage, Source: pluginModels.GrantSourceBonus, Bytes: 1000, BytesUsed: 0, BytesRemaining: 1000, IsActive: true},
+			{UserID: 2, Type: pluginModels.GrantTypeUpload, Source: pluginModels.GrantSourcePromo, Bytes: 500, BytesUsed: 100, BytesRemaining: 400, IsActive: true},
+			{UserID: 3, Type: pluginModels.GrantTypeDownload, Source: pluginModels.GrantSourceSubscription, Bytes: 2000, BytesUsed: 1500, BytesRemaining: 500, IsActive: false},
+		}
+		for _, grant := range grants {
+			err := db.Create(grant).Error
+			require.NoError(t, err)
+		}
+
+		// Create test data: user quota usage
+		userQuotas := []*pluginModels.UserQuota{
+			{UserID: 1, Date: today, BytesUploaded: 1000, BytesDownloaded: 500, BytesStored: 2000},
+			{UserID: 2, Date: today, BytesUploaded: 2000, BytesDownloaded: 1000, BytesStored: 3000},
+			{UserID: 3, Date: today, BytesUploaded: 3000, BytesDownloaded: 1500, BytesStored: 4000},
+		}
+		for _, quota := range userQuotas {
+			err := db.Create(quota).Error
+			require.NoError(t, err)
+		}
+
+		// Act
+		stats, err := quotaService.GetSystemStats(ctx)
+		
+		// Assert
+		require.NoError(t, err)
+		assert.NotNil(t, stats)
+
+		// Verify user counts
+		assert.Equal(t, int64(5), stats.TotalUsers)
+		assert.Equal(t, int64(5), stats.ActiveUsers)
+
+		// Verify plan counts
+		assert.Equal(t, int64(3), stats.TotalPlans)
+		assert.Equal(t, int64(2), stats.ActivePlans)
+
+		// Verify grant counts
+		assert.Equal(t, int64(3), stats.TotalGrants)
+		assert.Equal(t, int64(2), stats.ActiveGrants)
+
+		// Verify usage stats (sum of all user quotas)
+		expectedUpload := uint64(6000)  // 1000 + 2000 + 3000
+		expectedDownload := uint64(3000) // 500 + 1000 + 1500
+		expectedStorage := uint64(9000)  // 2000 + 3000 + 4000
+		expectedTotal := expectedUpload + expectedDownload + expectedStorage
+
+		assert.Equal(t, expectedUpload, stats.CurrentUsage.BytesUploaded)
+		assert.Equal(t, expectedDownload, stats.CurrentUsage.BytesDownloaded)
+		assert.Equal(t, expectedStorage, stats.CurrentUsage.BytesStored)
+		assert.Equal(t, expectedTotal, stats.TotalUsageBytes)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_GetSystemStats_EmptyDatabase tests system stats with empty database
+func TestQuotaServiceDefault_GetSystemStats_EmptyDatabase(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Act
+		stats, err := quotaService.GetSystemStats(ctx)
+
+		// Assert
+		require.NoError(t, err)
+		assert.NotNil(t, stats)
+
+		// All counts should be zero
+		assert.Equal(t, int64(0), stats.TotalUsers)
+		assert.Equal(t, int64(0), stats.ActiveUsers)
+		assert.Equal(t, int64(0), stats.TotalPlans)
+		assert.Equal(t, int64(0), stats.ActivePlans)
+		assert.Equal(t, int64(0), stats.TotalGrants)
+		assert.Equal(t, int64(0), stats.ActiveGrants)
+		assert.Equal(t, uint64(0), stats.CurrentUsage.BytesUploaded)
+		assert.Equal(t, uint64(0), stats.CurrentUsage.BytesDownloaded)
+		assert.Equal(t, uint64(0), stats.CurrentUsage.BytesStored)
+		assert.Equal(t, uint64(0), stats.TotalUsageBytes)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_GetSystemStats_PartialData tests system stats with partial data
+func TestQuotaServiceDefault_GetSystemStats_PartialData(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+		db := ctx.DB()
+
+		// Create only users
+		for i := 1; i <= 3; i++ {
+			config := &pluginModels.UserQuotaConfig{
+				UserID:            uint(i),
+				EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+			}
+			err := db.Create(config).Error
+			require.NoError(t, err)
+		}
+
+		// Create only one user quota with data
+		today := time.Now().UTC().Truncate(24 * time.Hour)
+		userQuota := &pluginModels.UserQuota{
+			UserID:        1,
+			Date:          today,
+			BytesUploaded: 500,
+			BytesDownloaded: 250,
+			BytesStored:   1000,
+		}
+		err := db.Create(userQuota).Error
+		require.NoError(t, err)
+
+		// Act
+		stats, err := quotaService.GetSystemStats(ctx)
+
+		// Assert
+		require.NoError(t, err)
+		assert.NotNil(t, stats)
+
+		// Verify user counts
+		assert.Equal(t, int64(3), stats.TotalUsers)
+		assert.Equal(t, int64(3), stats.ActiveUsers)
+
+		// Other counts should be zero
+		assert.Equal(t, int64(0), stats.TotalPlans)
+		assert.Equal(t, int64(0), stats.ActivePlans)
+		assert.Equal(t, int64(0), stats.TotalGrants)
+		assert.Equal(t, int64(0), stats.ActiveGrants)
+
+		// Verify usage stats from the one user quota
+		assert.Equal(t, uint64(500), stats.CurrentUsage.BytesUploaded)
+		assert.Equal(t, uint64(250), stats.CurrentUsage.BytesDownloaded)
+		assert.Equal(t, uint64(1000), stats.CurrentUsage.BytesStored)
+		assert.Equal(t, uint64(1750), stats.TotalUsageBytes)
+	}, testOptions())
+}
+

@@ -1,3 +1,4 @@
 package internal
 
-const PLUGIN_NAME = "quota"
+const PluginName = "quota"
+const ProtocolName = "quota"

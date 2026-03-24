@@ -143,3 +143,16 @@ const (
 
 type QuotaPlan = models.QuotaPlan
 type QuotaConfig = config.QuotaConfig
+
+// SystemStats represents system-wide quota statistics
+type SystemStats struct {
+	TotalUsers      int64  `json:"total_users"`
+	ActiveUsers     int64  `json:"active_users"`
+	TotalPlans      int64  `json:"total_plans"`
+	ActivePlans     int64  `json:"active_plans"`
+	TotalGrants     int64  `json:"total_grants"`
+	ActiveGrants    int64  `json:"active_grants"`
+	CurrentUsage    Usage  `json:"current_usage"`
+	TotalUsageBytes uint64 `json:"total_usage_bytes"`
+}
+

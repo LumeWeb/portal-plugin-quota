@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.lumeweb.com/queryutil"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
@@ -48,6 +49,211 @@ func TestGrantManager_CreateAllowanceGrant_ValidInput_Success(t *testing.T) {
 		assert.Equal(t, uint64(testGrantBytesLarge), savedGrant.BytesRemaining)
 		assert.True(t, savedGrant.IsActive)
 		assert.Nil(t, savedGrant.ExpiryDate)
+
+	}, pluginTesting.TestOptions())
+}
+
+// TestGrantManager_ListGrants_Default_Success tests listing grants without filters
+func TestGrantManager_ListGrants_Default_Success(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		grantManager := NewGrantManager(ctx)
+
+		// Create test data
+		grant1 := &pluginModels.AllowanceGrant{
+			UserID:     1,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourceSubscription,
+			Bytes:      testGrantBytesLarge,
+			ExpiryDate: nil,
+			IsActive:   true,
+		}
+		err := ctx.DB().Create(grant1).Error
+		require.NoError(t, err)
+
+		grant2 := &pluginModels.AllowanceGrant{
+			UserID:     2,
+			Type:       pluginModels.GrantTypeStorage,
+			Source:     pluginModels.GrantSourceBonus,
+			Bytes:      testGrantBytesMedium,
+			ExpiryDate: nil,
+			IsActive:   true,
+		}
+		err = ctx.DB().Create(grant2).Error
+		require.NoError(t, err)
+
+		// List all grants
+		grants, total, err := grantManager.ListGrants(ctx, nil, nil, queryutil.Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total)
+		assert.Len(t, grants, 2)
+
+	}, pluginTesting.TestOptions())
+}
+
+// TestGrantManager_ListGrants_WithPagination_Success tests listing grants with pagination
+func TestGrantManager_ListGrants_WithPagination_Success(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		grantManager := NewGrantManager(ctx)
+
+		// Create 5 test grants
+		for i := 1; i <= 5; i++ {
+			grant := &pluginModels.AllowanceGrant{
+				UserID:     uint(i),
+				Type:       pluginModels.GrantTypeUpload,
+				Source:     pluginModels.GrantSourceSubscription,
+				Bytes:      testGrantBytesLarge,
+				IsActive:   true,
+			}
+			err := ctx.DB().Create(grant).Error
+			require.NoError(t, err)
+		}
+
+		// Test first page (page size 2, start 0)
+		pagination1, err := queryutil.NewPagination(0, 2)
+		require.NoError(t, err)
+		grants1, total1, err := grantManager.ListGrants(ctx, nil, nil, pagination1)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), total1)
+		assert.Len(t, grants1, 2)
+
+		// Test second page (page size 2, start 2)
+		pagination2, err := queryutil.NewPagination(2, 2)
+		require.NoError(t, err)
+		grants2, total2, err := grantManager.ListGrants(ctx, nil, nil, pagination2)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), total2)
+		assert.Len(t, grants2, 2)
+
+		// Ensure different results
+		assert.NotEqual(t, grants1[0].ID, grants2[0].ID)
+
+	}, pluginTesting.TestOptions())
+}
+
+// TestGrantManager_ListGrants_WithSort_Success tests listing grants with sorting
+func TestGrantManager_ListGrants_WithSort_Success(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		grantManager := NewGrantManager(ctx)
+
+		// Create grants with different byte values
+		grant1 := &pluginModels.AllowanceGrant{
+			UserID:     1,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourceSubscription,
+			Bytes:      testGrantBytesSmall,
+			IsActive:   true,
+		}
+		err := ctx.DB().Create(grant1).Error
+		require.NoError(t, err)
+
+		grant2 := &pluginModels.AllowanceGrant{
+			UserID:     2,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourceSubscription,
+			Bytes:      testGrantBytesLarge,
+			IsActive:   true,
+		}
+		err = ctx.DB().Create(grant2).Error
+		require.NoError(t, err)
+
+		grant3 := &pluginModels.AllowanceGrant{
+			UserID:     3,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourceSubscription,
+			Bytes:      testGrantBytesMedium,
+			IsActive:   true,
+		}
+		err = ctx.DB().Create(grant3).Error
+		require.NoError(t, err)
+
+		// Test sorting by bytes ascending
+		sortAsc := []queryutil.Sort{{Field: "bytes", Order: queryutil.OrderAsc}}
+		paginationAsc, err := queryutil.NewPagination(0, 10)
+		require.NoError(t, err)
+		grantsAsc, _, err := grantManager.ListGrants(ctx, nil, sortAsc, paginationAsc)
+		require.NoError(t, err)
+		assert.Less(t, grantsAsc[0].Bytes, grantsAsc[1].Bytes)
+		assert.Less(t, grantsAsc[1].Bytes, grantsAsc[2].Bytes)
+
+		// Test sorting by bytes descending
+		sortDesc := []queryutil.Sort{{Field: "bytes", Order: queryutil.OrderDesc}}
+		paginationDesc, err := queryutil.NewPagination(0, 10)
+		require.NoError(t, err)
+		grantsDesc, _, err := grantManager.ListGrants(ctx, nil, sortDesc, paginationDesc)
+		require.NoError(t, err)
+		assert.Greater(t, grantsDesc[0].Bytes, grantsDesc[1].Bytes)
+		assert.Greater(t, grantsDesc[1].Bytes, grantsDesc[2].Bytes)
+
+	}, pluginTesting.TestOptions())
+}
+
+// TestGrantManager_ListGrants_WithFilters_Success tests listing grants with queryutil filters
+func TestGrantManager_ListGrants_WithFilters_Success(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		grantManager := NewGrantManager(ctx)
+
+		// Create grants with different types
+		grant1 := &pluginModels.AllowanceGrant{
+			UserID:     1,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourceSubscription,
+			Bytes:      testGrantBytesLarge,
+			IsActive:   true,
+		}
+		err := ctx.DB().Create(grant1).Error
+		require.NoError(t, err)
+
+		grant2 := &pluginModels.AllowanceGrant{
+			UserID:     2,
+			Type:       pluginModels.GrantTypeStorage,
+			Source:     pluginModels.GrantSourceBonus,
+			Bytes:      testGrantBytesMedium,
+			IsActive:   true,
+		}
+		err = ctx.DB().Create(grant2).Error
+		require.NoError(t, err)
+
+		grant3 := &pluginModels.AllowanceGrant{
+			UserID:     3,
+			Type:       pluginModels.GrantTypeUpload,
+			Source:     pluginModels.GrantSourcePromo,
+			Bytes:      testGrantBytesSmall,
+			IsActive:   true,
+		}
+		err = ctx.DB().Create(grant3).Error
+		require.NoError(t, err)
+
+		// Filter by user_id = 1
+		filterUserID := queryutil.FieldEqual("user_id", uint(1))
+		pagination1, err := queryutil.NewPagination(0, 10)
+		require.NoError(t, err)
+		grants1, total1, err := grantManager.ListGrants(ctx, []queryutil.CrudFilter{filterUserID}, nil, pagination1)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), total1)
+		assert.Len(t, grants1, 1)
+		assert.Equal(t, uint(1), grants1[0].UserID)
+
+		// Filter by type = upload
+		filterType := queryutil.FieldEqual("type", pluginModels.GrantTypeUpload)
+		pagination2, err := queryutil.NewPagination(0, 10)
+		require.NoError(t, err)
+		grants2, total2, err := grantManager.ListGrants(ctx, []queryutil.CrudFilter{filterType}, nil, pagination2)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total2)
+		assert.Len(t, grants2, 2)
+		for _, grant := range grants2 {
+			assert.Equal(t, pluginModels.GrantTypeUpload, grant.Type)
+		}
+
+		// Filter by source = bonus
+		filterSource := queryutil.FieldEqual("source", pluginModels.GrantSourceBonus)
+		pagination3, err := queryutil.NewPagination(0, 10)
+		require.NoError(t, err)
+		grants3, total3, err := grantManager.ListGrants(ctx, []queryutil.CrudFilter{filterSource}, nil, pagination3)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), total3)
+		assert.Len(t, grants3, 1)
+		assert.Equal(t, pluginModels.GrantSourceBonus, grants3[0].Source)
 
 	}, pluginTesting.TestOptions())
 }

@@ -3,6 +3,7 @@ package quota
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.lumeweb.com/queryutil"
@@ -28,6 +29,7 @@ type QuotaServiceDefault struct {
 	usageAggregator pluginCore.UsageAggregator
 
 	// System-level configuration (in-memory for now, should be database-backed in production)
+	configMutex            sync.RWMutex
 	enableQuotaEnforcement bool
 	storageRetentionDays   int
 }
@@ -882,6 +884,9 @@ func (s *QuotaServiceDefault) SetQuotaEnforcement(ctx context.Context, enabled b
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.SetQuotaEnforcement")
 	defer span.End()
 
+	s.configMutex.Lock()
+	defer s.configMutex.Unlock()
+
 	s.enableQuotaEnforcement = enabled
 	s.Logger().Info("Quota enforcement setting updated", zap.Bool("enabled", enabled))
 
@@ -897,6 +902,9 @@ func (s *QuotaServiceDefault) SetStorageRetentionDays(ctx context.Context, days 
 		return fmt.Errorf("storage retention days must be between 1 and 36500")
 	}
 
+	s.configMutex.Lock()
+	defer s.configMutex.Unlock()
+
 	s.storageRetentionDays = days
 	s.Logger().Info("Storage retention days setting updated", zap.Int("days", days))
 
@@ -905,7 +913,11 @@ func (s *QuotaServiceDefault) SetStorageRetentionDays(ctx context.Context, days 
 
 // GetSystemConfig returns the current system configuration
 func (s *QuotaServiceDefault) GetSystemConfig(ctx context.Context) (enableEnforcement bool, retentionDays int) {
-	return s.enableQuotaEnforcement, s.storageRetentionDays
+	s.configMutex.RLock()
+	enableEnforcement = s.enableQuotaEnforcement
+	retentionDays = s.storageRetentionDays
+	s.configMutex.RUnlock()
+	return enableEnforcement, retentionDays
 }
 
 // TODO: Implement reconciliation logic

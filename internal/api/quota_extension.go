@@ -67,6 +67,7 @@ func (e *QuotaExtension) Configure(gRouter router.Router, accessSvc core.AccessS
 				router.WithSummary("Get current quota status"),
 				router.WithDescription("Retrieve the current quota status including upload and download usage, limits, and remaining allowance for the authenticated user."),
 				router.WithTags("quota", "status"),
+				router.WithSuccessResponse(http.StatusOK, "Quota status", router.WithJSONContent(&dto.QuotaStatusResponse{})),
 			),
 		),
 		router.NewRoute(http.MethodGet, "/api/account/quota/history", e.handleQuotaHistory,
@@ -79,6 +80,7 @@ func (e *QuotaExtension) Configure(gRouter router.Router, accessSvc core.AccessS
 				router.WithQueryParam("start_date", "Start date in RFC3339 format", "2024-01-01T00:00:00Z"),
 				router.WithQueryParam("end_date", "End date in RFC3339 format", "2024-01-31T23:59:59Z"),
 				router.WithQueryParam("type", "Usage type (upload or download)", "upload"),
+				router.WithSuccessResponse(http.StatusOK, "Quota usage history", router.WithJSONContent(&dto.QuotaHistoryResponse{})),
 			),
 		),
 	}

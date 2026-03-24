@@ -1,5 +1,4 @@
 -- +goose Up
--- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS user_quotas (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NOT NULL,
@@ -117,14 +116,11 @@ CREATE TABLE IF NOT EXISTS allowance_consumptions (
     INDEX idx_usage_detail_id (usage_detail_id),
     INDEX idx_consumption_date (consumption_date)
 );
--- +goose StatementEnd
 
 -- +goose Down
--- +goose StatementBegin
 DROP TABLE allowance_consumptions;
 DROP TABLE allowance_grants;
 DROP TABLE user_quota_configs;
 DROP TABLE quota_plans;
 DROP TABLE user_usage_details;
 DROP TABLE user_quotas;
--- +goose StatementEnd

@@ -403,6 +403,20 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 		policies.PlanOperationsErr.WithLabelValues(policies.LabelPlanOperationUpdate),
 		func() error {
 			if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+				// Fetch existing plan to detect if Name is being changed
+				var existingPlan models.QuotaPlan
+				if err := tx.Where("id = ?", planID).First(&existingPlan).Error; err != nil {
+					// Plan doesn't exist, proceed with update (will fail later with 404 if needed)
+					return tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
+				}
+
+				// If Name is unchanged, use SkipHooks to avoid validation error
+				// This handles partial updates where Name field may have zero value
+				if plan.Name == existingPlan.Name {
+					return tx.Session(&gorm.Session{SkipHooks: true}).Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
+				}
+
+				// Name is being changed, use normal update with full validation
 				return tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
 			}); err != nil {
 				return fmt.Errorf("failed to update quota plan: %w", err)

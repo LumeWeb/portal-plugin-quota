@@ -86,5 +86,6 @@ type QuotaService interface {
 // QuotaPlanManager abstracts database operations related to quota plans
 type QuotaPlanManager interface {
 	GetQuotaPlanByID(ctx context.Context, id uint64) (*models.QuotaPlan, error)
+	GetQuotaPlanByName(ctx context.Context, name string) (*models.QuotaPlan, error)
 	GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error)
 }

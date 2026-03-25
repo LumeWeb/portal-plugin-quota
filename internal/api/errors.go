@@ -19,6 +19,7 @@ const (
 	ErrKeyInvalidPlanID       core.ErrorType = "INVALID_PLAN_ID"
 	ErrKeyInvalidGrantID      core.ErrorType = "INVALID_GRANT_ID"
 	ErrKeyPlanCreateFailed    core.ErrorType = "PLAN_CREATE_FAILED"
+	ErrKeyPlanNameExists      core.ErrorType = "PLAN_NAME_EXISTS"
 	ErrKeyPlanUpdateFailed    core.ErrorType = "PLAN_UPDATE_FAILED"
 	ErrKeyPlanDeleteFailed    core.ErrorType = "PLAN_DELETE_FAILED"
 	ErrKeyGrantCreateFailed   core.ErrorType = "GRANT_CREATE_FAILED"
@@ -101,6 +102,7 @@ func init() {
 		ErrKeyInvalidPlanID:       {Key: ErrKeyInvalidPlanID, Message: "Invalid plan ID format"},
 		ErrKeyInvalidGrantID:      {Key: ErrKeyInvalidGrantID, Message: "Invalid grant ID format"},
 		ErrKeyPlanCreateFailed:    {Key: ErrKeyPlanCreateFailed, Message: "Failed to create quota plan"},
+		ErrKeyPlanNameExists:      {Key: ErrKeyPlanNameExists, Message: "Quota plan with this name already exists"},
 		ErrKeyPlanUpdateFailed:    {Key: ErrKeyPlanUpdateFailed, Message: "Failed to update quota plan"},
 		ErrKeyPlanDeleteFailed:    {Key: ErrKeyPlanDeleteFailed, Message: "Failed to delete quota plan"},
 		ErrKeyGrantCreateFailed:   {Key: ErrKeyGrantCreateFailed, Message: "Failed to create grant"},
@@ -126,6 +128,7 @@ func init() {
 		ErrKeyInvalidPlanID:        http.StatusBadRequest,
 		ErrKeyInvalidGrantID:      http.StatusBadRequest,
 		ErrKeyPlanCreateFailed:    http.StatusInternalServerError,
+		ErrKeyPlanNameExists:      http.StatusConflict,
 		ErrKeyPlanUpdateFailed:    http.StatusInternalServerError,
 		ErrKeyPlanDeleteFailed:    http.StatusInternalServerError,
 		ErrKeyGrantCreateFailed:   http.StatusInternalServerError,

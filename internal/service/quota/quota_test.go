@@ -264,6 +264,147 @@ func TestQuotaServiceDefault_CreateQuotaPlan_Success(t *testing.T) {
 	}, testOptions())
 }
 
+// TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName tests that duplicate plan names are rejected
+func TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Create first plan
+		plan1 := &pluginModels.QuotaPlan{
+			Name:        "Enterprise Plan",
+			Description: "First enterprise plan",
+			StorageLimit:       1000,
+			UploadDailyLimit:   500,
+			DownloadDailyLimit: 750,
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan1)
+		require.NoError(t, err)
+		require.NotZero(t, plan1.ID)
+
+		// Try to create second plan with same name
+		plan2 := &pluginModels.QuotaPlan{
+			Name:        "Enterprise Plan", // Duplicate name
+			Description: "Second enterprise plan",
+			StorageLimit:       2000,
+			UploadDailyLimit:   1000,
+			DownloadDailyLimit: 1500,
+		}
+		err = quotaService.CreateQuotaPlan(ctx, plan2)
+
+		// Verify error is returned
+		require.Error(t, err)
+		assert.ErrorIs(t, err, pluginModels.ErrQuotaPlanNameExists)
+
+		// Verify second plan was not created in DB
+		var count int64
+		err = ctx.DB().Model(&pluginModels.QuotaPlan{}).Where("name = ?", "Enterprise Plan").Count(&count).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), count, "Should only have one plan with this name")
+
+		// Verify first plan is still intact
+		var savedPlan pluginModels.QuotaPlan
+		err = ctx.DB().Where("name = ?", "Enterprise Plan").First(&savedPlan).Error
+		require.NoError(t, err)
+		assert.Equal(t, plan1.ID, savedPlan.ID)
+		assert.Equal(t, "First enterprise plan", savedPlan.Description)
+		assert.Equal(t, int64(1000), savedPlan.StorageLimit)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_CreateQuotaPlan_DuplicatePlanNames tests multiple duplicate attempts
+func TestQuotaServiceDefault_CreateQuotaPlan_DuplicatePlanNames(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Create first plan
+		plan1 := &pluginModels.QuotaPlan{
+			Name:        "Standard Plan",
+			Description: "Standard tier",
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan1)
+		require.NoError(t, err)
+
+		// Attempt to create duplicate multiple times
+		for i := 0; i < 3; i++ {
+			duplicatePlan := &pluginModels.QuotaPlan{
+				Name:        "Standard Plan",
+				Description: fmt.Sprintf("Duplicate attempt %d", i+1),
+			}
+			err = quotaService.CreateQuotaPlan(ctx, duplicatePlan)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, pluginModels.ErrQuotaPlanNameExists)
+		}
+
+		// Verify only one plan exists
+		var count int64
+		err = ctx.DB().Model(&pluginModels.QuotaPlan{}).Where("name = ?", "Standard Plan").Count(&count).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_CreateQuotaPlan_SimilarNames tests that similar but different names are allowed
+func TestQuotaServiceDefault_CreateQuotaPlan_SimilarNames(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Create plans with similar but different names
+		planNames := []string{
+			"Basic Plan",
+			"Basic Plan Pro",
+			"Basic Plan Premium",
+			"basIC PLAN", // Case-sensitive test
+		}
+
+		for _, name := range planNames {
+			plan := &pluginModels.QuotaPlan{
+				Name:        name,
+				Description: fmt.Sprintf("Plan for %s", name),
+			}
+			err := quotaService.CreateQuotaPlan(ctx, plan)
+			require.NoError(t, err, "Should be able to create plan with name: %s", name)
+		}
+
+		// Verify all plans were created
+		var count int64
+		err := ctx.DB().Model(&pluginModels.QuotaPlan{}).Where("name IN ?", planNames).Count(&count).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(len(planNames)), count)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_CreateQuotaPlan_CaseSensitive tests that name comparison is case-sensitive
+func TestQuotaServiceDefault_CreateQuotaPlan_CaseSensitive(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Create plan with specific case
+		plan1 := &pluginModels.QuotaPlan{
+			Name:        "Enterprise Plan",
+			Description: "Original enterprise plan",
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan1)
+		require.NoError(t, err)
+
+		// Try to create plan with different case - should succeed due to case-sensitivity
+		plan2 := &pluginModels.QuotaPlan{
+			Name:        "enterprise plan", // Different case
+			Description: "Different case plan",
+		}
+		err = quotaService.CreateQuotaPlan(ctx, plan2)
+		require.NoError(t, err)
+
+		// Verify both plans exist
+		var count int64
+		err = ctx.DB().Model(&pluginModels.QuotaPlan{}).Where("name IN ?", []string{"Enterprise Plan", "enterprise plan"}).Count(&count).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), count)
+
+		// Verify they are different plans
+		assert.NotEqual(t, plan1.ID, plan2.ID)
+	}, testOptions())
+}
+
 // TestQuotaServiceDefault_GetQuotaPlan_Success tests successful quota plan retrieval
 func TestQuotaServiceDefault_GetQuotaPlan_Success(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {

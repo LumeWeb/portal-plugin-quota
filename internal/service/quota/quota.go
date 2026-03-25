@@ -2,7 +2,9 @@ package quota
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -354,13 +356,31 @@ func (s *QuotaServiceDefault) CreateQuotaPlan(ctx context.Context, plan *models.
 		return fmt.Errorf("database not initialized")
 	}
 
-	err := core.MetricTrack(
+	// Check if a plan with the same name already exists
+// Note: We perform this pre-flight check as an optimization for early feedback,
+// but we also handle UNIQUE constraint violations from the database during creation
+// to prevent race conditions (TOCTOU) where concurrent requests bypass this check.
+	existingPlan, err := s.planManager.GetQuotaPlanByName(ctx, plan.Name)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Real database error (connection, timeout, etc.) - fail fast
+		return fmt.Errorf("failed to check for existing plan: %w", err)
+	}
+	if existingPlan != nil {
+		// Plan already exists - return conflict error
+		return models.ErrQuotaPlanNameExists
+	}
+
+	err = core.MetricTrack(
 		nil,
 		policies.PlanOperationsErr.WithLabelValues(policies.LabelPlanOperationCreate),
 		func() error {
 			if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
 				return tx.Create(plan)
 			}); err != nil {
+				// Check for unique constraint violation and return proper error
+				if isUniqueConstraintError(err) {
+					return models.ErrQuotaPlanNameExists
+				}
 				return fmt.Errorf("failed to create quota plan: %w", err)
 			}
 			policies.PlanOperations.WithLabelValues(policies.LabelPlanOperationCreate).Inc()
@@ -1010,4 +1030,41 @@ func (s *QuotaServiceDefault) GetConfigManager() pluginCore.ConfigManager {
 // GetConfig implements core.Configurable
 func (s *QuotaServiceDefault) GetConfig() (any, error) {
 	return &config.QuotaConfig{}, nil
+}
+
+// isUniqueConstraintError checks if an error is a unique constraint violation
+// for the quota_plan name field. This handles both MySQL and SQLite errors.
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check the error message for unique constraint indicators
+	errStr := err.Error()
+	
+	// MySQL unique constraint violation
+	// Error 1062: Duplicate entry
+	// Error 1586: Duplicate entry
+	if strings.Contains(errStr, "Duplicate entry") &&
+	   strings.Contains(errStr, "key") &&
+	   strings.Contains(errStr, "quota_plans") {
+		return true
+	}
+
+	// SQLite unique constraint violation
+	if strings.Contains(errStr, "UNIQUE constraint failed") {
+		return true
+	}
+
+	// GORM's built-in duplicate key error
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+
+	// Additional check for MySQL ErrDuplicateEntry
+	// This requires checking for the MySQL driver error
+	// Note: This is a simplified check; in production you might want to
+	// use type assertions to check for specific driver errors
+	
+	return false
 }

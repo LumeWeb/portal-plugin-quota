@@ -36,6 +36,7 @@ var (
 	ErrInvalidDownloadTotalLimit  = errors.New("download_total_limit must be greater than or equal to 0")
 	ErrThresholdExceedsLimit      = errors.New("threshold cannot be greater than limit")
 	ErrQuotaPlanNotFound          = errors.New("quota plan not found")
+	ErrQuotaPlanNameExists       = errors.New("quota plan with this name already exists")
 	ErrNoDefaultQuotaPlan         = errors.New("no default quota plan set")
 	ErrInsufficientAllowance      = errors.New("insufficient allowance")
 )

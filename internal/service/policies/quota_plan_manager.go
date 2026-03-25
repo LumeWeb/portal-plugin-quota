@@ -55,6 +55,33 @@ func (q *QuotaPlanManagerDefault) GetQuotaPlanByID(ctx context.Context, id uint6
 	return &plan, nil
 }
 
+// GetQuotaPlanByName retrieves a quota plan by its name
+func (q *QuotaPlanManagerDefault) GetQuotaPlanByName(ctx context.Context, name string) (*models.QuotaPlan, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaPlanManagerDefault.GetQuotaPlanByName")
+	defer span.End()
+
+	q.logger.Debug("GetQuotaPlanByName: retrieving quota plan by name", zap.String("name", name))
+
+	var plan models.QuotaPlan
+	err := q.db.WithContext(ctx).Where("name = ?", name).First(&plan).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			q.logger.Debug("GetQuotaPlanByName: quota plan not found", zap.String("name", name))
+			return nil, fmt.Errorf("%w: %s", models.ErrQuotaPlanNotFound, name)
+		}
+		q.logger.Error("GetQuotaPlanByName: failed to retrieve quota plan",
+			zap.String("name", name),
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to retrieve quota plan: %w", err)
+	}
+
+	q.logger.Debug("GetQuotaPlanByName: quota plan retrieved successfully",
+		zap.Uint("id", plan.ID),
+		zap.String("name", plan.Name))
+
+	return &plan, nil
+}
+
 // GetDefaultQuotaPlan retrieves the default active quota plan
 func (q *QuotaPlanManagerDefault) GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaPlanManagerDefault.GetDefaultQuotaPlan")

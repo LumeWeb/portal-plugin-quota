@@ -167,3 +167,71 @@ func (_c *MockQuotaPlanManager_GetQuotaPlanByID_Call) RunAndReturn(run func(ctx 
 	_c.Call.Return(run)
 	return _c
 }
+
+// GetQuotaPlanByName provides a mock function for the type MockQuotaPlanManager
+func (_mock *MockQuotaPlanManager) GetQuotaPlanByName(ctx context.Context, name string) (*models.QuotaPlan, error) {
+	ret := _mock.Called(ctx, name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetQuotaPlanByName")
+	}
+
+	var r0 *models.QuotaPlan
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*models.QuotaPlan, error)); ok {
+		return returnFunc(ctx, name)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *models.QuotaPlan); ok {
+		r0 = returnFunc(ctx, name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*models.QuotaPlan)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, name)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQuotaPlanManager_GetQuotaPlanByName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetQuotaPlanByName'
+type MockQuotaPlanManager_GetQuotaPlanByName_Call struct {
+	*mock.Call
+}
+
+// GetQuotaPlanByName is a helper method to define mock.On call
+//   - ctx context.Context
+//   - name string
+func (_e *MockQuotaPlanManager_Expecter) GetQuotaPlanByName(ctx interface{}, name interface{}) *MockQuotaPlanManager_GetQuotaPlanByName_Call {
+	return &MockQuotaPlanManager_GetQuotaPlanByName_Call{Call: _e.mock.On("GetQuotaPlanByName", ctx, name)}
+}
+
+func (_c *MockQuotaPlanManager_GetQuotaPlanByName_Call) Run(run func(ctx context.Context, name string)) *MockQuotaPlanManager_GetQuotaPlanByName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaPlanManager_GetQuotaPlanByName_Call) Return(quotaPlan *models.QuotaPlan, err error) *MockQuotaPlanManager_GetQuotaPlanByName_Call {
+	_c.Call.Return(quotaPlan, err)
+	return _c
+}
+
+func (_c *MockQuotaPlanManager_GetQuotaPlanByName_Call) RunAndReturn(run func(ctx context.Context, name string) (*models.QuotaPlan, error)) *MockQuotaPlanManager_GetQuotaPlanByName_Call {
+	_c.Call.Return(run)
+	return _c
+}

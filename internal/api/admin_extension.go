@@ -285,6 +285,11 @@ func (e *QuotaAdminExtension) handleCreatePlan(c echo.Context) error {
 	}
 
 	if err := e.quotaService.CreateQuotaPlan(reqCtx, plan); err != nil {
+		if errors.Is(err, models.ErrQuotaPlanNameExists) {
+			e.Logger().Error("quota plan with this name already exists", zap.Error(err))
+			apiErr := NewError(ErrKeyPlanNameExists, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
 		e.Logger().Error("failed to create quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyPlanCreateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())

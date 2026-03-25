@@ -354,7 +354,13 @@ func (s *QuotaServiceDefault) CreateQuotaPlan(ctx context.Context, plan *models.
 		return fmt.Errorf("database not initialized")
 	}
 
-	err := core.MetricTrack(
+	// Check if a plan with the same name already exists
+	existingPlan, err := s.planManager.GetQuotaPlanByName(ctx, plan.Name)
+	if err == nil && existingPlan != nil {
+		return models.ErrQuotaPlanNameExists
+	}
+
+	err = core.MetricTrack(
 		nil,
 		policies.PlanOperationsErr.WithLabelValues(policies.LabelPlanOperationCreate),
 		func() error {

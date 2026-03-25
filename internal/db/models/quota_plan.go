@@ -1,7 +1,6 @@
 package models
 
 import (
-	"github.com/samber/lo"
 	"gorm.io/gorm"
 )
 
@@ -22,20 +21,6 @@ type QuotaPlan struct {
 	IsActive           *bool
 }
 
-// BeforeCreate validates the QuotaPlan model before creation
-func (q *QuotaPlan) BeforeCreate(_ *gorm.DB) error {
-	// Default active unless explicitly set
-	if q.IsActive == nil {
-		q.IsActive = lo.ToPtr(true)
-	}
-	return q.validate()
-}
-
-// BeforeUpdate validates the QuotaPlan model before update
-func (q *QuotaPlan) BeforeUpdate(_ *gorm.DB) error {
-	return q.validate()
-}
-
 // BeforeDelete validates the QuotaPlan model before deletion
 func (q *QuotaPlan) BeforeDelete(tx *gorm.DB) error {
 	// Prevent deletion if this is the default plan
@@ -45,8 +30,7 @@ func (q *QuotaPlan) BeforeDelete(tx *gorm.DB) error {
 
 	// Check if any UserQuotaConfig references this plan
 	var count int64
-	err := tx.Model(&UserQuotaConfig{}).Where("quota_plan_id = ?", q.ID).Count(&count).Error
-	if err != nil {
+	if err := tx.Model(&UserQuotaConfig{}).Where("quota_plan_id = ?", q.ID).Count(&count).Error; err != nil {
 		return err
 	}
 
@@ -57,14 +41,19 @@ func (q *QuotaPlan) BeforeDelete(tx *gorm.DB) error {
 	return nil
 }
 
-// validate performs validation checks on the QuotaPlan fields
-func (q *QuotaPlan) validate() error {
+// BeforeSave validates the QuotaPlan model before both create and update operations
+func (q *QuotaPlan) BeforeSave(tx *gorm.DB) error {
+	// Default active unless explicitly set (only runs for create since updates preserve existing value)
+	if q.IsActive == nil {
+		q.IsActive = new(true)
+	}
+
+	// Name must not be empty (applies to both create and update)
 	if q.Name == "" {
 		return ErrInvalidPlanName
 	}
 
-	// Validate that limit fields are either -1 (unlimited), 0 (disabled), or positive (actual limit)
-	// For required limits, we check that they're not unreasonably negative
+	// Validate limits are not unreasonably negative
 	if q.StorageLimit < -1 {
 		return ErrInvalidStorageLimit
 	}

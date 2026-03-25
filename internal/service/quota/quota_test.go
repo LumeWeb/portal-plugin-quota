@@ -87,7 +87,7 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_NameChanged_Validation(t *testing.T
 			UploadTotalLimit:   10737418240,
 			DownloadTotalLimit: 5368709120,
 			IsDefault:          false,
-			IsActive:           lo.ToPtr(true),
+			IsActive:           new(true),
 		}
 
 		err := quotaService.CreateQuotaPlan(ctx, createPlan)
@@ -105,7 +105,7 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_NameChanged_Validation(t *testing.T
 
 		// Assert - Update should fail with validation error
 		assert.Error(t, err, "Update should fail when Name is changed to empty string")
-		assert.Contains(t, err.Error(), "name must not be empty", 
+		assert.Contains(t, err.Error(), "name must not be empty",
 			"Error should indicate Name validation failed")
 	}, testOptions())
 }
@@ -151,7 +151,7 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 
 		// Act - Perform the update with the SAME plan object that was fetched
 		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
-		
+
 		// Assert - The update should succeed
 		if err != nil {
 			tb.Logf("UpdateQuotaPlan failed with error: %v", err)
@@ -164,7 +164,7 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 		require.NoError(t, err)
 
 		// Assert - Verify all fields were updated
-		assert.Equal(t, "Original Plan Name", resultingPlan.Name, 
+		assert.Equal(t, "Original Plan Name", resultingPlan.Name,
 			"Name should remain unchanged")
 		assert.Equal(t, "Updated description", resultingPlan.Description,
 			"Description should be updated")
@@ -207,13 +207,13 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits(t *test
 		require.NotNil(t, existingPlan)
 
 		// Act - Try to update with invalid negative limit during partial update
-		// Name is unchanged (so SkipHooks would be used), but we still need to validate limits
+		// Name is unchanged, but we still need to validate limits using change detection
 		existingPlan.StorageLimit = -100 // Invalid: less than -1
 		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
 
 		// Assert - Update should fail with invalid limit error
 		assert.Error(t, err, "Update should fail with invalid negative limit")
-		assert.Contains(t, err.Error(), "storage_limit", 
+		assert.Contains(t, err.Error(), "storage_limit",
 			"Error should reference the invalid field")
 		// Fetch again and verify the old limit is still in place (no corruption)
 		var resultingPlan pluginModels.QuotaPlan
@@ -546,8 +546,8 @@ func TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName(t *testing.T) {
 
 		// Create first plan
 		plan1 := &pluginModels.QuotaPlan{
-			Name:        "Enterprise Plan",
-			Description: "First enterprise plan",
+			Name:               "Enterprise Plan",
+			Description:        "First enterprise plan",
 			StorageLimit:       1000,
 			UploadDailyLimit:   500,
 			DownloadDailyLimit: 750,
@@ -558,8 +558,8 @@ func TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName(t *testing.T) {
 
 		// Try to create second plan with same name
 		plan2 := &pluginModels.QuotaPlan{
-			Name:        "Enterprise Plan", // Duplicate name
-			Description: "Second enterprise plan",
+			Name:               "Enterprise Plan", // Duplicate name
+			Description:        "Second enterprise plan",
 			StorageLimit:       2000,
 			UploadDailyLimit:   1000,
 			DownloadDailyLimit: 1500,
@@ -774,7 +774,7 @@ func TestQuotaServiceDefault_GetSystemStats_Success(t *testing.T) {
 		assert.Equal(t, int64(2), stats.ActiveGrants)
 
 		// Verify usage stats (sum of all user quotas)
-		expectedUpload := uint64(6000)  // 1000 + 2000 + 3000
+		expectedUpload := uint64(6000)   // 1000 + 2000 + 3000
 		expectedDownload := uint64(3000) // 500 + 1000 + 1500
 		expectedStorage := uint64(9000)  // 2000 + 3000 + 4000
 		expectedTotal := expectedUpload + expectedDownload + expectedStorage
@@ -831,11 +831,11 @@ func TestQuotaServiceDefault_GetSystemStats_PartialData(t *testing.T) {
 		// Create only one user quota with data
 		today := time.Now().UTC().Truncate(24 * time.Hour)
 		userQuota := &pluginModels.UserQuota{
-			UserID:        1,
-			Date:          today,
-			BytesUploaded: 500,
+			UserID:          1,
+			Date:            today,
+			BytesUploaded:   500,
 			BytesDownloaded: 250,
-			BytesStored:   1000,
+			BytesStored:     1000,
 		}
 		err := db.Create(userQuota).Error
 		require.NoError(t, err)
@@ -865,3 +865,89 @@ func TestQuotaServiceDefault_GetSystemStats_PartialData(t *testing.T) {
 	}, testOptions())
 }
 
+// TestSetDefaultQuotaPlan_SetsDefaultAndRetrieves tests that SetDefaultQuotaPlan
+// correctly marks a plan as default and GetDefaultQuotaPlan returns it.
+func TestSetDefaultQuotaPlan_SetsDefaultAndRetrieves(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a quota plan
+		plan := &pluginModels.QuotaPlan{
+			Name:               "Default Test Plan",
+			Description:        "Test plan for default bug",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           lo.ToPtr(true),
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+		require.NoError(t, err)
+		planID := plan.ID
+
+		// Act - Set plan as default
+		err = quotaService.SetDefaultQuotaPlan(ctx, planID)
+		require.NoError(t, err)
+
+		// Assert - Verify is_default flag is set
+		updatedPlan, err := quotaService.GetQuotaPlan(ctx, planID)
+		require.NoError(t, err)
+		assert.True(t, updatedPlan.IsDefault, "Plan should be marked as default")
+
+		// BUG CHECK: GetDefaultQuotaPlan should return the plan we just set
+		defaultPlan, err := quotaService.GetDefaultQuotaPlan(ctx)
+		require.NoError(t, err)
+		assert.NotNil(t, defaultPlan, "GetDefaultQuotaPlan should return a plan")
+		assert.Equal(t, planID, defaultPlan.ID, "Default plan ID should match the plan we set")
+
+	}, testOptions())
+}
+
+// TestUpdateAllowanceGrant_PreservesUserID tests that updating an allowance grant
+// doesn't overwrite the UserID with zero when only some fields are specified.
+func TestUpdateAllowanceGrant_PreservesUserID(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+		grantManager := quotaService.GetGrantManager()
+
+		// Arrange - Create an initial grant with userID 12345
+		userID := uint(12345)
+		initialGrant := &pluginModels.AllowanceGrant{
+			Type:   pluginModels.GrantTypeStorage,
+			Source: pluginModels.GrantSourceSubscription,
+			Bytes:  10000,
+		}
+		err := grantManager.CreateAllowanceGrant(ctx, userID, initialGrant)
+		require.NoError(t, err)
+		grantID := initialGrant.ID
+		require.NotZero(t, grantID)
+
+		// Verify initial state
+		savedGrant, err := grantManager.GetGrantByID(ctx, grantID)
+		require.NoError(t, err)
+		assert.Equal(t, userID, savedGrant.UserID, "Initial grant should have correct UserID")
+
+		// Act - Simulate admin update behavior: get grant, modify only bytes, update
+		targetGrant, err := grantManager.GetGrantByID(ctx, grantID)
+		require.NoError(t, err)
+
+		// Update only bytes (and expiry as needed) - don't touch UserID
+		targetGrant.Bytes = 20000
+		targetGrant.ExpiryDate = nil
+
+		// This should succeed without validation error
+		err = grantManager.UpdateAllowanceGrant(ctx, targetGrant)
+
+		// Assert - Update should succeed
+		require.NoError(t, err, "UpdateAllowanceGrant should succeed")
+
+		// Verify the grant still has correct UserID
+		updatedGrant, err := grantManager.GetGrantByID(ctx, grantID)
+		require.NoError(t, err)
+		assert.Equal(t, userID, updatedGrant.UserID, "UserID should not be overwritten")
+		assert.Equal(t, uint64(20000), updatedGrant.Bytes, "Bytes should be updated")
+
+	}, testOptions())
+}

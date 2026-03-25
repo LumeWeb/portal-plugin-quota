@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"go.lumeweb.com/queryutil"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
@@ -16,65 +15,10 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/service/policies"
 	"go.lumeweb.com/portal/core"
 	"go.lumeweb.com/portal/db"
+	"go.lumeweb.com/queryutil"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
-
-// validatePlanLimitsAndThresholds validates only limit and threshold fields for partial updates
-// This is used when the Name field is unchanged and we need to skip Name validation
-// but still enforce data integrity on other fields
-func validatePlanLimitsAndThresholds(plan *models.QuotaPlan) error {
-	// Validate that limit fields are either -1 (unlimited), 0 (disabled), or positive (actual limit)
-	if plan.StorageLimit < -1 {
-		return models.ErrInvalidStorageLimit
-	}
-
-	if plan.UploadDailyLimit < -1 {
-		return models.ErrInvalidUploadDailyLimit
-	}
-
-	if plan.DownloadDailyLimit < -1 {
-		return models.ErrInvalidDownloadDailyLimit
-	}
-
-	if plan.UploadTotalLimit < -1 {
-		return models.ErrInvalidUploadTotalLimit
-	}
-
-	if plan.DownloadTotalLimit < -1 {
-		return models.ErrInvalidDownloadTotalLimit
-	}
-
-	// Validate thresholds
-	if plan.StorageThreshold != nil {
-		if *plan.StorageThreshold < 0 {
-			return models.ErrInvalidStorageThreshold
-		}
-		if plan.StorageLimit > 0 && *plan.StorageThreshold > plan.StorageLimit {
-			return models.ErrThresholdExceedsLimit
-		}
-	}
-
-	if plan.UploadThreshold != nil {
-		if *plan.UploadThreshold < 0 {
-			return models.ErrInvalidUploadThreshold
-		}
-		if plan.UploadDailyLimit > 0 && *plan.UploadThreshold > plan.UploadDailyLimit {
-			return models.ErrThresholdExceedsLimit
-		}
-	}
-
-	if plan.DownloadThreshold != nil {
-		if *plan.DownloadThreshold < 0 {
-			return models.ErrInvalidDownloadThreshold
-		}
-		if plan.DownloadDailyLimit > 0 && *plan.DownloadThreshold > plan.DownloadDailyLimit {
-			return models.ErrThresholdExceedsLimit
-		}
-	}
-
-	return nil
-}
 
 type QuotaServiceDefault struct {
 	*core.BaseComponent
@@ -413,9 +357,9 @@ func (s *QuotaServiceDefault) CreateQuotaPlan(ctx context.Context, plan *models.
 	}
 
 	// Check if a plan with the same name already exists
-// Note: We perform this pre-flight check as an optimization for early feedback,
-// but we also handle UNIQUE constraint violations from the database during creation
-// to prevent race conditions (TOCTOU) where concurrent requests bypass this check.
+	// Note: We perform this pre-flight check as an optimization for early feedback,
+	// but we also handle UNIQUE constraint violations from the database during creation
+	// to prevent race conditions (TOCTOU) where concurrent requests bypass this check.
 	existingPlan, err := s.planManager.GetQuotaPlanByName(ctx, plan.Name)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !errors.Is(err, models.ErrQuotaPlanNotFound) {
 		// Real database error (connection, timeout, etc.) - fail fast
@@ -459,25 +403,28 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 		policies.PlanOperationsErr.WithLabelValues(policies.LabelPlanOperationUpdate),
 		func() error {
 			if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-				// Fetch existing plan to detect if Name is being changed
-				var existingPlan models.QuotaPlan
-				if err := tx.Where("id = ?", planID).First(&existingPlan).Error; err != nil {
-					// Plan doesn't exist, proceed with update (will fail later with 404 if needed)
-					return tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
+				// Fetch the existing plan to ensure we update the right record
+				var existing models.QuotaPlan
+				if result := tx.Where("id = ?", planID).First(&existing); result.Error != nil {
+					return tx
 				}
 
-				// If Name is unchanged, manually validate non-Name fields to ensure data integrity,
-				// then use SkipHooks to bypass Name validation which would fail on partial updates
-				if plan.Name == existingPlan.Name {
-					if err := validatePlanLimitsAndThresholds(plan); err != nil {
-						tx.Error = err
-						return tx
-					}
-					return tx.Session(&gorm.Session{SkipHooks: true}).Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
-				}
+				// Update the existing plan's fields with new values
+				existing.Name = plan.Name
+				existing.Description = plan.Description
+				existing.StorageLimit = plan.StorageLimit
+				existing.UploadDailyLimit = plan.UploadDailyLimit
+				existing.DownloadDailyLimit = plan.DownloadDailyLimit
+				existing.UploadTotalLimit = plan.UploadTotalLimit
+				existing.DownloadTotalLimit = plan.DownloadTotalLimit
+				existing.StorageThreshold = plan.StorageThreshold
+				existing.UploadThreshold = plan.UploadThreshold
+				existing.DownloadThreshold = plan.DownloadThreshold
+				existing.IsDefault = plan.IsDefault
+				existing.IsActive = plan.IsActive
 
-				// Name is being changed, use normal update with full validation
-				return tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
+				// Save the existing record to trigger BeforeSave and BeforeUpdate hooks
+				return tx.Save(&existing)
 			}); err != nil {
 				return fmt.Errorf("failed to update quota plan: %w", err)
 			}
@@ -581,19 +528,27 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID ui
 
 	// Perform both updates atomically in a transaction
 	return db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		// First, unset any existing default plan
-		if err := tx.Model(&models.QuotaPlan{}).Where("is_default = ?", true).Update("is_default", false).Error; err != nil {
+		// Fetch the current default plan (if any)
+		var currentDefault models.QuotaPlan
+		tx.Where("is_default = ?", true).First(&currentDefault)
+
+		// Fetch the plan being set as default
+		var newDefault models.QuotaPlan
+		if result := tx.Where("id = ?", planID).First(&newDefault); result.Error != nil {
 			return tx
 		}
 
-		// Then set the new default plan
-		if err := tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Update("is_default", true).Error; err != nil {
-			return tx
+		// Unset the current default plan using the existing model
+		// This ensures all fields have valid values, so Name validation passes
+		if currentDefault.ID != 0 {
+			currentDefault.IsDefault = false
+			tx.Save(&currentDefault)
 		}
 
-		return nil
+		// Set the new default plan using the existing model to ensure valid values
+		newDefault.IsDefault = true
+		return tx.Save(&newDefault)
 	})
-
 }
 
 func (s *QuotaServiceDefault) GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error) {
@@ -1115,13 +1070,13 @@ func isUniqueConstraintError(err error) bool {
 
 	// Check the error message for unique constraint indicators
 	errStr := err.Error()
-	
+
 	// MySQL unique constraint violation
 	// Error 1062: Duplicate entry
 	// Error 1586: Duplicate entry
 	if strings.Contains(errStr, "Duplicate entry") &&
-	   strings.Contains(errStr, "key") &&
-	   strings.Contains(errStr, "quota_plans") {
+		strings.Contains(errStr, "key") &&
+		strings.Contains(errStr, "quota_plans") {
 		return true
 	}
 
@@ -1139,6 +1094,6 @@ func isUniqueConstraintError(err error) bool {
 	// This requires checking for the MySQL driver error
 	// Note: This is a simplified check; in production you might want to
 	// use type assertions to check for specific driver errors
-	
+
 	return false
 }

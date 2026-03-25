@@ -491,9 +491,19 @@ func (gm *GrantManagerDefault) UpdateAllowanceGrant(ctx context.Context, grant *
 		return pluginModels.ErrInvalidGrantID
 	}
 
-	result := gm.db.WithContext(ctx).Model(&pluginModels.AllowanceGrant{}).
+	// Use UpdateColumns to only update specific modifiable fields (Bytes, ExpiryDate)
+	// This prevents accidentally updating read-only fields like UserID, Type, Source
+	// and skips BeforeUpdate hooks that would try to validate all fields
+	// Use UpdateColumns to update only specific modifiable fields (Bytes, ExpiryDate)
+	// Use Model(grant) with the fetched grant instead of empty struct so that
+	// BeforeUpdate hook receives a model with valid UserID (the GORM bug was that
+	// Model(AllowanceGrant{}) created an empty instance, causing validation to fail)
+	result := gm.db.WithContext(ctx).Model(grant).
 		Where("id = ?", grant.ID).
-		Updates(grant)
+		UpdateColumns(map[string]interface{}{
+			"Bytes":      grant.Bytes,
+			"ExpiryDate": grant.ExpiryDate,
+		})
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to update grant: %w", result.Error)

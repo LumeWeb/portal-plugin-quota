@@ -406,7 +406,7 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 				// Fetch the existing plan to ensure we update the right record
 				var existing models.QuotaPlan
 				if result := tx.Where("id = ?", planID).First(&existing); result.Error != nil {
-					return tx
+					return result
 				}
 
 				// Update the existing plan's fields with new values
@@ -535,14 +535,16 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID ui
 		// Fetch the plan being set as default
 		var newDefault models.QuotaPlan
 		if result := tx.Where("id = ?", planID).First(&newDefault); result.Error != nil {
-			return tx
+			return result
 		}
 
 		// Unset the current default plan using the existing model
 		// This ensures all fields have valid values, so Name validation passes
 		if currentDefault.ID != 0 {
 			currentDefault.IsDefault = false
-			tx.Save(&currentDefault)
+			if result := tx.Save(&currentDefault); result.Error != nil {
+				return result
+			}
 		}
 
 		// Set the new default plan using the existing model to ensure valid values
@@ -598,12 +600,12 @@ func (s *QuotaServiceDefault) AssignUserToPlan(ctx context.Context, userID uint,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
 		})
 		if result.Error != nil {
-			return tx
+			return result
 		}
 
 		// Update the user's quota config with the plan ID
-		if err := tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", planID).Error; err != nil {
-			return tx
+		if result = tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", planID); result.Error != nil {
+			return result
 		}
 
 		return nil
@@ -701,6 +703,7 @@ func (s *QuotaServiceDefault) addAllowanceWithSource(ctx context.Context, userID
 				Bytes:  storage,
 			}
 			if err := s.grantManager.CreateAllowanceGrantLocked(ctx, userID, storageGrant, tx); err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 			AllowanceAdded.WithLabelValues(sourceLabel).Inc()
@@ -715,6 +718,7 @@ func (s *QuotaServiceDefault) addAllowanceWithSource(ctx context.Context, userID
 				Bytes:  upload,
 			}
 			if err := s.grantManager.CreateAllowanceGrantLocked(ctx, userID, uploadGrant, tx); err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 			AllowanceAdded.WithLabelValues(sourceLabel).Inc()
@@ -729,6 +733,7 @@ func (s *QuotaServiceDefault) addAllowanceWithSource(ctx context.Context, userID
 				Bytes:  download,
 			}
 			if err := s.grantManager.CreateAllowanceGrantLocked(ctx, userID, downloadGrant, tx); err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 			AllowanceAdded.WithLabelValues(sourceLabel).Inc()
@@ -758,11 +763,13 @@ func (s *QuotaServiceDefault) DeductAllowance(ctx context.Context, userID uint, 
 				Timestamp: time.Now().UTC(),
 			}
 			if err := tx.Create(detail).Error; err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 
 			_, err := s.grantManager.ConsumeFromGrants(ctx, userID, models.GrantTypeStorage, storage, detail.ID, tx)
 			if err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 		}
@@ -776,6 +783,7 @@ func (s *QuotaServiceDefault) DeductAllowance(ctx context.Context, userID uint, 
 				Timestamp: time.Now().UTC(),
 			}
 			if err := tx.Create(detail).Error; err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 
@@ -794,6 +802,7 @@ func (s *QuotaServiceDefault) DeductAllowance(ctx context.Context, userID uint, 
 				Timestamp: time.Now().UTC(),
 			}
 			if err := tx.Create(detail).Error; err != nil {
+				_ = tx.AddError(err)
 				return tx
 			}
 

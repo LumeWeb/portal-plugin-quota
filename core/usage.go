@@ -51,6 +51,9 @@ type UsageManager interface {
 	// RecordUsageAndConsume records a usage detail and consumes from grants in a single transaction
 	// This is used by allowance policy enforcers to atomically record usage and consume allowance
 	RecordUsageAndConsume(ctx context.Context, detail *models.UserUsageDetail, grantType models.GrantType, bytes uint64) error
+
+	// GetAggregatedUsageByType returns the aggregated usage for a specific user and usage type
+	GetAggregatedUsageByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error)
 }
 
 // UsageAggregator defines the interface for aggregating usage data

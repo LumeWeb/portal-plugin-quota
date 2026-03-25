@@ -50,6 +50,9 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
 
+			// Initialize usage aggregator (usageManager implements UsageAggregator interface)
+			service.usageAggregator = service.usageManager
+
 			// Initialize limit resolver
 			service.limitResolver = policies.NewLimitResolver(ctx, service)
 

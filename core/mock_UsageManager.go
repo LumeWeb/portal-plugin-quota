@@ -40,6 +40,78 @@ func (_m *MockUsageManager) EXPECT() *MockUsageManager_Expecter {
 	return &MockUsageManager_Expecter{mock: &_m.Mock}
 }
 
+// GetAggregatedUsageByType provides a mock function for the type MockUsageManager
+func (_mock *MockUsageManager) GetAggregatedUsageByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error) {
+	ret := _mock.Called(ctx, userID, usageType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAggregatedUsageByType")
+	}
+
+	var r0 uint64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) (uint64, error)); ok {
+		return returnFunc(ctx, userID, usageType)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) uint64); ok {
+		r0 = returnFunc(ctx, userID, usageType)
+	} else {
+		r0 = ret.Get(0).(uint64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, UsageType) error); ok {
+		r1 = returnFunc(ctx, userID, usageType)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockUsageManager_GetAggregatedUsageByType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAggregatedUsageByType'
+type MockUsageManager_GetAggregatedUsageByType_Call struct {
+	*mock.Call
+}
+
+// GetAggregatedUsageByType is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - usageType UsageType
+func (_e *MockUsageManager_Expecter) GetAggregatedUsageByType(ctx interface{}, userID interface{}, usageType interface{}) *MockUsageManager_GetAggregatedUsageByType_Call {
+	return &MockUsageManager_GetAggregatedUsageByType_Call{Call: _e.mock.On("GetAggregatedUsageByType", ctx, userID, usageType)}
+}
+
+func (_c *MockUsageManager_GetAggregatedUsageByType_Call) Run(run func(ctx context.Context, userID uint, usageType UsageType)) *MockUsageManager_GetAggregatedUsageByType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 UsageType
+		if args[2] != nil {
+			arg2 = args[2].(UsageType)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUsageManager_GetAggregatedUsageByType_Call) Return(v uint64, err error) *MockUsageManager_GetAggregatedUsageByType_Call {
+	_c.Call.Return(v, err)
+	return _c
+}
+
+func (_c *MockUsageManager_GetAggregatedUsageByType_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType) (uint64, error)) *MockUsageManager_GetAggregatedUsageByType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetCurrentUsage provides a mock function for the type MockUsageManager
 func (_mock *MockUsageManager) GetCurrentUsage(ctx context.Context, userID uint) (*Usage, error) {
 	ret := _mock.Called(ctx, userID)

@@ -361,7 +361,7 @@ func (s *QuotaServiceDefault) CreateQuotaPlan(ctx context.Context, plan *models.
 // but we also handle UNIQUE constraint violations from the database during creation
 // to prevent race conditions (TOCTOU) where concurrent requests bypass this check.
 	existingPlan, err := s.planManager.GetQuotaPlanByName(ctx, plan.Name)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !errors.Is(err, models.ErrQuotaPlanNotFound) {
 		// Real database error (connection, timeout, etc.) - fail fast
 		return fmt.Errorf("failed to check for existing plan: %w", err)
 	}

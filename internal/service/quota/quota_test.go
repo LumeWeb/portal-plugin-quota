@@ -1,6 +1,7 @@
 package quota
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
 	coreTesting "go.lumeweb.com/portal/core/testing"
+	"gorm.io/gorm"
 )
 
 // Test constants
@@ -65,6 +67,126 @@ func TestQuotaServiceDefault_RecordUpload_Success(t *testing.T) {
 
 		err := quotaService.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_CreateQuotaPlan_WithNonExistentName tests that creating a plan
+// with a name that doesn't exist in the database (the common case) should succeed.
+//
+// This test replicates the bug scenario reported:
+// - A new quota plan is being created with name "Enterprise Plan"
+// - The duplicate name check calls GetQuotaPlanByName("Enterprise Plan")
+// - GetQuotaPlanByName returns ErrQuotaPlanNotFound (plan doesn't exist - expected state)
+// - The CreateQuotaPlan should NOT fail with "failed to check for existing plan"
+// - It should proceed to create the plan successfully
+//
+// Bug: The CreateQuotaPlan implementation in fix/duplicate-quota-plan-name-error-handling
+// incorrectly treats ErrQuotaPlanNotFound as an actual error instead of the expected
+// "plan doesn't exist" state, causing create to fail.
+func TestQuotaServiceDefault_CreateQuotaPlan_WithNonExistentName(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Mock the plan manager to simulate what happens when checking for a plan name
+		// that doesn't exist
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		quotaService.(*QuotaServiceDefault).planManager = mockPlanManager
+
+		// Setup: GetQuotaPlanByName returns ErrQuotaPlanNotFound because the plan
+		// doesn't exist yet (this is the expected state when creating a new plan)
+		mockPlanManager.EXPECT().
+			GetQuotaPlanByName(mock.Anything, "Enterprise Plan").
+			Return(nil, pluginModels.ErrQuotaPlanNotFound)
+
+		// Act: Create the plan
+		plan := &pluginModels.QuotaPlan{
+			Name:        "Enterprise Plan",
+			Description: "Enterprise tier quota plan",
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+
+		// Assert: Creation should succeed, not fail with "failed to check for existing plan"
+		// The error message "failed to create quota plan: failed to check for existing plan: quota plan not found: Enterprise Plan"
+		// indicates the implementation incorrectly treats the "not found" error as an actual error
+
+		// This assert will fail with the buggy behavior:
+		// Error: "failed to create quota plan: failed to check for existing plan: quota plan not found: Enterprise Plan"
+		require.NoError(t, err, "Creating plan with non-existent name should succeed")
+
+		// Verify plan was actually created in the database
+		require.NotZero(t, plan.ID, "Plan should have been assigned an ID")
+
+		// Verify we can retrieve it back
+		retrieved, err := quotaService.GetQuotaPlan(ctx, plan.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Enterprise Plan", retrieved.Name)
+		assert.Equal(t, "Enterprise tier quota plan", retrieved.Description)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_CreateQuotaPlan_WithExistingName tests that creating a plan
+// with a name that already exists returns a conflict error.
+func TestQuotaServiceDefault_CreateQuotaPlan_WithExistingName(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Mock the plan manager to simulate what happens when checking for a plan name
+		// that already exists
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		quotaService.(*QuotaServiceDefault).planManager = mockPlanManager
+
+		// Setup: GetQuotaPlanByName returns an existing plan (name is taken)
+		existingPlan := &pluginModels.QuotaPlan{
+			Model: gorm.Model{ID: 1},
+			Name:  "Enterprise Plan",
+		}
+		mockPlanManager.EXPECT().
+			GetQuotaPlanByName(mock.Anything, "Enterprise Plan").
+			Return(existingPlan, nil)
+
+		// Act: Try to create a plan with the same name
+		plan := &pluginModels.QuotaPlan{
+			Name:        "Enterprise Plan",
+			Description: "Another Enterprise tier quota plan",
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+
+		// Assert: Should get name conflict error
+		require.Error(t, err)
+		require.ErrorIs(t, err, pluginModels.ErrQuotaPlanNameExists)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_CreateQuotaPlan_WithDatabaseError tests that actual database errors
+// during the duplicate check are properly propagated.
+func TestQuotaServiceDefault_CreateQuotaPlan_WithDatabaseError(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE)
+
+		// Mock the plan manager to simulate a database error
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		quotaService.(*QuotaServiceDefault).planManager = mockPlanManager
+
+		// Setup: GetQuotaPlanByName returns a database error (e.g., connection issue)
+		dbError := errors.New("database connection failed")
+		mockPlanManager.EXPECT().
+			GetQuotaPlanByName(mock.Anything, "Enterprise Plan").
+			Return(nil, dbError)
+
+		// Act: Try to create a plan
+		plan := &pluginModels.QuotaPlan{
+			Name:        "Enterprise Plan",
+			Description: "Enterprise tier quota plan",
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+
+		// Assert: The database error should be wrapped and propagated
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to check for existing plan")
+		assert.Contains(t, err.Error(), "database connection failed")
 	}, testOptions())
 }
 
@@ -481,7 +603,7 @@ func TestQuotaServiceDefault_GetSystemStats_Success(t *testing.T) {
 
 		// Act
 		stats, err := quotaService.GetSystemStats(ctx)
-		
+
 		// Assert
 		require.NoError(t, err)
 		assert.NotNil(t, stats)

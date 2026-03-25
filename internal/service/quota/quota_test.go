@@ -177,6 +177,52 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 	}, testOptions())
 }
 
+// TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits tests that during
+// partial updates (when Name is unchanged), validation still enforces data integrity
+// by rejecting invalid limit values such as negative numbers.
+func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a quota plan first
+		createPlan := &pluginModels.QuotaPlan{
+			Name:               "Original Plan Name",
+			Description:        "Original description",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           lo.ToPtr(true),
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, createPlan)
+		require.NoError(t, err)
+		require.NotZero(t, createPlan.ID)
+
+		// Arrange - Fetch the existing plan (this is what the handler does)
+		existingPlan, err := quotaService.GetQuotaPlan(ctx, createPlan.ID)
+		require.NoError(t, err)
+		require.NotNil(t, existingPlan)
+
+		// Act - Try to update with invalid negative limit during partial update
+		// Name is unchanged (so SkipHooks would be used), but we still need to validate limits
+		existingPlan.StorageLimit = -100 // Invalid: less than -1
+		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
+
+		// Assert - Update should fail with invalid limit error
+		assert.Error(t, err, "Update should fail with invalid negative limit")
+		assert.Contains(t, err.Error(), "storage_limit", 
+			"Error should reference the invalid field")
+		// Fetch again and verify the old limit is still in place (no corruption)
+		var resultingPlan pluginModels.QuotaPlan
+		_ = ctx.DB().Where("id = ?", createPlan.ID).First(&resultingPlan)
+		assert.Equal(t, int64(10737418240), resultingPlan.StorageLimit,
+			"Storage limit should remain unchanged after failed validation")
+	}, testOptions())
+}
+
 // TestQuotaServiceDefault_CreateQuotaPlan_WithNonExistentName tests that creating a plan
 // with a name that doesn't exist in the database (the common case) should succeed.
 //

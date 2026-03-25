@@ -20,6 +20,62 @@ import (
 	"gorm.io/gorm"
 )
 
+// validatePlanLimitsAndThresholds validates only limit and threshold fields for partial updates
+// This is used when the Name field is unchanged and we need to skip Name validation
+// but still enforce data integrity on other fields
+func validatePlanLimitsAndThresholds(plan *models.QuotaPlan) error {
+	// Validate that limit fields are either -1 (unlimited), 0 (disabled), or positive (actual limit)
+	if plan.StorageLimit < -1 {
+		return models.ErrInvalidStorageLimit
+	}
+
+	if plan.UploadDailyLimit < -1 {
+		return models.ErrInvalidUploadDailyLimit
+	}
+
+	if plan.DownloadDailyLimit < -1 {
+		return models.ErrInvalidDownloadDailyLimit
+	}
+
+	if plan.UploadTotalLimit < -1 {
+		return models.ErrInvalidUploadTotalLimit
+	}
+
+	if plan.DownloadTotalLimit < -1 {
+		return models.ErrInvalidDownloadTotalLimit
+	}
+
+	// Validate thresholds
+	if plan.StorageThreshold != nil {
+		if *plan.StorageThreshold < 0 {
+			return models.ErrInvalidStorageThreshold
+		}
+		if plan.StorageLimit > 0 && *plan.StorageThreshold > plan.StorageLimit {
+			return models.ErrThresholdExceedsLimit
+		}
+	}
+
+	if plan.UploadThreshold != nil {
+		if *plan.UploadThreshold < 0 {
+			return models.ErrInvalidUploadThreshold
+		}
+		if plan.UploadDailyLimit > 0 && *plan.UploadThreshold > plan.UploadDailyLimit {
+			return models.ErrThresholdExceedsLimit
+		}
+	}
+
+	if plan.DownloadThreshold != nil {
+		if *plan.DownloadThreshold < 0 {
+			return models.ErrInvalidDownloadThreshold
+		}
+		if plan.DownloadDailyLimit > 0 && *plan.DownloadThreshold > plan.DownloadDailyLimit {
+			return models.ErrThresholdExceedsLimit
+		}
+	}
+
+	return nil
+}
+
 type QuotaServiceDefault struct {
 	*core.BaseComponent
 	config          *config.QuotaConfig
@@ -410,9 +466,13 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 					return tx.Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
 				}
 
-				// If Name is unchanged, use SkipHooks to avoid validation error
-				// This handles partial updates where Name field may have zero value
+				// If Name is unchanged, manually validate non-Name fields to ensure data integrity,
+				// then use SkipHooks to bypass Name validation which would fail on partial updates
 				if plan.Name == existingPlan.Name {
+					if err := validatePlanLimitsAndThresholds(plan); err != nil {
+						tx.Error = err
+						return tx
+					}
 					return tx.Session(&gorm.Session{SkipHooks: true}).Model(&models.QuotaPlan{}).Where("id = ?", planID).Updates(plan)
 				}
 

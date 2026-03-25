@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -67,6 +68,158 @@ func TestQuotaServiceDefault_RecordUpload_Success(t *testing.T) {
 
 		err := quotaService.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_UpdateQuotaPlan_NameChanged_Validation tests that
+// when Name is actually being changed, validation still runs and rejects empty names.
+func TestQuotaServiceDefault_UpdateQuotaPlan_NameChanged_Validation(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a quota plan first
+		createPlan := &pluginModels.QuotaPlan{
+			Name:               "Original Plan Name",
+			Description:        "Original description",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           lo.ToPtr(true),
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, createPlan)
+		require.NoError(t, err)
+		require.NotZero(t, createPlan.ID)
+
+		// Act - Try to change Name to empty string
+		existingPlan, err := quotaService.GetQuotaPlan(ctx, createPlan.ID)
+		require.NoError(t, err)
+
+		existingPlan.Name = "" // Attempt to change Name to empty (invalid)
+		existingPlan.Description = "Updated description"
+
+		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
+
+		// Assert - Update should fail with validation error
+		assert.Error(t, err, "Update should fail when Name is changed to empty string")
+		assert.Contains(t, err.Error(), "name must not be empty", 
+			"Error should indicate Name validation failed")
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate tests that updating a quota plan
+// with some (but not all) fields works correctly and preserves existing values.
+// This test verifies partial updates don't trigger validation errors for unchanged fields.
+func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a quota plan first
+		createPlan := &pluginModels.QuotaPlan{
+			Name:               "Original Plan Name",
+			Description:        "Original description",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           lo.ToPtr(true),
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, createPlan)
+		require.NoError(t, err)
+		require.NotZero(t, createPlan.ID)
+
+		// Arrange - Fetch the existing plan (this is what the handler does)
+		existingPlan, err := quotaService.GetQuotaPlan(ctx, createPlan.ID)
+		require.NoError(t, err)
+		require.NotNil(t, existingPlan)
+
+		// Act - Update the existing plan's fields (this is what the handler code does)
+		// Simulating the E2E test request body with updated limits
+		existingPlan.Description = "Updated description"
+		existingPlan.StorageLimit = 21474836480
+		existingPlan.UploadDailyLimit = 209715200
+		existingPlan.DownloadDailyLimit = 1048576000
+		existingPlan.UploadTotalLimit = 21474836480
+		existingPlan.DownloadTotalLimit = 10737418240
+		// Note: existingPlan.Name is NOT updated, so it retains "Original Plan Name"
+
+		// Act - Perform the update with the SAME plan object that was fetched
+		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
+		
+		// Assert - The update should succeed
+		if err != nil {
+			tb.Logf("UpdateQuotaPlan failed with error: %v", err)
+		}
+		require.NoError(t, err, "UpdateQuotaPlan should succeed even when name is preserved from existing plan")
+
+		// Act - Fetch the updated plan
+		var resultingPlan pluginModels.QuotaPlan
+		err = ctx.DB().Where("id = ?", createPlan.ID).First(&resultingPlan).Error
+		require.NoError(t, err)
+
+		// Assert - Verify all fields were updated
+		assert.Equal(t, "Original Plan Name", resultingPlan.Name, 
+			"Name should remain unchanged")
+		assert.Equal(t, "Updated description", resultingPlan.Description,
+			"Description should be updated")
+		assert.Equal(t, int64(21474836480), resultingPlan.StorageLimit,
+			"Storage limit should be updated")
+		assert.Equal(t, int64(209715200), resultingPlan.UploadDailyLimit,
+			"Upload daily limit should be updated")
+		assert.Equal(t, int64(1048576000), resultingPlan.DownloadDailyLimit,
+			"Download daily limit should be updated")
+	}, testOptions())
+}
+
+// TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits tests that during
+// partial updates (when Name is unchanged), validation still enforces data integrity
+// by rejecting invalid limit values such as negative numbers.
+func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a quota plan first
+		createPlan := &pluginModels.QuotaPlan{
+			Name:               "Original Plan Name",
+			Description:        "Original description",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           lo.ToPtr(true),
+		}
+
+		err := quotaService.CreateQuotaPlan(ctx, createPlan)
+		require.NoError(t, err)
+		require.NotZero(t, createPlan.ID)
+
+		// Arrange - Fetch the existing plan (this is what the handler does)
+		existingPlan, err := quotaService.GetQuotaPlan(ctx, createPlan.ID)
+		require.NoError(t, err)
+		require.NotNil(t, existingPlan)
+
+		// Act - Try to update with invalid negative limit during partial update
+		// Name is unchanged (so SkipHooks would be used), but we still need to validate limits
+		existingPlan.StorageLimit = -100 // Invalid: less than -1
+		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
+
+		// Assert - Update should fail with invalid limit error
+		assert.Error(t, err, "Update should fail with invalid negative limit")
+		assert.Contains(t, err.Error(), "storage_limit", 
+			"Error should reference the invalid field")
+		// Fetch again and verify the old limit is still in place (no corruption)
+		var resultingPlan pluginModels.QuotaPlan
+		_ = ctx.DB().Where("id = ?", createPlan.ID).First(&resultingPlan)
+		assert.Equal(t, int64(10737418240), resultingPlan.StorageLimit,
+			"Storage limit should remain unchanged after failed validation")
 	}, testOptions())
 }
 

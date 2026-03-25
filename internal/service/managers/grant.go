@@ -491,8 +491,13 @@ func (gm *GrantManagerDefault) UpdateAllowanceGrant(ctx context.Context, grant *
 		return pluginModels.ErrInvalidGrantID
 	}
 
-	result := gm.db.WithContext(ctx).Model(&pluginModels.AllowanceGrant{}).
+	// Use UpdateColumns to only update specific modifiable fields (Bytes, ExpiryDate)
+	// This prevents accidentally updating read-only fields like UserID, Type, Source
+	// and skips BeforeUpdate hooks that would try to validate all fields
+	// Use Updates with Select to trigger BeforeSave hook for BytesRemaining calculation
+	result := gm.db.WithContext(ctx).Model(grant).
 		Where("id = ?", grant.ID).
+		Select("Bytes", "ExpiryDate").
 		Updates(grant)
 
 	if result.Error != nil {

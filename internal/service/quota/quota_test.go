@@ -978,6 +978,80 @@ func TestSetDefaultQuotaPlan_SwitchDefaultPlan(t *testing.T) {
 	}, testOptions())
 }
 
+// TestUpdateQuotaPlan_CannotChangeDefault tests that UpdateQuotaPlan rejects attempts
+// to change the IsDefault field. This is a regression test to ensure that only
+// SetDefaultQuotaPlan can change default plans, preventing duplicate key violations.
+func TestUpdateQuotaPlan_CannotChangeDefault(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a non-default plan
+		plan := &pluginModels.QuotaPlan{
+			Name:               "Test Plan",
+			Description:        "Original plan",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           new(true),
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+		require.NoError(t, err)
+		planID := plan.ID
+
+		// Act & Assert - Try to set IsDefault=true via UpdateQuotaPlan
+		updatePlan := &pluginModels.QuotaPlan{
+			Name:               "Test Plan",
+			Description:        "Updated Plan",
+			StorageLimit:       5368709120,
+			UploadDailyLimit:   52428800,
+			DownloadDailyLimit: 262144000,
+			UploadTotalLimit:   5368709120,
+			DownloadTotalLimit: 2684354560,
+			IsDefault:          true, // Try to set to default
+			IsActive:           new(true),
+		}
+		err = quotaService.UpdateQuotaPlan(ctx, planID, updatePlan)
+		assert.Error(t, err, "UpdateQuotaPlan should return error when trying to change IsDefault to true")
+		assert.Contains(t, err.Error(), "cannot change default", "Error message should indicate the restriction")
+
+		// Verify plan was NOT updated
+		updatedPlan, err := quotaService.GetQuotaPlan(ctx, planID)
+		require.NoError(t, err)
+		assert.Equal(t, "Test Plan", updatedPlan.Name, "Plan name should remain unchanged")
+		assert.False(t, updatedPlan.IsDefault, "Plan should still not be default")
+
+		// Arrange - Set plan as default using proper method
+		err = quotaService.SetDefaultQuotaPlan(ctx, planID)
+		require.NoError(t, err)
+
+		// Act & Assert - Try to unset IsDefault via UpdateQuotaPlan
+		unsetPlan := &pluginModels.QuotaPlan{
+			Name:               "Test Plan",
+			Description:        "Unset Default",
+			StorageLimit:       5368709120,
+			UploadDailyLimit:   52428800,
+			DownloadDailyLimit: 262144000,
+			UploadTotalLimit:   5368709120,
+			DownloadTotalLimit: 2684354560,
+			IsDefault:          false, // Try to unset default
+			IsActive:           new(true),
+		}
+		err = quotaService.UpdateQuotaPlan(ctx, planID, unsetPlan)
+		assert.Error(t, err, "UpdateQuotaPlan should return error when trying to unset IsDefault")
+		assert.Contains(t, err.Error(), "cannot change default", "Error message should indicate the restriction")
+
+		// Verify plan is still default
+		defaultPlan, err := quotaService.GetDefaultQuotaPlan(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, planID, defaultPlan.ID, "Plan should still be default")
+		assert.Equal(t, "Test Plan", defaultPlan.Name, "Plan name should remain unchanged")
+
+	}, testOptions())
+}
+
 // TestUpdateAllowanceGrant_PreservesUserID tests that updating an allowance grant
 // doesn't overwrite the UserID with zero when only some fields are specified.
 func TestUpdateAllowanceGrant_PreservesUserID(t *testing.T) {

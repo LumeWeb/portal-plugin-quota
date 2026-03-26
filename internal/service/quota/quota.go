@@ -401,6 +401,18 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 		return fmt.Errorf("database not initialized")
 	}
 
+	// Fetch the existing plan to check if IsDefault is being changed
+	var existing models.QuotaPlan
+	if err := s.DB().Where("id = ?", planID).First(&existing).Error; err != nil {
+		return fmt.Errorf("failed to fetch existing quota plan: %w", err)
+	}
+
+	// Block all attempts to change IsDefault through UpdateQuotaPlan
+	// Only SetDefaultQuotaPlan can change default status to prevent duplicate key violations
+	if existing.IsDefault != plan.IsDefault {
+		return fmt.Errorf("cannot change default quota plan status through update - use SetDefaultQuotaPlan to change the default plan")
+	}
+
 	err := core.MetricTrack(
 		nil,
 		policies.PlanOperationsErr.WithLabelValues(policies.LabelPlanOperationUpdate),
@@ -413,6 +425,7 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 				}
 
 				// Update the existing plan's fields with new values
+				// Note: IsDefault is not updated here unless handled by SetDefaultQuotaPlan
 				existing.Name = plan.Name
 				existing.Description = plan.Description
 				existing.StorageLimit = plan.StorageLimit
@@ -423,7 +436,7 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 				existing.StorageThreshold = plan.StorageThreshold
 				existing.UploadThreshold = plan.UploadThreshold
 				existing.DownloadThreshold = plan.DownloadThreshold
-				existing.IsDefault = plan.IsDefault
+				// existing.IsDefault intentionally not set here - must use SetDefaultQuotaPlan
 				existing.IsActive = plan.IsActive
 
 				// Save the existing record to trigger BeforeSave and BeforeUpdate hooks

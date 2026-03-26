@@ -530,27 +530,26 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID ui
 	}
 
 	// Perform both updates atomically in a transaction
+	// Order is critical: unset old default first, then set new one
+	// This ensures never more than one default, avoiding constraint violations
 	return db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		// Fetch the current default plan (if any)
+		// First, fetch and unset the current default plan (if any)
+		// Fetching the full model ensures validation hooks can run
 		var currentDefault models.QuotaPlan
-		tx.Where("is_default = ?", true).First(&currentDefault)
-
-		// Fetch the plan being set as default
-		var newDefault models.QuotaPlan
-		if result := tx.Where("id = ?", planID).First(&newDefault); result.Error != nil {
-			return result
-		}
-
-		// Unset the current default plan using the existing model
-		// This ensures all fields have valid values, so Name validation passes
-		if currentDefault.ID != 0 {
+		if tx.Where("is_default = ?", true).First(&currentDefault).Error == nil {
 			currentDefault.IsDefault = false
 			if result := tx.Save(&currentDefault); result.Error != nil {
 				return result
 			}
 		}
 
-		// Set the new default plan using the existing model to ensure valid values
+		// Then, fetch and set the new default plan
+		// Must fetch the full model to trigger validation hooks
+		var newDefault models.QuotaPlan
+		if result := tx.Where("id = ? AND is_active = ?", planID, true).First(&newDefault); result.Error != nil {
+			return result
+		}
+
 		newDefault.IsDefault = true
 		return tx.Save(&newDefault)
 	})

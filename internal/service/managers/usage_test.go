@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	pluginModels "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	pluginTesting "go.lumeweb.com/portal-plugin-quota/internal/testing"
@@ -846,9 +847,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
 		userCount := uint(4)                        // Shared among 4 users
 
-		usageManager := NewUsageManager(ctx)
-
-		sharedBytes := usageManager.calculateSharedBytes(totalBytes, userCount, 0)
+		sharedBytes := pluginCore.CalculateSharedBytes(totalBytes, userCount, 0)
 		// Verifies exact division: 1000 bytes / 4 users = 250 bytes per user
 		expected := uint64(250)
 		assert.Equal(t, expected, sharedBytes)
@@ -861,9 +860,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		totalBytes := uint64(1)               // 1 byte total
 		userCount := uint(testUserCountLarge) // Shared among 10 users
 
-		usageManager := NewUsageManager(ctx)
-
-		sharedBytes := usageManager.calculateSharedBytes(totalBytes, userCount, 0)
+		sharedBytes := pluginCore.CalculateSharedBytes(totalBytes, userCount, 0)
 		// Verifies floor division behavior: 1 byte / 10 users = 0 bytes per user (rounded down)
 		assert.Equal(t, uint64(0), sharedBytes)
 
@@ -875,9 +872,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
 		userCount := uint(testUserCountSmall)       // Shared among 3 users
 
-		usageManager := NewUsageManager(ctx)
-
-		sharedBytes := usageManager.calculateSharedBytes(totalBytes, userCount, 2)
+		sharedBytes := pluginCore.CalculateSharedBytes(totalBytes, userCount, 2)
 		// Verifies precision handling with 2 decimal places:
 		// 1000 bytes / 3 users = 333.333... bytes per user
 		// With 2 decimal places precision: 333.33, rounded up to 333.34
@@ -893,9 +888,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
 		userCount := uint(testUserCountSmall)       // Shared among 3 users
 
-		usageManager := NewUsageManager(ctx)
-
-		sharedBytes := usageManager.calculateSharedBytes(totalBytes, userCount, 10)
+		sharedBytes := pluginCore.CalculateSharedBytes(totalBytes, userCount, 10)
 		// Verifies precision handling with 10 decimal places:
 		// 1000 bytes / 3 users = 333.333... bytes per user
 		// With 10 decimal places precision: 333.3333333333, rounded up to 333.3333333334
@@ -911,9 +904,7 @@ func TestUsageManager_calculateSharedBytes_MultipleScenarios_Success(t *testing.
 		totalBytes := uint64(testUsageBytesMassive) // 1000 bytes
 		userCount := uint(testUserCountSmall)       // Shared among 3 users
 
-		usageManager := NewUsageManager(ctx)
-
-		sharedBytes := usageManager.calculateSharedBytes(totalBytes, userCount, 1)
+		sharedBytes := pluginCore.CalculateSharedBytes(totalBytes, userCount, 1)
 		// Verifies precision handling with 1 decimal place:
 		// 1000 bytes / 3 users = 333.333... bytes per user
 		// With 1 decimal place precision: 333.3, rounded up to 333.4

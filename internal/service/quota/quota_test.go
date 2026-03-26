@@ -1052,6 +1052,31 @@ func TestUpdateQuotaPlan_CannotChangeDefault(t *testing.T) {
 	}, testOptions())
 }
 
+// TestCreateQuotaPlan_CannotCreateAsDefault tests that CreateQuotaPlan rejects attempts
+// to create a plan with IsDefault=true. This prevents duplicate key violations
+// by ensuring default status must be set via SetDefaultQuotaPlan after creation.
+func TestCreateQuotaPlan_CannotCreateAsDefault(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Act & Assert - Try to create a plan with IsDefault=true
+		plan := &pluginModels.QuotaPlan{
+			Name:               "Test Default Plan",
+			Description:        "Attempt to create as default",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          true, // This should be rejected
+			IsActive:           new(true),
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+		assert.Error(t, err, "CreateQuotaPlan should return error when trying to create with IsDefault=true")
+		assert.Contains(t, err.Error(), "cannot create plan with IsDefault=true", "Error message should indicate the restriction")
+	}, testOptions())
+}
+
 // TestUpdateAllowanceGrant_PreservesUserID tests that updating an allowance grant
 // doesn't overwrite the UserID with zero when only some fields are specified.
 func TestUpdateAllowanceGrant_PreservesUserID(t *testing.T) {

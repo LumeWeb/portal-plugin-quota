@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samber/lo"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -127,7 +127,7 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 			UploadTotalLimit:   10737418240,
 			DownloadTotalLimit: 5368709120,
 			IsDefault:          false,
-			IsActive:           lo.ToPtr(true),
+			IsActive:           new(true),
 		}
 
 		err := quotaService.CreateQuotaPlan(ctx, createPlan)
@@ -194,7 +194,7 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits(t *test
 			UploadTotalLimit:   10737418240,
 			DownloadTotalLimit: 5368709120,
 			IsDefault:          false,
-			IsActive:           lo.ToPtr(true),
+			IsActive:           new(true),
 		}
 
 		err := quotaService.CreateQuotaPlan(ctx, createPlan)
@@ -881,7 +881,7 @@ func TestSetDefaultQuotaPlan_SetsDefaultAndRetrieves(t *testing.T) {
 			UploadTotalLimit:   10737418240,
 			DownloadTotalLimit: 5368709120,
 			IsDefault:          false,
-			IsActive:           lo.ToPtr(true),
+			IsActive:           new(true),
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan)
 		require.NoError(t, err)
@@ -901,6 +901,79 @@ func TestSetDefaultQuotaPlan_SetsDefaultAndRetrieves(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, defaultPlan, "GetDefaultQuotaPlan should return a plan")
 		assert.Equal(t, planID, defaultPlan.ID, "Default plan ID should match the plan we set")
+
+	}, testOptions())
+}
+
+// TestSetDefaultQuotaPlan_SwitchDefaultPlan tests switching from one default plan to another.
+// This is a regression test for the duplicate key error that occurred when setting a new default,
+// which happens when two plans temporarily have is_default=true and is_active=1,
+// violating the uniq_default_active_one constraint.
+func TestSetDefaultQuotaPlan_SwitchDefaultPlan(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create two quota plans
+		plan1 := &pluginModels.QuotaPlan{
+			Name:               "First Plan",
+			Description:        "First default plan",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           new(true),
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan1)
+		require.NoError(t, err)
+		plan1ID := plan1.ID
+
+		plan2 := &pluginModels.QuotaPlan{
+			Name:               "Second Plan",
+			Description:        "Second default plan",
+			StorageLimit:       5368709120,
+			UploadDailyLimit:   52428800,
+			DownloadDailyLimit: 262144000,
+			UploadTotalLimit:   5368709120,
+			DownloadTotalLimit: 2684354560,
+			IsDefault:          false,
+			IsActive:           new(true),
+		}
+		err = quotaService.CreateQuotaPlan(ctx, plan2)
+		require.NoError(t, err)
+		plan2ID := plan2.ID
+
+		// Act 1 - Set first plan as default
+		err = quotaService.SetDefaultQuotaPlan(ctx, plan1ID)
+		require.NoError(t, err)
+
+		// Assert 1 - Verify plan1 is default
+		defaultPlan1, err := quotaService.GetDefaultQuotaPlan(ctx)
+		require.NoError(t, err)
+		assert.NotNil(t, defaultPlan1)
+		assert.Equal(t, plan1ID, defaultPlan1.ID)
+		assert.True(t, defaultPlan1.IsDefault)
+
+		// Act 2 - Switch to second plan (this was causing duplicate key error)
+		err = quotaService.SetDefaultQuotaPlan(ctx, plan2ID)
+		require.NoError(t, err, "Switching default plan should not cause duplicate key error")
+
+		// Assert 2 - Verify plan2 is now default and plan1 is not
+		defaultPlan2, err := quotaService.GetDefaultQuotaPlan(ctx)
+		require.NoError(t, err)
+		assert.NotNil(t, defaultPlan2)
+		assert.Equal(t, plan2ID, defaultPlan2.ID, "Second plan should now be default")
+
+		// Verify the old default plan is no longer marked as default
+		oldPlan, err := quotaService.GetQuotaPlan(ctx, plan1ID)
+		require.NoError(t, err)
+		assert.False(t, oldPlan.IsDefault, "Old default plan should no longer be marked as default")
+
+		// Verify the new default plan is marked as default
+		newPlan, err := quotaService.GetQuotaPlan(ctx, plan2ID)
+		require.NoError(t, err)
+		assert.True(t, newPlan.IsDefault, "New default plan should be marked as default")
 
 	}, testOptions())
 }

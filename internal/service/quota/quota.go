@@ -553,11 +553,14 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID ui
 	// This ensures never more than one default, avoiding constraint violations
 	return db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
 		// First, fetch and unset the current default plan (if any)
-		// Fetching the full model ensures validation hooks can run
+		// Use Unscoped() to include soft-deleted records, which prevents
+		// duplicate key violations when trying to set a new default plan
+		// after the old default has been soft-deleted
 		var currentDefault models.QuotaPlan
-		if tx.Where("is_default = ?", true).First(&currentDefault).Error == nil {
+		if tx.Unscoped().Where("is_default = ?", true).First(&currentDefault).Error == nil {
+			// Also use Unscoped() when saving to ensure we can update soft-deleted records
 			currentDefault.IsDefault = false
-			if result := tx.Save(&currentDefault); result.Error != nil {
+			if result := tx.Unscoped().Save(&currentDefault); result.Error != nil {
 				return result
 			}
 		}

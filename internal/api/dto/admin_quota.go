@@ -105,11 +105,11 @@ func (r *QuotaPlanResponse) FromModel(model *models.QuotaPlan) error {
 //
 // This struct exists due to a swagger documentation generation bug where queryutil.Response generics
 // are not getting detected properly as an array type. By providing a concrete struct, we ensure the
-// swagger docs correctly show the plans field as an array of QuotaPlanResponse items.
+// swagger docs correctly show the Plans field (mapped to "data" in JSON) as an array of QuotaPlanResponse items.
 //
 // Note: This struct is only used for swagger documentation, not for actual encoding.
 type PlanListResponse struct {
-	Plans []QuotaPlanResponse `json:"plans"`
+	Plans []QuotaPlanResponse `json:"data"`
 	Total int                 `json:"total"`
 }
 
@@ -208,11 +208,11 @@ func (r *AllowanceGrantResponse) FromModel(model *models.AllowanceGrant) error {
 //
 // This struct exists due to a swagger documentation generation bug where queryutil.Response generics
 // are not getting detected properly as an array type. By providing a concrete struct, we ensure the
-// swagger docs correctly show the grants field as an array of AllowanceGrantResponse items.
+// swagger docs correctly show the Grants field (mapped to "data" in JSON) as an array of AllowanceGrantResponse items.
 //
 // Note: This struct is only used for swagger documentation, not for actual encoding.
 type AllowanceListResponse struct {
-	Grants []AllowanceGrantResponse `json:"grants"`
+	Grants []AllowanceGrantResponse `json:"data"`
 	Total  int                      `json:"total"`
 }
 

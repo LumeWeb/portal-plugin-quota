@@ -105,11 +105,9 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 	}
 
 	// Get user's quota config to determine policy
-	config, err := e.quotaService.GetConfigManager().GetUserQuotaConfig(e.Context(), userID)
+	config, err := e.quotaService.GetConfigManager().GetUserQuotaConfig(ctx.Request().Context(), userID)
 	if err != nil {
-		e.Logger().Error("failed to get user quota config", zap.Error(err))
-		apiErr := NewError(ErrKeyQuotaFetchFailed, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
+		return e.handleQuotaError(ctx, "failed to get user quota config", err)
 	}
 
 	var response dto.QuotaStatusResponse
@@ -118,51 +116,46 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 	switch config.EnforcementPolicy {
 	case models.EnforcementPolicyAllowance:
 		// ALLOWANCE: Use ad-hoc grants (PAYG style)
-		balance, err := e.quotaService.GetAllowanceBalance(e.Context(), userID)
+		balance, err := e.quotaService.GetAllowanceBalance(ctx.Request().Context(), userID)
 		if err != nil {
-			e.Logger().Error("failed to get allowance balance", zap.Error(err))
-			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
+			return e.handleQuotaError(ctx, "failed to get allowance balance", err)
 		}
 
 		response = dto.QuotaStatusResponse{
 			Upload:   e.buildQuotaTypeStatus(balance.UploadUsed, balance.UploadAllowance, balance.UploadRemaining),
 			Download: e.buildQuotaTypeStatus(balance.DownloadUsed, balance.DownloadAllowance, balance.DownloadRemaining),
+			Storage:  e.buildQuotaTypeStatus(balance.StorageUsed, balance.StorageAllowance, balance.StorageRemaining),
 		}
 
 	case models.EnforcementPolicyUnlimited:
 		// UNLIMITED: Show usage without limits
-		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(e.Context(), userID)
+		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(ctx.Request().Context(), userID)
 		if err != nil {
-			e.Logger().Error("failed to get current usage", zap.Error(err))
-			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
+			return e.handleQuotaError(ctx, "failed to get current usage", err)
 		}
 
 		response = dto.QuotaStatusResponse{
 			Upload:   e.buildUnlimitedStatus(usage.BytesUploaded),
 			Download: e.buildUnlimitedStatus(usage.BytesDownloaded),
+			Storage:  e.buildUnlimitedStatus(usage.BytesStored),
 		}
 
 	case models.EnforcementPolicyHardLimits, models.EnforcementPolicyThreshold:
 		// HARD_LIMITS and THRESHOLD: Show effective limits and current usage
-		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(e.Context(), userID)
+		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(ctx.Request().Context(), userID)
 		if err != nil {
-			e.Logger().Error("failed to get current usage", zap.Error(err))
-			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
+			return e.handleQuotaError(ctx, "failed to get current usage", err)
 		}
 
-		limits, err := e.quotaService.GetConfigManager().ResolveEffectiveLimits(e.Context(), userID)
+		limits, err := e.quotaService.GetConfigManager().ResolveEffectiveLimits(ctx.Request().Context(), userID)
 		if err != nil {
-			e.Logger().Error("failed to resolve effective limits", zap.Error(err))
-			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
+			return e.handleQuotaError(ctx, "failed to resolve effective limits", err)
 		}
 
 		response = dto.QuotaStatusResponse{
 			Upload:   e.buildLimitedStatus(usage.BytesUploaded, limits.UploadDailyLimit, limits.UploadThreshold),
 			Download: e.buildLimitedStatus(usage.BytesDownloaded, limits.DownloadDailyLimit, limits.DownloadThreshold),
+			Storage:  e.buildLimitedStatus(usage.BytesStored, limits.StorageLimit, nil),
 		}
 
 	default:
@@ -272,6 +265,13 @@ func (e *QuotaExtension) getUser(ctx httputil.RequestContext) (uint, bool) {
 	return user, true
 }
 
+// handleQuotaError handles quota-related errors with consistent logging and response formatting
+func (e *QuotaExtension) handleQuotaError(ctx httputil.RequestContext, msg string, err error) error {
+	e.Logger().Error(msg, zap.Error(err))
+	apiErr := NewError(ErrKeyQuotaFetchFailed, err)
+	return ctx.Error(apiErr, apiErr.HttpStatus())
+}
+
 // buildUnlimitedStatus builds a quota type status for unlimited usage
 func (e *QuotaExtension) buildUnlimitedStatus(used uint64) dto.QuotaTypeStatus {
 	return dto.QuotaTypeStatus{
@@ -307,5 +307,6 @@ func (e *QuotaExtension) buildLimitedStatus(used uint64, limit, threshold *uint6
 		Limit:      limit,
 		Remaining:  remaining,
 		Percentage: percentage,
+		Threshold:  threshold,
 	}
 }

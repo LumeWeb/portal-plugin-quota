@@ -2,9 +2,9 @@ package dto
 
 // QuotaStatusResponse represents current quota status for progress bars
 type QuotaStatusResponse struct {
-	Upload    QuotaTypeStatus `json:"upload"`
-	Download  QuotaTypeStatus `json:"download"`
-	Bandwidth QuotaTypeStatus `json:"bandwidth,omitempty"`
+	Upload   QuotaTypeStatus `json:"upload"`
+	Download QuotaTypeStatus `json:"download"`
+	Storage  QuotaTypeStatus `json:"storage"`
 }
 
 // FromModel implements DTOResponse interface
@@ -18,6 +18,7 @@ type QuotaTypeStatus struct {
 	Limit      *uint64 `json:"limit,omitempty"`
 	Remaining  *uint64 `json:"remaining,omitempty"`
 	Percentage *int    `json:"percentage"`
+	Threshold  *uint64 `json:"threshold,omitempty"`
 }
 
 // QuotaHistoryRequest parameters for historical data query

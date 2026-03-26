@@ -1077,6 +1077,78 @@ func TestCreateQuotaPlan_CannotCreateAsDefault(t *testing.T) {
 	}, testOptions())
 }
 
+// TestSetDefaultQuotaPlan_AfterSoftDelete tests that setting a default plan still works
+// after the previous default plan has been soft-deleted. This edge case triggers
+// the 'uniq_default_active_one' constraint violation if soft-deleted records with
+// is_default=1 are not properly handled.
+func TestSetDefaultQuotaPlan_AfterSoftDelete(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		db := ctx.DB()
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create first plan and set as default
+		plan1 := &pluginModels.QuotaPlan{
+			Name:               "First Plan",
+			Description:        "First plan",
+			StorageLimit:       10737418240,
+			UploadDailyLimit:   104857600,
+			DownloadDailyLimit: 524288000,
+			UploadTotalLimit:   10737418240,
+			DownloadTotalLimit: 5368709120,
+			IsDefault:          false,
+			IsActive:           new(true),
+		}
+		err := quotaService.CreateQuotaPlan(ctx, plan1)
+		require.NoError(t, err)
+		plan1ID := plan1.ID
+
+		err = quotaService.SetDefaultQuotaPlan(ctx, plan1ID)
+		require.NoError(t, err)
+
+		// Verify plan1 is default
+		defaultPlan, err := quotaService.GetDefaultQuotaPlan(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, plan1ID, defaultPlan.ID)
+
+		// Act - Soft-delete the default plan
+		// Simulates a scenario where a plan is marked as deleted but still exists in database
+		err = db.Model(&pluginModels.QuotaPlan{}).Where("id = ?", plan1ID).Delete(&pluginModels.QuotaPlan{}).Error
+		require.NoError(t, err, "Failed to soft-delete plan")
+
+		// Verify the plan is soft-deleted (exists in DB but has deleted_at set)
+		var count int64
+		err = db.Model(&pluginModels.QuotaPlan{}).Unscoped().Where("id = ?", plan1ID).Count(&count).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), count, "Plan should still exist in database")
+
+		// Arrange - Create second plan and try to set as default
+		plan2 := &pluginModels.QuotaPlan{
+			Name:               "Second Plan",
+			Description:        "Second plan",
+			StorageLimit:       5368709120,
+			UploadDailyLimit:   52428800,
+			DownloadDailyLimit: 262144000,
+			UploadTotalLimit:   5368709120,
+			DownloadTotalLimit: 2684354560,
+			IsDefault:          false,
+			IsActive:           new(true),
+		}
+		err = quotaService.CreateQuotaPlan(ctx, plan2)
+		require.NoError(t, err)
+		plan2ID := plan2.ID
+
+		// Act - This should NOT fail with duplicate entry error
+		err = quotaService.SetDefaultQuotaPlan(ctx, plan2ID)
+		assert.NoError(t, err, "Setting new default after soft-delete should succeed")
+
+		// Verify plan2 is now default
+		newDefaultPlan, err := quotaService.GetDefaultQuotaPlan(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, plan2ID, newDefaultPlan.ID, "Second plan should now be default")
+		assert.True(t, newDefaultPlan.IsDefault, "New plan should be marked as default")
+	}, testOptions())
+}
+
 // TestUpdateAllowanceGrant_PreservesUserID tests that updating an allowance grant
 // doesn't overwrite the UserID with zero when only some fields are specified.
 func TestUpdateAllowanceGrant_PreservesUserID(t *testing.T) {

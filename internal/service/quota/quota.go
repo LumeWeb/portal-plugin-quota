@@ -359,6 +359,12 @@ func (s *QuotaServiceDefault) CreateQuotaPlan(ctx context.Context, plan *models.
 		return fmt.Errorf("database not initialized")
 	}
 
+	// Block creation with IsDefault=true to prevent duplicate key violations
+	// Use SetDefaultQuotaPlan to change which plan is default after creation
+	if plan.IsDefault {
+		return fmt.Errorf("cannot create plan with IsDefault=true - set an existing plan as default using SetDefaultQuotaPlan")
+	}
+
 	// Check if a plan with the same name already exists
 	// Note: We perform this pre-flight check as an optimization for early feedback,
 	// but we also handle UNIQUE constraint violations from the database during creation

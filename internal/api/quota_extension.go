@@ -15,6 +15,7 @@ import (
 	quotaCore "go.lumeweb.com/portal-plugin-quota/core"
 	router "go.lumeweb.com/portal-router"
 	"go.lumeweb.com/portal-plugin-quota/internal/api/dto"
+	models "go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal"
 	"go.uber.org/zap"
 )
@@ -103,16 +104,71 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	balance, err := e.quotaService.GetAllowanceBalance(e.Context(), userID)
+	// Get user's quota config to determine policy
+	config, err := e.quotaService.GetConfigManager().GetUserQuotaConfig(e.Context(), userID)
 	if err != nil {
-		e.Logger().Error("failed to get allowance balance", zap.Error(err))
+		e.Logger().Error("failed to get user quota config", zap.Error(err))
 		apiErr := NewError(ErrKeyQuotaFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
-	response := dto.QuotaStatusResponse{
-		Upload:   e.buildQuotaTypeStatus(balance.UploadUsed, balance.UploadAllowance, balance.UploadRemaining),
-		Download: e.buildQuotaTypeStatus(balance.DownloadUsed, balance.DownloadAllowance, balance.DownloadRemaining),
+	var response dto.QuotaStatusResponse
+
+	// Handle based on enforcement policy
+	switch config.EnforcementPolicy {
+	case models.EnforcementPolicyAllowance:
+		// ALLOWANCE: Use ad-hoc grants (PAYG style)
+		balance, err := e.quotaService.GetAllowanceBalance(e.Context(), userID)
+		if err != nil {
+			e.Logger().Error("failed to get allowance balance", zap.Error(err))
+			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+
+		response = dto.QuotaStatusResponse{
+			Upload:   e.buildQuotaTypeStatus(balance.UploadUsed, balance.UploadAllowance, balance.UploadRemaining),
+			Download: e.buildQuotaTypeStatus(balance.DownloadUsed, balance.DownloadAllowance, balance.DownloadRemaining),
+		}
+
+	case models.EnforcementPolicyUnlimited:
+		// UNLIMITED: Show usage without limits
+		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(e.Context(), userID)
+		if err != nil {
+			e.Logger().Error("failed to get current usage", zap.Error(err))
+			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+
+		response = dto.QuotaStatusResponse{
+			Upload:   e.buildUnlimitedStatus(usage.BytesUploaded),
+			Download: e.buildUnlimitedStatus(usage.BytesDownloaded),
+		}
+
+	case models.EnforcementPolicyHardLimits, models.EnforcementPolicyThreshold:
+		// HARD_LIMITS and THRESHOLD: Show effective limits and current usage
+		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(e.Context(), userID)
+		if err != nil {
+			e.Logger().Error("failed to get current usage", zap.Error(err))
+			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+
+		limits, err := e.quotaService.GetConfigManager().ResolveEffectiveLimits(e.Context(), userID)
+		if err != nil {
+			e.Logger().Error("failed to resolve effective limits", zap.Error(err))
+			apiErr := NewError(ErrKeyQuotaFetchFailed, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
+
+		response = dto.QuotaStatusResponse{
+			Upload:   e.buildLimitedStatus(usage.BytesUploaded, limits.UploadDailyLimit, limits.UploadThreshold),
+			Download: e.buildLimitedStatus(usage.BytesDownloaded, limits.DownloadDailyLimit, limits.DownloadThreshold),
+		}
+
+	default:
+		e.Logger().Warn("unknown enforcement policy", zap.String("policy", string(config.EnforcementPolicy)))
+		apiErr := NewError(ErrKeyQuotaFetchFailed, fmt.Errorf("unknown enforcement policy: %s", config.EnforcementPolicy))
+		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 
 	return httputil.EncodeResponse(ctx, response, response)
@@ -216,4 +272,40 @@ func (e *QuotaExtension) getUser(ctx httputil.RequestContext) (uint, bool) {
 	return user, true
 }
 
+// buildUnlimitedStatus builds a quota type status for unlimited usage
+func (e *QuotaExtension) buildUnlimitedStatus(used uint64) dto.QuotaTypeStatus {
+	return dto.QuotaTypeStatus{
+		Used:       used,
+		Limit:      nil, // nil indicates unlimited
+		Remaining:  nil,
+		Percentage: nil,
+	}
+}
 
+// buildLimitedStatus builds a quota type status for limits and thresholds
+func (e *QuotaExtension) buildLimitedStatus(used uint64, limit, threshold *uint64) dto.QuotaTypeStatus {
+	var remaining *uint64
+	var percentage *int
+
+	// Calculate remaining if limit is set
+	if limit != nil {
+		if used < *limit {
+			r := *limit - used
+			remaining = &r
+		} else {
+			zero := uint64(0)
+			remaining = &zero
+		}
+
+		// Calculate percentage
+		p := e.calculateProgress(used, *limit)
+		percentage = &p
+	}
+
+	return dto.QuotaTypeStatus{
+		Used:       used,
+		Limit:      limit,
+		Remaining:  remaining,
+		Percentage: percentage,
+	}
+}

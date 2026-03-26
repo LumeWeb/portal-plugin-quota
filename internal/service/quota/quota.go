@@ -1117,11 +1117,8 @@ func (s *QuotaServiceDefault) CheckCIDGroupQuotaAvailability(ctx context.Context
 	_, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckCIDGroupQuotaAvailability")
 	defer span.End()
 
-	// Use the service's stored context
-	coreCtx := s.Context()
-
 	// Try to resolve CID to upload ID
-	uploadID, err := s.resolveCIDToUploadID(coreCtx, cid)
+	uploadID, err := s.resolveCIDToUploadID(s.Context(), cid)
 	if err != nil {
 		s.Logger().Warn("Failed to resolve CID to upload ID",
 			zap.Stringer("hash", cid),

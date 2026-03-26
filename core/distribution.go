@@ -1,7 +1,5 @@
 package core
 
-import "math"
-
 // SharedDistribution provides utilities for calculating shared distribution of bytes
 // among multiple users/pinners, following anonymous distribution logic.
 
@@ -25,22 +23,20 @@ func CalculateSharedBytes(totalBytes uint64, userCount uint, precision int) uint
 		return 0
 	}
 
-	// Calculate base shared bytes
-	baseFloat := float64(totalBytes) / float64(userCount)
-
-	// Precision semantics:
-	//   0  -> floor to whole byte
-	//   >0 -> ceil to whole byte
 	var roundedBytes uint64
 	if precision > 0 {
-		roundedBytes = uint64(math.Ceil(baseFloat))
+		// Ceiling division without float conversion
+		roundedBytes = totalBytes / uint64(userCount)
+		if totalBytes % uint64(userCount) != 0 {
+			roundedBytes++
+		}
+		// Ensure minimum of 1 byte when totalBytes > 0
+		if roundedBytes == 0 && totalBytes > 0 {
+			roundedBytes = 1
+		}
 	} else {
-		roundedBytes = uint64(baseFloat) // floor
-	}
-
-	// Ensure minimum of 1 byte when using precision and totalBytes > 0 and userCount > 0
-	if precision > 0 && roundedBytes == 0 && totalBytes > 0 && userCount > 0 {
-		roundedBytes = 1
+		// Floor division
+		roundedBytes = totalBytes / uint64(userCount)
 	}
 
 	return roundedBytes

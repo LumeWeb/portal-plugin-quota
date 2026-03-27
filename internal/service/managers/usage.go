@@ -334,7 +334,7 @@ func (um *UsageManager) recordAnonymousDownload(ctx context.Context, uploadID ui
 
 	// Calculate shared bytes per user
 	userCount := uint(len(pinnedUsers))
-	sharedBytes := um.calculateSharedBytes(bytes, userCount, um.config.SharedUsagePrecision)
+	sharedBytes := pluginCore.CalculateSharedBytes(bytes, userCount, um.config.SharedUsagePrecision)
 
 	// Record usage for each pinned user
 	recordingFailures := 0
@@ -463,32 +463,7 @@ func (um *UsageManager) RecordStorageChange(ctx context.Context, userID, uploadI
 	return nil
 }
 
-// calculateSharedBytes calculates the bytes per user with configurable precision
-func (um *UsageManager) calculateSharedBytes(totalBytes uint64, userCount uint, precision int) uint64 {
-	if userCount == 0 {
-		return 0
-	}
 
-	// Calculate base shared bytes
-	baseFloat := float64(totalBytes) / float64(userCount)
-
-	// Precision semantics:
-	//   0  -> floor to whole byte
-	//   >0 -> ceil to whole byte
-	var roundedBytes uint64
-	if precision > 0 {
-		roundedBytes = uint64(math.Ceil(baseFloat))
-	} else {
-		roundedBytes = uint64(baseFloat) // floor
-	}
-
-	// Ensure minimum of 1 byte when using precision and totalBytes > 0 and userCount > 0
-	if precision > 0 && roundedBytes == 0 && totalBytes > 0 && userCount > 0 {
-		roundedBytes = 1
-	}
-
-	return roundedBytes
-}
 
 // RecordUserUsageDetail records a detailed usage record
 // If tx is provided, it will be used instead of creating a new transaction

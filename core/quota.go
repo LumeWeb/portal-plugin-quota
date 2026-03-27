@@ -81,6 +81,10 @@ type QuotaService interface {
 	SetQuotaEnforcement(ctx context.Context, enabled bool) error
 	SetStorageRetentionDays(ctx context.Context, days int) error
 	GetSystemConfig(ctx context.Context) (enableEnforcement bool, retentionDays int)
+
+	// CID-based quota availability check
+	// Checks if there are any users with sufficient quota to handle an operation on content identified by CID
+	CheckCIDGroupQuotaAvailability(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType UsageType) (bool, error)
 }
 
 // QuotaPlanManager abstracts database operations related to quota plans

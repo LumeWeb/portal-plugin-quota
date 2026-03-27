@@ -481,6 +481,84 @@ func (_c *MockQuotaService_AssignUserToPlan_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// CheckCIDGroupQuotaAvailability provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) CheckCIDGroupQuotaAvailability(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType UsageType) (bool, error) {
+	ret := _mock.Called(ctx, cid, requiredBytes, usageType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CheckCIDGroupQuotaAvailability")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, core.StorageHash, uint64, UsageType) (bool, error)); ok {
+		return returnFunc(ctx, cid, requiredBytes, usageType)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, core.StorageHash, uint64, UsageType) bool); ok {
+		r0 = returnFunc(ctx, cid, requiredBytes, usageType)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, core.StorageHash, uint64, UsageType) error); ok {
+		r1 = returnFunc(ctx, cid, requiredBytes, usageType)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQuotaService_CheckCIDGroupQuotaAvailability_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CheckCIDGroupQuotaAvailability'
+type MockQuotaService_CheckCIDGroupQuotaAvailability_Call struct {
+	*mock.Call
+}
+
+// CheckCIDGroupQuotaAvailability is a helper method to define mock.On call
+//   - ctx context.Context
+//   - cid core.StorageHash
+//   - requiredBytes uint64
+//   - usageType UsageType
+func (_e *MockQuotaService_Expecter) CheckCIDGroupQuotaAvailability(ctx interface{}, cid interface{}, requiredBytes interface{}, usageType interface{}) *MockQuotaService_CheckCIDGroupQuotaAvailability_Call {
+	return &MockQuotaService_CheckCIDGroupQuotaAvailability_Call{Call: _e.mock.On("CheckCIDGroupQuotaAvailability", ctx, cid, requiredBytes, usageType)}
+}
+
+func (_c *MockQuotaService_CheckCIDGroupQuotaAvailability_Call) Run(run func(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType UsageType)) *MockQuotaService_CheckCIDGroupQuotaAvailability_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 core.StorageHash
+		if args[1] != nil {
+			arg1 = args[1].(core.StorageHash)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		var arg3 UsageType
+		if args[3] != nil {
+			arg3 = args[3].(UsageType)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_CheckCIDGroupQuotaAvailability_Call) Return(b bool, err error) *MockQuotaService_CheckCIDGroupQuotaAvailability_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockQuotaService_CheckCIDGroupQuotaAvailability_Call) RunAndReturn(run func(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType UsageType) (bool, error)) *MockQuotaService_CheckCIDGroupQuotaAvailability_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CheckDownloadQuota provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error) {
 	ret := _mock.Called(ctx, userID, requestedBytes)

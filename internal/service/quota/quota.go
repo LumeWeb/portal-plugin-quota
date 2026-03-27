@@ -8,12 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/policies"
 	"go.lumeweb.com/portal/core"
+	portalModels "go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/portal/db"
 	"go.lumeweb.com/queryutil"
 	"go.uber.org/zap"
@@ -29,6 +31,7 @@ type QuotaServiceDefault struct {
 	planManager     pluginCore.QuotaPlanManager
 	limitResolver   pluginCore.LimitResolver
 	usageAggregator pluginCore.UsageAggregator
+	uploadService   core.UploadService
 
 	// System-level configuration (in-memory for now, should be database-backed in production)
 	configMutex            sync.RWMutex
@@ -58,6 +61,12 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 
 			// Initialize plan manager
 			service.planManager = policies.NewQuotaPlanManager(ctx, ctx.DB(), ctx.Logger())
+
+			// Initialize upload service
+			uploadSvc := core.GetService[core.UploadService](ctx, core.UPLOAD_SERVICE)
+			if uploadSvc != nil {
+				service.uploadService = uploadSvc
+			}
 
 			// Initialize policy enforcers
 			policyEnforcers := make(map[models.EnforcementPolicy]pluginCore.PolicyEnforcer)
@@ -1028,6 +1037,247 @@ func (s *QuotaServiceDefault) Reconcile(ctx context.Context) error {
 	// 3. Clean up any orphaned records
 
 	return nil
+}
+
+// CheckGroupQuotaIteration performs iterative filtering to determine if a group of users
+// can collectively handle a quota-based operation with anonymous distribution.
+//
+// The algorithm:
+// 1. Calculates shared bytes for current user count
+// 2. Checks each user's quota availability
+// 3. Filters out users without sufficient quota
+// 4. Re-calculates share with remaining users
+// 5. Repeats until stabilized or empty
+//
+// Parameters:
+//   - users: Initial list of user IDs to check
+//   - requiredBytes: Total bytes to be shared across users
+//   - checkQuota: Function that checks if a user has sufficient quota for a given byte amount
+//   - precision: Decimal precision for shared bytes calculation
+//
+// Returns:
+//   - bool: True if some users can collectively handle the operation, false otherwise
+//   - error: Error from quota checking (nil if no errors occurred)
+func CheckGroupQuotaIteration(
+	users []uint,
+	requiredBytes uint64,
+	checkQuota func(uint, uint64) (bool, error),
+	precision int,
+) (bool, error) {
+	currentUsers := users
+
+	for {
+		userCount := uint(len(currentUsers))
+		sharedBytes := pluginCore.CalculateSharedBytes(requiredBytes, userCount, precision)
+
+		// Check each user and collect those with sufficient quota
+		sufficientUsers := make([]uint, 0, len(currentUsers))
+		for _, userID := range currentUsers {
+			hasSufficient, err := checkQuota(userID, sharedBytes)
+			if err != nil {
+				return false, err
+			}
+
+			if hasSufficient {
+				sufficientUsers = append(sufficientUsers, userID)
+			}
+		}
+
+		// No users can handle their share → cannot serve
+		if len(sufficientUsers) == 0 {
+			return false, nil
+		}
+
+		// All current users have sufficient quota → stabilized
+		if len(sufficientUsers) == len(currentUsers) {
+			return true, nil
+		}
+
+		// Need to re-calculate with filtered users
+		currentUsers = sufficientUsers
+	}
+}
+
+// CheckCIDGroupQuotaAvailability checks if the group of users pinning content can collectively handle an operation
+// on content identified by CID, following anonymous distribution logic with iterative filtering.
+//
+// This method:
+// 1. Resolves the CID to get users who have pinned this content
+// 2. Iteratively calculates per-user cost using anonymous distribution logic
+// 3. Filters out users who lack sufficient quota for their share
+// 4. Re-calculates share with remaining users, repeating until:
+//    - No users remain (cannot serve) → returns false
+//    - All remaining users have sufficient quota (stabilized) → returns true
+//
+// Algorithm rationale:
+// - As users are excluded due to insufficient quota, the per-user cost increases
+// - This may cause more users to be excluded, requiring multiple iterations
+// - The process stabilizes when either no users can serve or all remaining users can
+func (s *QuotaServiceDefault) CheckCIDGroupQuotaAvailability(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType pluginCore.UsageType) (bool, error) {
+	_, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckCIDGroupQuotaAvailability")
+	defer span.End()
+
+	// Try to resolve CID to upload ID
+	uploadID, err := s.resolveCIDToUploadID(ctx, cid)
+	if err != nil {
+		s.Logger().Warn("Failed to resolve CID to upload ID",
+			zap.Stringer("hash", cid),
+			zap.Error(err))
+		return false, fmt.Errorf("failed to resolve CID: %w", err)
+	}
+
+	if uploadID == 0 {
+		s.Logger().Debug("No upload found for CID",
+			zap.Stringer("hash", cid))
+		return false, nil
+	}
+
+	// Get all users who have pinned this upload
+	pinningUsers, err := s.getPinningUsersForUpload(ctx, uploadID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get pinning users: %w", err)
+	}
+
+	if len(pinningUsers) == 0 {
+		s.Logger().Debug("No users pinning the content",
+			zap.Stringer("hash", cid),
+			zap.Uint("uploadID", uploadID))
+		return false, nil
+	}
+
+	// Use iterative filtering algorithm to check if group can handle the operation
+	available, err := CheckGroupQuotaIteration(pinningUsers, requiredBytes, func(userID uint, bytes uint64) (bool, error) {
+		return s.checkUserQuotaForAction(ctx, userID, bytes, usageType)
+	}, s.config.SharedUsagePrecision)
+
+	if err != nil {
+		s.Logger().Error("Group quota check failed",
+			zap.Stringer("hash", cid),
+			zap.Error(err))
+		return false, fmt.Errorf("group quota check failed: %w", err)
+	}
+
+	if available {
+		s.Logger().Debug("Group can handle CID operation",
+			zap.Stringer("hash", cid),
+			zap.Int("initialPinners", len(pinningUsers)),
+			zap.Uint64("requiredBytes", requiredBytes),
+			zap.String("usageType", string(usageType)))
+	} else {
+		s.Logger().Debug("Group cannot handle CID operation",
+			zap.Stringer("hash", cid),
+			zap.Int("initialPinners", len(pinningUsers)),
+			zap.Uint64("requiredBytes", requiredBytes),
+			zap.String("usageType", string(usageType)))
+	}
+
+	return available, nil
+
+	return false, nil
+}
+
+// resolveCIDToUploadID attempts to resolve a StorageHash to an upload ID using the portal's upload service.
+func (s *QuotaServiceDefault) resolveCIDToUploadID(ctx context.Context, storageHash core.StorageHash) (uint, error) {
+	_, span := core.TraceMethod(ctx, "QuotaServiceDefault.resolveCIDToUploadID")
+	defer span.End()
+
+	// Try to get the upload by its hash
+	upload, err := s.uploadService.GetUpload(ctx, storageHash)
+	if err != nil {
+		if errors.Is(err, core.ErrUploadNotFound) {
+			s.Logger().Debug("No upload found for CID",
+				zap.Stringer("hash", storageHash))
+			return 0, nil
+		}
+		s.Logger().Warn("Failed to get upload by hash",
+			zap.Stringer("hash", storageHash),
+			zap.Error(err))
+		return 0, fmt.Errorf("failed to get upload by hash: %w", err)
+	}
+
+	if upload == nil {
+		s.Logger().Debug("Upload is nil for hash",
+			zap.Stringer("hash", storageHash))
+		return 0, nil
+	}
+
+	s.Logger().Debug("Successfully resolved hash to upload ID",
+		zap.Stringer("hash", storageHash),
+		zap.Uint("uploadID", upload.ID))
+
+	return upload.ID, nil
+}
+
+// getPinningUsersForUpload returns all user IDs that have pinned the given upload
+// Copied from UsageManager but added here for CID availability checking
+func (s *QuotaServiceDefault) getPinningUsersForUpload(ctx context.Context, uploadID uint) ([]uint, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.getPinningUsersForUpload")
+	defer span.End()
+
+	usageManager := s.GetUsageManager()
+	if usageManager == nil {
+		return nil, fmt.Errorf("usage manager not available")
+	}
+
+	// Access pin service through the core
+	pinService := core.GetService[core.PinService](s.Context(), core.PIN_SERVICE)
+	if pinService == nil {
+		return nil, fmt.Errorf("pin service not available")
+	}
+
+	pins, err := pinService.GetPinsByUploadID(ctx, uploadID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pins for upload: %w", err)
+	}
+
+	return lo.Uniq(lo.Map(pins, func(pin *portalModels.Pin, _ int) uint {
+		return pin.UserID
+	})), nil
+}
+
+// checkUserQuotaForAction checks if a user has sufficient quota for a specific action
+func (s *QuotaServiceDefault) checkUserQuotaForAction(ctx context.Context, userID uint, requiredBytes uint64, usageType pluginCore.UsageType) (bool, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.checkUserQuotaForAction")
+	defer span.End()
+
+	// Check based on usage type
+	switch usageType {
+	case pluginCore.UsageTypeUpload:
+		return s.checkUploadQuotaWithUsage(ctx, userID, requiredBytes)
+	case pluginCore.UsageTypeDownload:
+		return s.checkDownloadQuotaWithUsage(ctx, userID, requiredBytes)
+	case pluginCore.UsageTypeStorageAdd:
+		return s.checkStorageQuotaWithUsage(ctx, userID, requiredBytes)
+	default:
+		return false, fmt.Errorf("unsupported usage type: %s", usageType)
+	}
+}
+
+// checkUploadQuotaWithUsage checks if user has sufficient upload quota given current usage
+func (s *QuotaServiceDefault) checkUploadQuotaWithUsage(ctx context.Context, userID uint, requiredBytes uint64) (bool, error) {
+	result, err := s.CheckUploadQuota(ctx, userID, requiredBytes)
+	if err != nil {
+		return false, fmt.Errorf("failed to check upload quota: %w", err)
+	}
+	return result.Allowed, nil
+}
+
+// checkDownloadQuotaWithUsage checks if user has sufficient download quota given current usage
+func (s *QuotaServiceDefault) checkDownloadQuotaWithUsage(ctx context.Context, userID uint, requiredBytes uint64) (bool, error) {
+	result, err := s.CheckDownloadQuota(ctx, userID, requiredBytes)
+	if err != nil {
+		return false, fmt.Errorf("failed to check download quota: %w", err)
+	}
+	return result.Allowed, nil
+}
+
+// checkStorageQuotaWithUsage checks if user has sufficient storage quota given current usage
+func (s *QuotaServiceDefault) checkStorageQuotaWithUsage(ctx context.Context, userID uint, requiredBytes uint64) (bool, error) {
+	result, err := s.CheckStorageQuota(ctx, userID, requiredBytes)
+	if err != nil {
+		return false, fmt.Errorf("failed to check storage quota: %w", err)
+	}
+	return result.Allowed, nil
 }
 
 func (s *QuotaServiceDefault) CleanupOldRecords(ctx context.Context, retentionDays int) (int64, error) {

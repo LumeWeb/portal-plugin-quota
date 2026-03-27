@@ -1118,7 +1118,7 @@ func (s *QuotaServiceDefault) CheckCIDGroupQuotaAvailability(ctx context.Context
 	defer span.End()
 
 	// Try to resolve CID to upload ID
-	uploadID, err := s.resolveCIDToUploadID(s.Context(), cid)
+	uploadID, err := s.resolveCIDToUploadID(ctx, cid)
 	if err != nil {
 		s.Logger().Warn("Failed to resolve CID to upload ID",
 			zap.Stringer("hash", cid),
@@ -1177,12 +1177,12 @@ func (s *QuotaServiceDefault) CheckCIDGroupQuotaAvailability(ctx context.Context
 }
 
 // resolveCIDToUploadID attempts to resolve a StorageHash to an upload ID using the portal's upload service.
-func (s *QuotaServiceDefault) resolveCIDToUploadID(coreCtx core.Context, storageHash core.StorageHash) (uint, error) {
-	_, span := core.TraceMethod(coreCtx, "QuotaServiceDefault.resolveCIDToUploadID")
+func (s *QuotaServiceDefault) resolveCIDToUploadID(ctx context.Context, storageHash core.StorageHash) (uint, error) {
+	_, span := core.TraceMethod(ctx, "QuotaServiceDefault.resolveCIDToUploadID")
 	defer span.End()
 
 	// Try to get the upload by its hash
-	upload, err := s.uploadService.GetUpload(coreCtx, storageHash)
+	upload, err := s.uploadService.GetUpload(ctx, storageHash)
 	if err != nil {
 		if errors.Is(err, core.ErrUploadNotFound) {
 			s.Logger().Debug("No upload found for CID",

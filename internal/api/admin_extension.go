@@ -146,6 +146,7 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Set a quota plan as the default for new users"),
 			router.WithTags("quota", "plans"),
 			router.WithPathParam("planID", "Numeric ID of the quota plan", ""),
+			router.WithSuccessResponse(http.StatusNoContent, "Default plan set successfully"),
 		),
 
 		// User Quota Config Management

@@ -139,6 +139,7 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Delete a quota plan by ID"),
 			router.WithTags("quota", "plans"),
 			router.WithPathParam("planID", "Numeric ID of the quota plan", ""),
+			router.WithoutDefaultSuccessResponse(),
 			router.WithSuccessResponse(http.StatusNoContent, "Plan deleted successfully"),
 		),
 		e.newRoute(http.MethodPost, "/plans/:planID/default", e.handleSetDefaultPlan,
@@ -146,6 +147,7 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Set a quota plan as the default for new users"),
 			router.WithTags("quota", "plans"),
 			router.WithPathParam("planID", "Numeric ID of the quota plan", ""),
+			router.WithoutDefaultSuccessResponse(),
 			router.WithSuccessResponse(http.StatusNoContent, "Default plan set successfully"),
 		),
 
@@ -171,6 +173,7 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Remove a user's assigned quota plan (sets to NULL)"),
 			router.WithTags("quota", "user-configs"),
 			router.WithPathParam("userID", "Numeric ID of the user", ""),
+			router.WithoutDefaultSuccessResponse(),
 			router.WithSuccessResponse(http.StatusNoContent, "User quota plan reset successfully"),
 		),
 
@@ -203,6 +206,7 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Deactivate an allowance grant"),
 			router.WithTags("quota", "grants"),
 			router.WithPathParam("grantID", "Numeric ID of the allowance grant", ""),
+			router.WithoutDefaultSuccessResponse(),
 			router.WithSuccessResponse(http.StatusNoContent, "Grant deactivated"),
 		),
 

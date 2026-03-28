@@ -1454,14 +1454,11 @@ func TestUpdateUserQuotaConfig_UpdatesFields(t *testing.T) {
 		}
 
 		// Act - Update the config
-		err = quotaService.UpdateUserQuotaConfig(ctx, userID, update)
+		updatedConfig, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update)
 
 		// Assert
 		require.NoError(t, err)
-
-		// Verify the update
-		updatedConfig, err := quotaService.GetQuotaConfig(ctx, userID)
-		require.NoError(t, err)
+		require.NotNil(t, updatedConfig)
 		assert.Equal(t, newStorageLimit, *updatedConfig.StorageLimit)
 		assert.Equal(t, newPolicy, updatedConfig.EnforcementPolicy)
 	}, testOptions())
@@ -1484,10 +1481,11 @@ func TestUpdateUserQuotaConfig_NoFields_ReturnsError(t *testing.T) {
 
 		// Act - Update with empty update (no fields)
 		update := &pluginCore.UserQuotaConfigUpdate{}
-		err = quotaService.UpdateUserQuotaConfig(ctx, userID, update)
+		updatedConfig, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update)
 
 		// Assert
 		require.Error(t, err)
+		require.Nil(t, updatedConfig)
 		assert.Contains(t, err.Error(), "no fields to update")
 	}, testOptions())
 }

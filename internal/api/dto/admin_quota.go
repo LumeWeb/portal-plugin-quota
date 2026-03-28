@@ -356,16 +356,16 @@ type UserQuotaConfigListResponse struct {
 
 // UserQuotaConfigUpdateRequest represents a request to update a user's quota config
 type UserQuotaConfigUpdateRequest struct {
-	EnforcementPolicy  *string `json:"enforcement_policy,omitempty"`
-	QuotaPlanID        *uint64 `json:"quota_plan_id,omitempty"`
-	StorageLimit       *int64  `json:"storage_limit,omitempty"`
-	UploadDailyLimit   *int64  `json:"upload_daily_limit,omitempty"`
-	DownloadDailyLimit *int64  `json:"download_daily_limit,omitempty"`
-	UploadTotalLimit   *int64  `json:"upload_total_limit,omitempty"`
-	DownloadTotalLimit *int64  `json:"download_total_limit,omitempty"`
-	StorageThreshold   *int64  `json:"storage_threshold,omitempty"`
-	UploadThreshold    *int64  `json:"upload_threshold,omitempty"`
-	DownloadThreshold  *int64  `json:"download_threshold,omitempty"`
+	EnforcementPolicy  *models.EnforcementPolicy `json:"enforcement_policy,omitempty"`
+	QuotaPlanID        *uint64                   `json:"quota_plan_id,omitempty"`
+	StorageLimit       *int64                    `json:"storage_limit,omitempty"`
+	UploadDailyLimit   *int64                    `json:"upload_daily_limit,omitempty"`
+	DownloadDailyLimit *int64                    `json:"download_daily_limit,omitempty"`
+	UploadTotalLimit   *int64                    `json:"upload_total_limit,omitempty"`
+	DownloadTotalLimit *int64                    `json:"download_total_limit,omitempty"`
+	StorageThreshold   *int64                    `json:"storage_threshold,omitempty"`
+	UploadThreshold    *int64                    `json:"upload_threshold,omitempty"`
+	DownloadThreshold  *int64                    `json:"download_threshold,omitempty"`
 }
 
 func (r *UserQuotaConfigUpdateRequest) Schema() *z.StructSchema {

@@ -505,49 +505,21 @@ func (e *QuotaAdminExtension) handleUpdateUserQuotaConfig(c echo.Context) error 
 	// Convert request to core update struct
 	update := &quotaCore.UserQuotaConfigUpdate{}
 
-	if req.EnforcementPolicy != nil {
-		policy := quotaCore.EnforcementPolicy(*req.EnforcementPolicy)
-		update.EnforcementPolicy = &policy
-	}
-	if req.QuotaPlanID != nil {
-		update.QuotaPlanID = req.QuotaPlanID
-	}
-	if req.StorageLimit != nil {
-		update.StorageLimit = req.StorageLimit
-	}
-	if req.UploadDailyLimit != nil {
-		update.UploadDailyLimit = req.UploadDailyLimit
-	}
-	if req.DownloadDailyLimit != nil {
-		update.DownloadDailyLimit = req.DownloadDailyLimit
-	}
-	if req.UploadTotalLimit != nil {
-		update.UploadTotalLimit = req.UploadTotalLimit
-	}
-	if req.DownloadTotalLimit != nil {
-		update.DownloadTotalLimit = req.DownloadTotalLimit
-	}
-	if req.StorageThreshold != nil {
-		update.StorageThreshold = req.StorageThreshold
-	}
-	if req.UploadThreshold != nil {
-		update.UploadThreshold = req.UploadThreshold
-	}
-	if req.DownloadThreshold != nil {
-		update.DownloadThreshold = req.DownloadThreshold
-	}
+	update.EnforcementPolicy = req.EnforcementPolicy
+	update.QuotaPlanID = req.QuotaPlanID
+	update.StorageLimit = req.StorageLimit
+	update.UploadDailyLimit = req.UploadDailyLimit
+	update.DownloadDailyLimit = req.DownloadDailyLimit
+	update.UploadTotalLimit = req.UploadTotalLimit
+	update.DownloadTotalLimit = req.DownloadTotalLimit
+	update.StorageThreshold = req.StorageThreshold
+	update.UploadThreshold = req.UploadThreshold
+	update.DownloadThreshold = req.DownloadThreshold
 
-	if err := e.quotaService.UpdateUserQuotaConfig(reqCtx, userID, update); err != nil {
+	config, err := e.quotaService.UpdateUserQuotaConfig(reqCtx, userID, update)
+	if err != nil {
 		e.Logger().Error("failed to update user quota config", zap.Error(err))
 		apiErr := NewError(ErrKeyConfigUpdateFailed, err)
-		return ctx.Error(apiErr, apiErr.HttpStatus())
-	}
-
-	// Fetch the updated config to return
-	config, err := e.quotaService.GetQuotaConfig(reqCtx, userID)
-	if err != nil {
-		e.Logger().Error("failed to fetch updated user quota config", zap.Error(err))
-		apiErr := NewError(ErrKeyConfigFetchFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}
 

@@ -708,17 +708,17 @@ func (s *QuotaServiceDefault) ListUserQuotaConfigs(ctx context.Context, filters 
 	return configs, total, nil
 }
 
-// UpdateUserQuotaConfig updates a user's quota configuration
-func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID uint, update *pluginCore.UserQuotaConfigUpdate) error {
+// UpdateUserQuotaConfig updates a user's quota configuration and returns the updated config
+func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID uint, update *pluginCore.UserQuotaConfigUpdate) (*models.UserQuotaConfig, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.UpdateUserQuotaConfig")
 	defer span.End()
 
 	if s.DB() == nil {
-		return fmt.Errorf("database not initialized")
+		return nil, fmt.Errorf("database not initialized")
 	}
 
 	if userID == 0 {
-		return fmt.Errorf("invalid user ID")
+		return nil, fmt.Errorf("invalid user ID")
 	}
 
 	// Build update map with only provided fields
@@ -756,8 +756,10 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 	}
 
 	if len(updates) == 0 {
-		return fmt.Errorf("no fields to update")
+		return nil, fmt.Errorf("no fields to update")
 	}
+
+	var updatedConfig models.UserQuotaConfig
 
 	// Ensure the user has a quota config first, then apply updates
 	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
@@ -771,12 +773,17 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 		}
 
 		// Apply the updates to the found/created config
-		return tx.Model(&config).Updates(updates)
+		if result = tx.Model(&config).Updates(updates); result.Error != nil {
+			return result
+		}
+
+		// Reload the config to return the updated state
+		return tx.Where("user_id = ?", userID).First(&updatedConfig)
 	}); err != nil {
-		return fmt.Errorf("failed to update user quota config: %w", err)
+		return nil, fmt.Errorf("failed to update user quota config: %w", err)
 	}
 
-	return nil
+	return &updatedConfig, nil
 }
 
 // ResetUserQuotaPlan resets a user's quota plan assignment to NULL

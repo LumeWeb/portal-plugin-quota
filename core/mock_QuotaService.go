@@ -3390,20 +3390,31 @@ func (_c *MockQuotaService_UpdateQuotaPlan_Call) RunAndReturn(run func(ctx conte
 }
 
 // UpdateUserQuotaConfig provides a mock function for the type MockQuotaService
-func (_mock *MockQuotaService) UpdateUserQuotaConfig(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) error {
+func (_mock *MockQuotaService) UpdateUserQuotaConfig(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) (*UserQuotaConfig, error) {
 	ret := _mock.Called(ctx, userID, update)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateUserQuotaConfig")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, *UserQuotaConfigUpdate) error); ok {
+	var r0 *UserQuotaConfig
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, *UserQuotaConfigUpdate) (*UserQuotaConfig, error)); ok {
+		return returnFunc(ctx, userID, update)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, *UserQuotaConfigUpdate) *UserQuotaConfig); ok {
 		r0 = returnFunc(ctx, userID, update)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*UserQuotaConfig)
+		}
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, *UserQuotaConfigUpdate) error); ok {
+		r1 = returnFunc(ctx, userID, update)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockQuotaService_UpdateUserQuotaConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateUserQuotaConfig'
@@ -3442,12 +3453,12 @@ func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) Return(err error) *MockQuotaService_UpdateUserQuotaConfig_Call {
-	_c.Call.Return(err)
+func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) Return(v *UserQuotaConfig, err error) *MockQuotaService_UpdateUserQuotaConfig_Call {
+	_c.Call.Return(v, err)
 	return _c
 }
 
-func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) RunAndReturn(run func(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) error) *MockQuotaService_UpdateUserQuotaConfig_Call {
+func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) RunAndReturn(run func(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) (*UserQuotaConfig, error)) *MockQuotaService_UpdateUserQuotaConfig_Call {
 	_c.Call.Return(run)
 	return _c
 }

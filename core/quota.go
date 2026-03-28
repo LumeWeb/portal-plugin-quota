@@ -49,7 +49,7 @@ type QuotaService interface {
 
 	// User Quota Config Management
 	ListUserQuotaConfigs(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*UserQuotaConfig, int64, error)
-	UpdateUserQuotaConfig(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) error
+	UpdateUserQuotaConfig(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) (*UserQuotaConfig, error)
 	ResetUserQuotaPlan(ctx context.Context, userID uint) error
 
 	// Allowance Management (for ALLOWANCE policy)

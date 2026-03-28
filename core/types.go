@@ -156,3 +156,17 @@ type SystemStats struct {
 	TotalUsageBytes uint64 `json:"total_usage_bytes"`
 }
 
+// UserQuotaConfigUpdate represents the fields that can be updated for a user's quota config
+type UserQuotaConfigUpdate struct {
+	EnforcementPolicy  *EnforcementPolicy `json:"enforcement_policy,omitempty"`
+	QuotaPlanID        *uint64            `json:"quota_plan_id,omitempty"`
+	StorageLimit       *int64             `json:"storage_limit,omitempty"`
+	UploadDailyLimit   *int64             `json:"upload_daily_limit,omitempty"`
+	DownloadDailyLimit *int64             `json:"download_daily_limit,omitempty"`
+	UploadTotalLimit   *int64             `json:"upload_total_limit,omitempty"`
+	DownloadTotalLimit *int64             `json:"download_total_limit,omitempty"`
+	StorageThreshold   *int64             `json:"storage_threshold,omitempty"`
+	UploadThreshold    *int64             `json:"upload_threshold,omitempty"`
+	DownloadThreshold  *int64             `json:"download_threshold,omitempty"`
+}
+

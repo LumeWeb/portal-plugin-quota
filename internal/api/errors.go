@@ -35,6 +35,7 @@ const (
 	ErrKeyCleanupFailed       core.ErrorType = "CLEANUP_FAILED"
 	ErrKeyConfigUpdateFailed  core.ErrorType = "CONFIG_UPDATE_FAILED"
 	ErrKeyConfigFetchFailed   core.ErrorType = "CONFIG_FETCH_FAILED"
+	ErrKeyPlanInUse         core.ErrorType = "PLAN_IN_USE"
 )
 
 // ErrorDetails represents the structured error response format
@@ -118,6 +119,7 @@ func init() {
 		ErrKeyCleanupFailed:       {Key: ErrKeyCleanupFailed, Message: "Failed to cleanup old records"},
 		ErrKeyConfigUpdateFailed:  {Key: ErrKeyConfigUpdateFailed, Message: "Failed to update system config"},
 		ErrKeyConfigFetchFailed:   {Key: ErrKeyConfigFetchFailed, Message: "Failed to fetch system config"},
+		ErrKeyPlanInUse:         {Key: ErrKeyPlanInUse, Message: "Cannot delete plan because it is assigned to users"},
 	})
 
 	core.MustRegisterErrorCodes(Namespace, map[core.ErrorType]int{
@@ -144,6 +146,7 @@ func init() {
 		ErrKeyCleanupFailed:       http.StatusInternalServerError,
 		ErrKeyConfigUpdateFailed:  http.StatusInternalServerError,
 		ErrKeyConfigFetchFailed:   http.StatusInternalServerError,
+		ErrKeyPlanInUse:         http.StatusConflict,
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"go.lumeweb.com/portal-middleware/auth/jwt"
@@ -98,6 +99,9 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 	// Create reusable schema for AllowanceGrantResponse
 	grantSchema := queryutil.NewSchemaProvider().ForType(&dto.AllowanceGrantResponse{})
 
+	// Create reusable schema for UserQuotaConfigResponse
+	userConfigSchema := queryutil.NewSchemaProvider().ForType(&dto.UserQuotaConfigResponse{})
+
 	return []router.Route{
 		// Quota Plan Management
 		e.newRoute(http.MethodGet, "/plans", e.handleListPlans,
@@ -142,6 +146,31 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithDescription("Set a quota plan as the default for new users"),
 			router.WithTags("quota", "plans"),
 			router.WithPathParam("planID", "Numeric ID of the quota plan", ""),
+		),
+
+		// User Quota Config Management
+		e.newRoute(http.MethodGet, "/user-configs", e.handleListUserQuotaConfigs,
+			router.WithSummary("List user quota configs"),
+			router.WithDescription("Get a paginated list of user quota configurations with filtering and sorting"),
+			router.WithTags("quota", "user-configs"),
+			router.WithSchema(userConfigSchema),
+			router.WithFilterParamsFromSchema(userConfigSchema),
+			router.WithSuccessResponse(http.StatusOK, "List of user quota configs", router.WithJSONContent(&dto.UserQuotaConfigListResponse{})),
+		),
+		e.newRoute(http.MethodPut, "/user-configs/:userID", e.handleUpdateUserQuotaConfig,
+			router.WithSummary("Update user quota config"),
+			router.WithDescription("Update a user's quota configuration"),
+			router.WithTags("quota", "user-configs"),
+			router.WithPathParam("userID", "Numeric ID of the user", ""),
+			router.WithRequestBody(&dto.UserQuotaConfigUpdateRequest{}, "User quota config update", true),
+			router.WithSuccessResponse(http.StatusOK, "User quota config updated", router.WithJSONContent(&dto.UserQuotaConfigResponse{})),
+		),
+		e.newRoute(http.MethodDelete, "/user-configs/:userID/plan", e.handleResetUserQuotaPlan,
+			router.WithSummary("Reset user quota plan"),
+			router.WithDescription("Remove a user's assigned quota plan (sets to NULL)"),
+			router.WithTags("quota", "user-configs"),
+			router.WithPathParam("userID", "Numeric ID of the user", ""),
+			router.WithSuccessResponse(http.StatusNoContent, "User quota plan reset successfully"),
 		),
 
 		// Allowance Management
@@ -389,6 +418,11 @@ func (e *QuotaAdminExtension) handleDeletePlan(c echo.Context) error {
 			apiErr := NewError(ErrKeyPlanNotFound, err)
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
+		// Check if the error indicates the plan is in use
+		if strings.Contains(err.Error(), "users assigned") {
+			apiErr := NewError(ErrKeyPlanInUse, err)
+			return ctx.Error(apiErr, apiErr.HttpStatus())
+		}
 		e.Logger().Error("failed to delete quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyPlanDeleteFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
@@ -413,6 +447,97 @@ func (e *QuotaAdminExtension) handleSetDefaultPlan(c echo.Context) error {
 			return ctx.Error(apiErr, apiErr.HttpStatus())
 		}
 		e.Logger().Error("failed to set default quota plan", zap.Error(err))
+		apiErr := NewError(ErrKeyConfigUpdateFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// User Quota Config Management Handlers
+func (e *QuotaAdminExtension) handleListUserQuotaConfigs(c echo.Context) error {
+	ctx := httputil.Context(c)
+
+	return queryutilHttp.ProcessListRequest(
+		c.Response(),
+		c.Request(),
+		"user-configs",
+		func(filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.UserQuotaConfig, int64, error) {
+			return e.quotaService.ListUserQuotaConfigs(ctx.Request().Context(), filters, sorts, pagination)
+		},
+		func(config *models.UserQuotaConfig) dto.UserQuotaConfigResponse {
+			return dto.UserQuotaConfigResponse{
+				ID:                 config.ID,
+				UserID:             config.UserID,
+				EnforcementPolicy:  string(config.EnforcementPolicy),
+				QuotaPlanID:        config.QuotaPlanID,
+				StorageLimit:       config.StorageLimit,
+				UploadDailyLimit:   config.UploadDailyLimit,
+				DownloadDailyLimit: config.DownloadDailyLimit,
+				UploadTotalLimit:   config.UploadTotalLimit,
+				DownloadTotalLimit: config.DownloadTotalLimit,
+				StorageThreshold:   config.StorageThreshold,
+				UploadThreshold:    config.UploadThreshold,
+				DownloadThreshold:  config.DownloadThreshold,
+				CreatedAt:          config.CreatedAt,
+				UpdatedAt:          config.UpdatedAt,
+			}
+		},
+	)
+}
+
+func (e *QuotaAdminExtension) handleUpdateUserQuotaConfig(c echo.Context) error {
+	ctx := httputil.Context(c)
+	reqCtx := ctx.Context.Request().Context()
+
+	userID, err := parseUintParam(c, "userID")
+	if err != nil {
+		apiErr := NewError(ErrKeyInvalidRequestParameters, fmt.Errorf("invalid user ID: %w", err))
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	var req dto.UserQuotaConfigUpdateRequest
+	_, ok := httputil.DecodeAndValidateRequest[*dto.UserQuotaConfigUpdateRequest, *dto.UserQuotaConfigUpdateRequest](ctx, &req)
+	if !ok {
+		return nil
+	}
+
+	// Convert request to core update struct
+	update := &quotaCore.UserQuotaConfigUpdate{}
+
+	update.EnforcementPolicy = req.EnforcementPolicy
+	update.QuotaPlanID = req.QuotaPlanID
+	update.StorageLimit = req.StorageLimit
+	update.UploadDailyLimit = req.UploadDailyLimit
+	update.DownloadDailyLimit = req.DownloadDailyLimit
+	update.UploadTotalLimit = req.UploadTotalLimit
+	update.DownloadTotalLimit = req.DownloadTotalLimit
+	update.StorageThreshold = req.StorageThreshold
+	update.UploadThreshold = req.UploadThreshold
+	update.DownloadThreshold = req.DownloadThreshold
+
+	config, err := e.quotaService.UpdateUserQuotaConfig(reqCtx, userID, update)
+	if err != nil {
+		e.Logger().Error("failed to update user quota config", zap.Error(err))
+		apiErr := NewError(ErrKeyConfigUpdateFailed, err)
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	return httputil.EncodeResponse(ctx, config, &dto.UserQuotaConfigResponse{})
+}
+
+func (e *QuotaAdminExtension) handleResetUserQuotaPlan(c echo.Context) error {
+	ctx := httputil.Context(c)
+	reqCtx := ctx.Context.Request().Context()
+
+	userID, err := parseUintParam(c, "userID")
+	if err != nil {
+		apiErr := NewError(ErrKeyInvalidRequestParameters, fmt.Errorf("invalid user ID: %w", err))
+		return ctx.Error(apiErr, apiErr.HttpStatus())
+	}
+
+	if err := e.quotaService.ResetUserQuotaPlan(reqCtx, userID); err != nil {
+		e.Logger().Error("failed to reset user quota plan", zap.Error(err))
 		apiErr := NewError(ErrKeyConfigUpdateFailed, err)
 		return ctx.Error(apiErr, apiErr.HttpStatus())
 	}

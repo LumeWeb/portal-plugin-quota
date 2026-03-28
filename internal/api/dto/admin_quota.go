@@ -22,6 +22,11 @@ var (
 	_ httputil.DTORequest[*CleanupRequest] = (*CleanupRequest)(nil)
 	_ httputil.DTOValidator = (*QuotaConfigUpdateRequest)(nil)
 	_ httputil.DTORequest[*QuotaConfigUpdateRequest] = (*QuotaConfigUpdateRequest)(nil)
+	_ httputil.DTOValidator = (*UserQuotaConfigUpdateRequest)(nil)
+	_ httputil.DTORequest[*UserQuotaConfigUpdateRequest] = (*UserQuotaConfigUpdateRequest)(nil)
+	_ httputil.DTOValidator = (*UserQuotaConfigListRequest)(nil)
+	_ httputil.DTORequest[*UserQuotaConfigListRequest] = (*UserQuotaConfigListRequest)(nil)
+	_ httputil.DTOResponse[*models.UserQuotaConfig] = (*UserQuotaConfigResponse)(nil)
 )
 
 // QuotaPlanRequest describes a quota plan for creation/update
@@ -294,6 +299,107 @@ type ReconcileResponse struct {
 
 func (r ReconcileResponse) FromModel(_ ReconcileResponse) error {
 	return nil
+}
+
+// UserQuotaConfigResponse represents a user quota configuration
+// Note: Uses pointer for UserID to avoid gorm.Model embedding issues
+type UserQuotaConfigResponse struct {
+	ID                 uint      `json:"id"`
+	UserID             uint      `json:"user_id"`
+	EnforcementPolicy  string    `json:"enforcement_policy"`
+	QuotaPlanID        *uint64   `json:"quota_plan_id,omitempty"`
+	StorageLimit       *int64    `json:"storage_limit,omitempty"`
+	UploadDailyLimit   *int64    `json:"upload_daily_limit,omitempty"`
+	DownloadDailyLimit *int64    `json:"download_daily_limit,omitempty"`
+	UploadTotalLimit   *int64    `json:"upload_total_limit,omitempty"`
+	DownloadTotalLimit *int64    `json:"download_total_limit,omitempty"`
+	StorageThreshold   *int64    `json:"storage_threshold,omitempty"`
+	UploadThreshold    *int64    `json:"upload_threshold,omitempty"`
+	DownloadThreshold  *int64    `json:"download_threshold,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+func (r *UserQuotaConfigResponse) FromModel(model *models.UserQuotaConfig) error {
+	if model == nil {
+		return nil
+	}
+	r.ID = model.ID
+	r.UserID = model.UserID
+	r.EnforcementPolicy = string(model.EnforcementPolicy)
+	r.QuotaPlanID = model.QuotaPlanID
+	r.StorageLimit = model.StorageLimit
+	r.UploadDailyLimit = model.UploadDailyLimit
+	r.DownloadDailyLimit = model.DownloadDailyLimit
+	r.UploadTotalLimit = model.UploadTotalLimit
+	r.DownloadTotalLimit = model.DownloadTotalLimit
+	r.StorageThreshold = model.StorageThreshold
+	r.UploadThreshold = model.UploadThreshold
+	r.DownloadThreshold = model.DownloadThreshold
+	r.CreatedAt = model.CreatedAt
+	r.UpdatedAt = model.UpdatedAt
+	return nil
+}
+
+// UserQuotaConfigListResponse is a swagger-only DTO that represents the paginated response for user quota configs.
+// It mirrors queryutil.Response[*dto.UserQuotaConfigResponse] for OpenAPI documentation.
+//
+// This struct exists due to a swagger documentation generation bug where queryutil.Response generics
+// are not getting detected properly as an array type. By providing a concrete struct, we ensure the
+// swagger docs correctly show the Configs field (mapped to "data" in JSON) as an array of UserQuotaConfigResponse items.
+//
+// Note: This struct is only used for swagger documentation, not for actual encoding.
+type UserQuotaConfigListResponse struct {
+	Configs []UserQuotaConfigResponse `json:"data"`
+	Total   int                       `json:"total"`
+}
+
+// UserQuotaConfigUpdateRequest represents a request to update a user's quota config
+type UserQuotaConfigUpdateRequest struct {
+	EnforcementPolicy  *models.EnforcementPolicy `json:"enforcement_policy,omitempty"`
+	QuotaPlanID        *uint64                   `json:"quota_plan_id,omitempty"`
+	StorageLimit       *int64                    `json:"storage_limit,omitempty"`
+	UploadDailyLimit   *int64                    `json:"upload_daily_limit,omitempty"`
+	DownloadDailyLimit *int64                    `json:"download_daily_limit,omitempty"`
+	UploadTotalLimit   *int64                    `json:"upload_total_limit,omitempty"`
+	DownloadTotalLimit *int64                    `json:"download_total_limit,omitempty"`
+	StorageThreshold   *int64                    `json:"storage_threshold,omitempty"`
+	UploadThreshold    *int64                    `json:"upload_threshold,omitempty"`
+	DownloadThreshold  *int64                    `json:"download_threshold,omitempty"`
+}
+
+func (r *UserQuotaConfigUpdateRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"EnforcementPolicy":  config.ZogStringLike[models.EnforcementPolicy]().Optional(),
+		"QuotaPlanID":        z.Ptr(z.UintLike[uint64]()),
+		"StorageLimit":       z.Ptr(z.Int64().GTE(0)),
+		"UploadDailyLimit":   z.Ptr(z.Int64().GTE(0)),
+		"DownloadDailyLimit": z.Ptr(z.Int64().GTE(0)),
+		"UploadTotalLimit":   z.Ptr(z.Int64().GTE(0)),
+		"DownloadTotalLimit": z.Ptr(z.Int64().GTE(0)),
+		"StorageThreshold":   z.Ptr(z.Int64().GTE(0)),
+		"UploadThreshold":    z.Ptr(z.Int64().GTE(0)),
+		"DownloadThreshold":  z.Ptr(z.Int64().GTE(0)),
+	})
+}
+
+func (r *UserQuotaConfigUpdateRequest) ToModel() (*UserQuotaConfigUpdateRequest, error) {
+	return r, nil
+}
+
+// UserQuotaConfigListRequest represents query parameters for listing user quota configs
+type UserQuotaConfigListRequest struct {
+	PlanID *uint `query:"plan_id" json:"plan_id,omitempty"`
+}
+
+func (r *UserQuotaConfigListRequest) Schema() *z.StructSchema {
+	return z.Struct(z.Shape{
+		"PlanID": z.Ptr(z.UintLike[uint]()),
+	})
+}
+
+func (r *UserQuotaConfigListRequest) ToModel() (*UserQuotaConfigListRequest, error) {
+	return r, nil
 }
 
 // SystemStatsResponse represents system-wide quota statistics

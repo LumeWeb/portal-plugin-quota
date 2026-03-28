@@ -2353,6 +2353,92 @@ func (_c *MockQuotaService_ListQuotaPlans_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// ListUserQuotaConfigs provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) ListUserQuotaConfigs(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*UserQuotaConfig, int64, error) {
+	ret := _mock.Called(ctx, filters, sorts, pagination)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListUserQuotaConfigs")
+	}
+
+	var r0 []*UserQuotaConfig
+	var r1 int64
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) ([]*UserQuotaConfig, int64, error)); ok {
+		return returnFunc(ctx, filters, sorts, pagination)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) []*UserQuotaConfig); ok {
+		r0 = returnFunc(ctx, filters, sorts, pagination)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*UserQuotaConfig)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) int64); ok {
+		r1 = returnFunc(ctx, filters, sorts, pagination)
+	} else {
+		r1 = ret.Get(1).(int64)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, []queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination) error); ok {
+		r2 = returnFunc(ctx, filters, sorts, pagination)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockQuotaService_ListUserQuotaConfigs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListUserQuotaConfigs'
+type MockQuotaService_ListUserQuotaConfigs_Call struct {
+	*mock.Call
+}
+
+// ListUserQuotaConfigs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - filters []queryutil.CrudFilter
+//   - sorts []queryutil.Sort
+//   - pagination queryutil.Pagination
+func (_e *MockQuotaService_Expecter) ListUserQuotaConfigs(ctx interface{}, filters interface{}, sorts interface{}, pagination interface{}) *MockQuotaService_ListUserQuotaConfigs_Call {
+	return &MockQuotaService_ListUserQuotaConfigs_Call{Call: _e.mock.On("ListUserQuotaConfigs", ctx, filters, sorts, pagination)}
+}
+
+func (_c *MockQuotaService_ListUserQuotaConfigs_Call) Run(run func(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination)) *MockQuotaService_ListUserQuotaConfigs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []queryutil.CrudFilter
+		if args[1] != nil {
+			arg1 = args[1].([]queryutil.CrudFilter)
+		}
+		var arg2 []queryutil.Sort
+		if args[2] != nil {
+			arg2 = args[2].([]queryutil.Sort)
+		}
+		var arg3 queryutil.Pagination
+		if args[3] != nil {
+			arg3 = args[3].(queryutil.Pagination)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_ListUserQuotaConfigs_Call) Return(vs []*UserQuotaConfig, n int64, err error) *MockQuotaService_ListUserQuotaConfigs_Call {
+	_c.Call.Return(vs, n, err)
+	return _c
+}
+
+func (_c *MockQuotaService_ListUserQuotaConfigs_Call) RunAndReturn(run func(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*UserQuotaConfig, int64, error)) *MockQuotaService_ListUserQuotaConfigs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Logger provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) Logger() *core.Logger {
 	ret := _mock.Called()
@@ -2785,6 +2871,63 @@ func (_c *MockQuotaService_ResetAllowance_Call) Return(err error) *MockQuotaServ
 }
 
 func (_c *MockQuotaService_ResetAllowance_Call) RunAndReturn(run func(ctx context.Context, userID uint) error) *MockQuotaService_ResetAllowance_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ResetUserQuotaPlan provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) ResetUserQuotaPlan(ctx context.Context, userID uint) error {
+	ret := _mock.Called(ctx, userID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResetUserQuotaPlan")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) error); ok {
+		r0 = returnFunc(ctx, userID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_ResetUserQuotaPlan_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResetUserQuotaPlan'
+type MockQuotaService_ResetUserQuotaPlan_Call struct {
+	*mock.Call
+}
+
+// ResetUserQuotaPlan is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+func (_e *MockQuotaService_Expecter) ResetUserQuotaPlan(ctx interface{}, userID interface{}) *MockQuotaService_ResetUserQuotaPlan_Call {
+	return &MockQuotaService_ResetUserQuotaPlan_Call{Call: _e.mock.On("ResetUserQuotaPlan", ctx, userID)}
+}
+
+func (_c *MockQuotaService_ResetUserQuotaPlan_Call) Run(run func(ctx context.Context, userID uint)) *MockQuotaService_ResetUserQuotaPlan_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_ResetUserQuotaPlan_Call) Return(err error) *MockQuotaService_ResetUserQuotaPlan_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_ResetUserQuotaPlan_Call) RunAndReturn(run func(ctx context.Context, userID uint) error) *MockQuotaService_ResetUserQuotaPlan_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3242,6 +3385,69 @@ func (_c *MockQuotaService_UpdateQuotaPlan_Call) Return(err error) *MockQuotaSer
 }
 
 func (_c *MockQuotaService_UpdateQuotaPlan_Call) RunAndReturn(run func(ctx context.Context, planID uint, plan *models.QuotaPlan) error) *MockQuotaService_UpdateQuotaPlan_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateUserQuotaConfig provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) UpdateUserQuotaConfig(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) error {
+	ret := _mock.Called(ctx, userID, update)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateUserQuotaConfig")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, *UserQuotaConfigUpdate) error); ok {
+		r0 = returnFunc(ctx, userID, update)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_UpdateUserQuotaConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateUserQuotaConfig'
+type MockQuotaService_UpdateUserQuotaConfig_Call struct {
+	*mock.Call
+}
+
+// UpdateUserQuotaConfig is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - update *UserQuotaConfigUpdate
+func (_e *MockQuotaService_Expecter) UpdateUserQuotaConfig(ctx interface{}, userID interface{}, update interface{}) *MockQuotaService_UpdateUserQuotaConfig_Call {
+	return &MockQuotaService_UpdateUserQuotaConfig_Call{Call: _e.mock.On("UpdateUserQuotaConfig", ctx, userID, update)}
+}
+
+func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) Run(run func(ctx context.Context, userID uint, update *UserQuotaConfigUpdate)) *MockQuotaService_UpdateUserQuotaConfig_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 *UserQuotaConfigUpdate
+		if args[2] != nil {
+			arg2 = args[2].(*UserQuotaConfigUpdate)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) Return(err error) *MockQuotaService_UpdateUserQuotaConfig_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_UpdateUserQuotaConfig_Call) RunAndReturn(run func(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) error) *MockQuotaService_UpdateUserQuotaConfig_Call {
 	_c.Call.Return(run)
 	return _c
 }

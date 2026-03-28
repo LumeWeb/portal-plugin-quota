@@ -474,6 +474,18 @@ func (s *QuotaServiceDefault) DeleteQuotaPlan(ctx context.Context, planID uint) 
 		return fmt.Errorf("database not initialized")
 	}
 
+	// Check if any users are assigned to this plan
+	var assignedUserCount int64
+	if err := s.DB().WithContext(ctx).Model(&models.UserQuotaConfig{}).
+		Where("quota_plan_id = ?", planID).
+		Count(&assignedUserCount).Error; err != nil {
+		return fmt.Errorf("failed to check plan assignments: %w", err)
+	}
+
+	if assignedUserCount > 0 {
+		return fmt.Errorf("plan %d has %d users assigned, cannot delete", planID, assignedUserCount)
+	}
+
 	err := core.MetricTrack(
 		nil,
 		policies.PlanOperationsErr.WithLabelValues(policies.LabelPlanOperationDelete),
@@ -637,11 +649,7 @@ func (s *QuotaServiceDefault) AssignUserToPlan(ctx context.Context, userID uint,
 		}
 
 		// Update the user's quota config with the plan ID
-		if result = tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", planID); result.Error != nil {
-			return result
-		}
-
-		return nil
+		return tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", planID)
 	})
 
 }
@@ -664,6 +672,131 @@ func (s *QuotaServiceDefault) RemoveUserFromPlan(ctx context.Context, userID uin
 		return tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", nil)
 	}); err != nil {
 		return fmt.Errorf("failed to remove user from plan: %w", err)
+	}
+
+	return nil
+}
+
+// ListUserQuotaConfigs retrieves a paginated and filtered list of user quota configurations
+func (s *QuotaServiceDefault) ListUserQuotaConfigs(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*models.UserQuotaConfig, int64, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.ListUserQuotaConfigs")
+	defer span.End()
+
+	if s.DB() == nil {
+		return nil, 0, fmt.Errorf("database not initialized")
+	}
+
+	var configs []*models.UserQuotaConfig
+	var total int64
+
+	query := s.DB().WithContext(ctx).Model(&models.UserQuotaConfig{})
+
+	// Apply filters, sorts and pagination using queryutil helpers
+	query = queryutil.ApplyFilters(query, filters, nil)
+	query = queryutil.ApplySort(query, sorts)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count user quota configs: %w", err)
+	}
+
+	query = queryutil.ApplyPagination(query, pagination)
+
+	if err := query.Find(&configs).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch user quota configs: %w", err)
+	}
+
+	return configs, total, nil
+}
+
+// UpdateUserQuotaConfig updates a user's quota configuration
+func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID uint, update *pluginCore.UserQuotaConfigUpdate) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.UpdateUserQuotaConfig")
+	defer span.End()
+
+	if s.DB() == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	if userID == 0 {
+		return fmt.Errorf("invalid user ID")
+	}
+
+	// Build update map with only provided fields
+	updates := make(map[string]interface{})
+
+	if update.EnforcementPolicy != nil {
+		updates["enforcement_policy"] = *update.EnforcementPolicy
+	}
+	if update.QuotaPlanID != nil {
+		updates["quota_plan_id"] = *update.QuotaPlanID
+	}
+	if update.StorageLimit != nil {
+		updates["storage_limit"] = update.StorageLimit
+	}
+	if update.UploadDailyLimit != nil {
+		updates["upload_daily_limit"] = update.UploadDailyLimit
+	}
+	if update.DownloadDailyLimit != nil {
+		updates["download_daily_limit"] = update.DownloadDailyLimit
+	}
+	if update.UploadTotalLimit != nil {
+		updates["upload_total_limit"] = update.UploadTotalLimit
+	}
+	if update.DownloadTotalLimit != nil {
+		updates["download_total_limit"] = update.DownloadTotalLimit
+	}
+	if update.StorageThreshold != nil {
+		updates["storage_threshold"] = update.StorageThreshold
+	}
+	if update.UploadThreshold != nil {
+		updates["upload_threshold"] = update.UploadThreshold
+	}
+	if update.DownloadThreshold != nil {
+		updates["download_threshold"] = update.DownloadThreshold
+	}
+
+	if len(updates) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	// Ensure the user has a quota config first, then apply updates
+	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+		var config models.UserQuotaConfig
+		result := tx.Where("user_id = ?", userID).FirstOrCreate(&config, &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyHardLimits,
+		})
+		if result.Error != nil {
+			return result
+		}
+
+		// Apply the updates to the found/created config
+		return tx.Model(&config).Updates(updates)
+	}); err != nil {
+		return fmt.Errorf("failed to update user quota config: %w", err)
+	}
+
+	return nil
+}
+
+// ResetUserQuotaPlan resets a user's quota plan assignment to NULL
+func (s *QuotaServiceDefault) ResetUserQuotaPlan(ctx context.Context, userID uint) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.ResetUserQuotaPlan")
+	defer span.End()
+
+	if s.DB() == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	if userID == 0 {
+		return fmt.Errorf("invalid user ID")
+	}
+
+	// Update the quota config to remove the plan ID
+	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+		return tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", nil)
+	}); err != nil {
+		return fmt.Errorf("failed to reset user quota plan: %w", err)
 	}
 
 	return nil

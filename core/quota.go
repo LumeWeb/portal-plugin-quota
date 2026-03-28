@@ -47,6 +47,11 @@ type QuotaService interface {
 	AssignUserToPlan(ctx context.Context, userID uint, planID uint) error
 	RemoveUserFromPlan(ctx context.Context, userID uint) error
 
+	// User Quota Config Management
+	ListUserQuotaConfigs(ctx context.Context, filters []queryutil.CrudFilter, sorts []queryutil.Sort, pagination queryutil.Pagination) ([]*UserQuotaConfig, int64, error)
+	UpdateUserQuotaConfig(ctx context.Context, userID uint, update *UserQuotaConfigUpdate) error
+	ResetUserQuotaPlan(ctx context.Context, userID uint) error
+
 	// Allowance Management (for ALLOWANCE policy)
 	AddAllowance(ctx context.Context, userID uint, storage, upload, download uint64) error
 	AddBonusAllowance(ctx context.Context, userID uint, storage, upload, download uint64) error

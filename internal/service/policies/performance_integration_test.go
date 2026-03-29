@@ -266,7 +266,7 @@ func TestPerformance_TimezoneBoundaries(t *testing.T) {
 				UploadID:  dataManager.NextUploadID(),
 				Type:      models.UsageTypeUpload,
 				Bytes:     200,
-				IP:        "192.168.1.1",
+				IP:        models.IPAddr("192.168.1.1"),
 				Timestamp: startOfNextDay,
 			}
 			err = ctx.DB().Create(detail2).Error

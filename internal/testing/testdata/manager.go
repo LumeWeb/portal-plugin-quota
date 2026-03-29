@@ -170,7 +170,7 @@ func (tdm *TestDataManager) CreateUsageDetail(userID uint, uploadID uint, usageT
 		UploadID:  uploadID,
 		Type:      usageType,
 		Bytes:     bytes,
-		IP:        ip,
+		IP:        pluginModels.IPAddr(ip),
 		Timestamp: time.Now().UTC(),
 	}
 
@@ -190,7 +190,7 @@ func (tdm *TestDataManager) CreateUsageDetailWithTimestamp(userID uint, uploadID
 		UploadID:  uploadID,
 		Type:      usageType,
 		Bytes:     bytes,
-		IP:        ip,
+		IP:        pluginModels.IPAddr(ip),
 		Timestamp: timestamp,
 	}
 

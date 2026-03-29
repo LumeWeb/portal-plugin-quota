@@ -391,7 +391,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      models.UsageTypeUpload,
 			Bytes:     100,
-			IP:        "192.168.1.1",
+			IP:        models.IPAddr("192.168.1.1"),
 			Timestamp: time.Now(),
 		},
 		{
@@ -399,7 +399,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      models.UsageTypeDownload,
 			Bytes:     200,
-			IP:        "192.168.1.2",
+			IP:        models.IPAddr("192.168.1.2"),
 			Timestamp: time.Now().Add(-30 * time.Minute),
 		},
 	}

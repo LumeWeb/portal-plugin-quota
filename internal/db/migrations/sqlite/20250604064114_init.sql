@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS user_usage_details (
     upload_id INTEGER NOT NULL,
     type VARCHAR(255) NOT NULL,
     bytes INTEGER DEFAULT 0,
-    ip VARCHAR(45) NOT NULL,
+    ip VARCHAR(45) NULL,
     shared_with INTEGER DEFAULT 0,
     timestamp DATETIME NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

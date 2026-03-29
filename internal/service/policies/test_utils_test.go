@@ -135,7 +135,7 @@ func createTestUsageRecord(t *testing.T, ctx coreTesting.TestContext, userID uin
 		UploadID:  1,
 		Type:      usageType,
 		Bytes:     bytes,
-		IP:        "192.168.1.1",
+		IP:        models.IPAddr("192.168.1.1"),
 		Timestamp: time.Now(),
 	}
 
@@ -229,7 +229,7 @@ func CreateTestUserUsageDetail(userID uint, uploadID uint, usageType models.Usag
 		UploadID:  uploadID,
 		Type:      usageType,
 		Bytes:     bytes,
-		IP:        ip,
+		IP:        models.IPAddr(ip),
 		Timestamp: timestamp,
 	}
 }

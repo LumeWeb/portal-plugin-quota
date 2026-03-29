@@ -113,7 +113,7 @@ func TestModelValidation_UsageType_ValidUpload(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      models.UsageTypeUpload,
 			Bytes:     100,
-			IP:        "192.168.1.1",
+			IP:        models.IPAddr("192.168.1.1"),
 			Timestamp: time.Now(),
 		}
 
@@ -135,7 +135,7 @@ func TestModelValidation_UsageType_ValidDownload(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      models.UsageTypeDownload,
 			Bytes:     100,
-			IP:        "192.168.1.1",
+			IP:        models.IPAddr("192.168.1.1"),
 			Timestamp: time.Now(),
 		}
 
@@ -157,7 +157,7 @@ func TestModelValidation_UsageType_ValidStorageAdd(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      models.UsageTypeStorageAdd,
 			Bytes:     100,
-			IP:        "192.168.1.1",
+			IP:        models.IPAddr("192.168.1.1"),
 			Timestamp: time.Now(),
 		}
 
@@ -179,7 +179,7 @@ func TestModelValidation_UsageType_ValidStorageRemove(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      models.UsageTypeStorageRemove,
 			Bytes:     100,
-			IP:        "192.168.1.1",
+			IP:        models.IPAddr("192.168.1.1"),
 			Timestamp: time.Now(),
 		}
 

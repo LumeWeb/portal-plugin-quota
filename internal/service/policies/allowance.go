@@ -181,7 +181,7 @@ func (a *AllowancePolicyEnforcer) RecordUpload(ctx context.Context, userID, uplo
 		UploadID:   uploadID,
 		Type:       models.UsageTypeUpload,
 		Bytes:      bytes,
-		IP:         ip,
+		IP:         models.IPAddr(ip),
 		SharedWith: 1,
 		Timestamp:  time.Now().UTC(),
 	}
@@ -209,7 +209,7 @@ func (a *AllowancePolicyEnforcer) RecordDownload(ctx context.Context, userID, up
 		UploadID:   uploadID,
 		Type:       models.UsageTypeDownload,
 		Bytes:      bytes,
-		IP:         ip,
+		IP:         models.IPAddr(ip),
 		SharedWith: 1,
 		Timestamp:  time.Now().UTC(),
 	}
@@ -260,7 +260,7 @@ func (a *AllowancePolicyEnforcer) RecordStorageChange(ctx context.Context, userI
 		UploadID:   uploadID,
 		Type:       usageType,
 		Bytes:      recordBytes,
-		IP:         ip,
+		IP:         models.IPAddr(ip),
 		SharedWith: 1,
 		Timestamp:  time.Now().UTC(),
 	}

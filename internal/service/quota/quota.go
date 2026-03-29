@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -32,11 +31,6 @@ type QuotaServiceDefault struct {
 	limitResolver   pluginCore.LimitResolver
 	usageAggregator pluginCore.UsageAggregator
 	uploadService   core.UploadService
-
-	// System-level configuration (in-memory for now, should be database-backed in production)
-	configMutex            sync.RWMutex
-	enableQuotaEnforcement bool
-	storageRetentionDays   int
 }
 
 var _ pluginCore.QuotaService = (*QuotaServiceDefault)(nil)
@@ -1119,47 +1113,6 @@ func (s *QuotaServiceDefault) GetSystemStats(ctx context.Context) (*pluginCore.S
 	}
 
 	return stats, nil
-}
-
-// SetQuotaEnforcement sets whether quota enforcement is enabled system-wide
-func (s *QuotaServiceDefault) SetQuotaEnforcement(ctx context.Context, enabled bool) error {
-	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.SetQuotaEnforcement")
-	defer span.End()
-
-	s.configMutex.Lock()
-	defer s.configMutex.Unlock()
-
-	s.enableQuotaEnforcement = enabled
-	s.Logger().Info("Quota enforcement setting updated", zap.Bool("enabled", enabled))
-
-	return nil
-}
-
-// SetStorageRetentionDays sets the number of days to retain storage usage records
-func (s *QuotaServiceDefault) SetStorageRetentionDays(ctx context.Context, days int) error {
-	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.SetStorageRetentionDays")
-	defer span.End()
-
-	if days < 1 || days > 36500 {
-		return fmt.Errorf("storage retention days must be between 1 and 36500")
-	}
-
-	s.configMutex.Lock()
-	defer s.configMutex.Unlock()
-
-	s.storageRetentionDays = days
-	s.Logger().Info("Storage retention days setting updated", zap.Int("days", days))
-
-	return nil
-}
-
-// GetSystemConfig returns the current system configuration
-func (s *QuotaServiceDefault) GetSystemConfig(ctx context.Context) (enableEnforcement bool, retentionDays int) {
-	s.configMutex.RLock()
-	enableEnforcement = s.enableQuotaEnforcement
-	retentionDays = s.storageRetentionDays
-	s.configMutex.RUnlock()
-	return enableEnforcement, retentionDays
 }
 
 // TODO: Implement reconciliation logic

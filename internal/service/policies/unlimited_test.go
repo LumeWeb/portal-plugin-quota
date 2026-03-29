@@ -150,7 +150,7 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 				UploadID:  setup.dataManager.NextUploadID(),
 				Type:      models.UsageTypeDownload,
 				Bytes:     200,
-				IP:        "192.168.1.2",
+				IP:        models.IPAddr("192.168.1.2"),
 				Timestamp: earlierTime,
 			},
 			{
@@ -158,7 +158,7 @@ func TestUnlimitedPolicyEnforcer_UsageMethods_Success(t *testing.T) {
 				UploadID:  setup.dataManager.NextUploadID(),
 				Type:      models.UsageTypeUpload,
 				Bytes:     100,
-				IP:        "192.168.1.1",
+				IP:        models.IPAddr("192.168.1.1"),
 				Timestamp: laterTime,
 			},
 		}

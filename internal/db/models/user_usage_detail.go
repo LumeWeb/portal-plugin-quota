@@ -16,7 +16,7 @@ type UserUsageDetail struct {
 	UploadID   uint      `gorm:"index"`
 	Type       UsageType `gorm:"index"` // UPLOAD, DOWNLOAD, STORAGE_ADD, STORAGE_REMOVE
 	Bytes      uint64
-	IP         string    `gorm:"index"`
+	IP         *string   `gorm:"index"`
 	SharedWith uint      // Number of users sharing this object
 	Timestamp  time.Time `gorm:"index"`
 
@@ -62,7 +62,7 @@ func (u *UserUsageDetail) validate() error {
 		return ErrInvalidBytes
 	}
 
-	if net.ParseIP(u.IP) == nil {
+	if u.IP != nil && net.ParseIP(*u.IP) == nil {
 		return ErrInvalidIP
 	}
 
@@ -101,7 +101,7 @@ func (u *UserUsageDetail) validatePartial(tx *gorm.DB) error {
 	}
 
 	if tx.Statement.Changed("ip") {
-		if net.ParseIP(u.IP) == nil {
+		if u.IP != nil && net.ParseIP(*u.IP) == nil {
 			return ErrInvalidIP
 		}
 	}

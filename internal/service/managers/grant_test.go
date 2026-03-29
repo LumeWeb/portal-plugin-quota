@@ -265,7 +265,7 @@ func createUserUsageDetail(ctx coreTesting.TestContext, userID uint, usageType p
 		UploadID:   1, // Default upload ID for tests
 		Type:       usageType,
 		Bytes:      1000,
-		IP:         "127.0.0.1",
+		IP:         pluginModels.IPAddr("127.0.0.1"),
 		SharedWith: 1,
 		Timestamp:  time.Now().UTC(),
 	}

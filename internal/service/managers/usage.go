@@ -56,7 +56,7 @@ func (um *UsageManager) RecordUpload(ctx context.Context, userID, uploadID uint,
 		UploadID:   uploadID,
 		Type:       pluginModels.UsageTypeUpload,
 		Bytes:      bytes,
-		IP:         ip,
+		IP:         pluginModels.IPAddr(ip),
 		SharedWith: 1, // Only the uploader
 		Timestamp:  time.Now().UTC(),
 	}
@@ -282,7 +282,7 @@ func (um *UsageManager) RecordDownload(ctx context.Context, userID, uploadID uin
 		UploadID:   uploadID,
 		Type:       pluginModels.UsageTypeDownload,
 		Bytes:      bytes,
-		IP:         ip,
+		IP:         pluginModels.IPAddr(ip),
 		SharedWith: 1, // Not shared - user pays in full
 		Timestamp:  time.Now().UTC(),
 	}
@@ -344,7 +344,7 @@ func (um *UsageManager) recordAnonymousDownload(ctx context.Context, uploadID ui
 			UploadID:   uploadID,
 			Type:       pluginModels.UsageTypeDownload,
 			Bytes:      sharedBytes,
-			IP:         ip,
+			IP:         pluginModels.IPAddr(ip),
 			SharedWith: userCount,
 			Timestamp:  time.Now().UTC(),
 		}
@@ -438,7 +438,7 @@ func (um *UsageManager) RecordStorageChange(ctx context.Context, userID, uploadI
 		UploadID:   uploadID,
 		Type:       usageType,
 		Bytes:      sharedBytes,
-		IP:         ip,
+		IP:         pluginModels.IPAddr(ip),
 		SharedWith: sharedWith,
 		Timestamp:  time.Now().UTC(),
 	}
@@ -462,8 +462,6 @@ func (um *UsageManager) RecordStorageChange(ctx context.Context, userID, uploadI
 
 	return nil
 }
-
-
 
 // RecordUserUsageDetail records a detailed usage record
 // If tx is provided, it will be used instead of creating a new transaction

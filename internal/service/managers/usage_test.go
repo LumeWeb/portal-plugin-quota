@@ -114,7 +114,11 @@ func TestUsageManager_RecordUpload_ValidInput_Success(t *testing.T) {
 		assert.Len(t, usageDetails, 1)
 		assert.Equal(t, pluginModels.UsageTypeUpload, usageDetails[0].Type)
 		assert.Equal(t, bytes, usageDetails[0].Bytes)
-		assert.Equal(t, ip, usageDetails[0].IP)
+		if usageDetails[0].IP != nil {
+			assert.Equal(t, ip, *usageDetails[0].IP)
+		} else {
+			assert.Equal(t, "", ip)
+		}
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Uploads are not shared
 
 		// Verify the daily quota was updated
@@ -262,7 +266,7 @@ func TestUsageManager_GetUsageHistory_RecentUsageHistory_Success(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      pluginModels.UsageTypeUpload,
 			Bytes:     testUsageBytesMedium,
-			IP:        "192.168.1.1",
+			IP:        pluginModels.IPAddr("192.168.1.1"),
 			Timestamp: now.Add(-48 * time.Hour), // 2 days ago
 		}
 		err := ctx.DB().Create(oldDetail).Error
@@ -304,7 +308,7 @@ func TestUsageManager_GetUsageHistory_AllUsageHistory_Success(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      pluginModels.UsageTypeUpload,
 			Bytes:     testUsageBytesMedium,
-			IP:        "192.168.1.1",
+			IP:        pluginModels.IPAddr("192.168.1.1"),
 			Timestamp: now.Add(-48 * time.Hour), // 2 days ago
 		}
 		err := ctx.DB().Create(oldDetail).Error
@@ -348,7 +352,7 @@ func TestUsageManager_GetDetailedUsage_WithinTimeRange_Success(t *testing.T) {
 			UploadID:  dataManager.NextUploadID(),
 			Type:      pluginModels.UsageTypeStorageAdd,
 			Bytes:     testUsageBytesLarge,
-			IP:        "192.168.1.1",
+			IP:        pluginModels.IPAddr("192.168.1.1"),
 			Timestamp: now.Add(-48 * time.Hour),
 		}
 		err := ctx.DB().Create(oldDetail).Error
@@ -391,7 +395,7 @@ func TestUsageManager_RecordUserUsageDetail_RecordDetail_Success(t *testing.T) {
 			UploadID:  uploadID,
 			Type:      pluginModels.UsageTypeUpload,
 			Bytes:     testUsageBytesSmall,
-			IP:        "192.168.1.1",
+			IP:        pluginModels.IPAddr("192.168.1.1"),
 			Timestamp: time.Now(),
 		}
 
@@ -551,7 +555,11 @@ func TestUsageManager_RecordDownload_ValidInput_Success(t *testing.T) {
 		assert.Len(t, usageDetails, 1)
 		assert.Equal(t, pluginModels.UsageTypeDownload, usageDetails[0].Type)
 		assert.Equal(t, bytes, usageDetails[0].Bytes)
-		assert.Equal(t, ip, usageDetails[0].IP)
+		if usageDetails[0].IP != nil {
+			assert.Equal(t, ip, *usageDetails[0].IP)
+		} else {
+			assert.Equal(t, "", ip)
+		}
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Not shared when disabled
 
 		// Verify the daily quota was updated
@@ -614,7 +622,11 @@ func TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success(t *testing
 			assert.Len(t, usageDetails, 1)
 			assert.Equal(t, pluginModels.UsageTypeDownload, usageDetails[0].Type)
 			assert.Equal(t, uint64(testUsageBytesHuge/testUserCountSmall), usageDetails[0].Bytes) // testUsageBytesHuge/testUserCountSmall = testUsageBytesMedium
-			assert.Equal(t, ip, usageDetails[0].IP)
+			if usageDetails[0].IP != nil {
+				assert.Equal(t, ip, *usageDetails[0].IP)
+			} else {
+				assert.Equal(t, "", ip)
+			}
 			assert.Equal(t, uint(testUserCountSmall), usageDetails[0].SharedWith)
 
 			// Verify the daily quota was updated
@@ -786,7 +798,11 @@ func TestUsageManager_RecordStorageChange_ValidInput_Success(t *testing.T) {
 		assert.Len(t, usageDetails, 1)
 		assert.Equal(t, pluginModels.UsageTypeStorageAdd, usageDetails[0].Type)
 		assert.Equal(t, uint64(bytes), usageDetails[0].Bytes)
-		assert.Equal(t, ip, usageDetails[0].IP)
+		if usageDetails[0].IP != nil {
+			assert.Equal(t, ip, *usageDetails[0].IP)
+		} else {
+			assert.Equal(t, "", ip)
+		}
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Not shared when disabled
 
 		// Verify the daily quota was updated
@@ -833,7 +849,11 @@ func TestUsageManager_RecordStorageChange_Remove_Success(t *testing.T) {
 		assert.Len(t, usageDetails, 1)
 		assert.Equal(t, pluginModels.UsageTypeStorageRemove, usageDetails[0].Type)
 		assert.Equal(t, uint64(-bytes), usageDetails[0].Bytes) // Positive bytes in record
-		assert.Equal(t, ip, usageDetails[0].IP)
+		if usageDetails[0].IP != nil {
+			assert.Equal(t, ip, *usageDetails[0].IP)
+		} else {
+			assert.Equal(t, "", ip)
+		}
 		assert.Equal(t, uint(1), usageDetails[0].SharedWith) // Removals are not shared
 
 		dataManager.Cleanup()
@@ -1155,7 +1175,11 @@ func TestUsageManager_RecordStorageChange_MinInt64(t *testing.T) {
 		// math.MinInt64 should be converted to math.MaxInt64
 		assert.Equal(t, uint64(math.MaxInt64), detail.Bytes)
 		assert.Equal(t, uint(1), detail.SharedWith)
-		assert.Equal(t, ip, detail.IP)
+		if detail.IP != nil {
+			assert.Equal(t, ip, *detail.IP)
+		} else {
+			assert.Equal(t, "", ip)
+		}
 		assert.WithinDuration(t, time.Now(), detail.Timestamp, time.Second*10)
 
 		dataManager.Cleanup()

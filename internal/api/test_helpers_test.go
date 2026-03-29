@@ -95,20 +95,29 @@ func (h *QuotaTestHelper) ExecuteRequest(method, url string, body []byte) *httpt
 
 // createMockQuotaPlan creates a standardized mock quota plan
 func createMockQuotaPlan(id uint) *quotaModels.QuotaPlan {
+	storageLimit := uint64(10737418240) // 10GB
+	uploadLimit := uint64(104857600)    // 100MB
+	downloadLimit := uint64(524288000)  // 500MB
+	windowType := quotaModels.WindowTypeRolling
+	windowDuration := int64(86400) // 1 day in seconds
+	startHour := 0
+	timezone := "UTC"
+	
 	return &quotaModels.QuotaPlan{
-
-		Name:               "Test Basic Plan",
-		Description:        "Basic quota plan for testing",
-		StorageLimit:       10737418240, // 10GB
-		UploadDailyLimit:   104857600,   // 100MB
-		DownloadDailyLimit: 524288000,   // 500MB
-		UploadTotalLimit:   1073741824,  // 1GB
-		DownloadTotalLimit: 1073741824,  // 1GB
-		StorageThreshold:   &[]int64{80}[0],
-		UploadThreshold:    &[]int64{90}[0],
-		DownloadThreshold:  &[]int64{90}[0],
-		IsDefault:          false,
-		IsActive:           &[]bool{true}[0],
+		Name:              "Test Basic Plan",
+		Description:       "Basic quota plan for testing",
+		WindowType:        windowType,
+		WindowDuration:    &windowDuration,
+		WindowStartHour:   &startHour,
+		WindowTimezone:    &timezone,
+		StorageLimitBytes: storageLimit,
+		UploadLimitBytes:  uploadLimit,
+		DownloadLimitBytes: downloadLimit,
+		StorageThreshold:  &[]int64{8589934592}[0],  // 8GB
+		UploadThreshold:   &[]int64{94371840}[0],    // 90MB
+		DownloadThreshold: &[]int64{471859200}[0],   // 450MB
+		IsDefault:         false,
+		IsActive:          &[]bool{true}[0],
 	}
 }
 

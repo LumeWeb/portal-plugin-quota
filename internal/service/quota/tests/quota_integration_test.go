@@ -43,7 +43,7 @@ func newQuotaIntegrationTestFixture(t *testing.T, ctx coreTesting.TestContext) *
 	require.NotNil(t, fixture.quotaService)
 
 	// Create default quota plan
-	fixture.dataManager.CreateQuotaPlan("default", 100*units.GB, 5000, 5000, 100*units.MB, 100*units.MB, true)
+	fixture.dataManager.CreateQuotaPlan("default", 100*units.GB, 1*units.GB, 1*units.GB, true)
 
 	// Setup test upload
 	fixture.setupTestUpload(t)
@@ -109,16 +109,16 @@ func TestCheckCIDGroupQuotaAvailability_AllUsersHaveSufficientQuota(t *testing.T
 		storageLimit := uploadLimit
 
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &uploadLimit,
-			StorageLimit:     &storageLimit,
+			UploadLimitBytes: &uploadLimit,
+			StorageLimitBytes: &storageLimit,
 		})
 		fixture.dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &uploadLimit,
-			StorageLimit:     &storageLimit,
+			UploadLimitBytes: &uploadLimit,
+			StorageLimitBytes:     &storageLimit,
 		})
 		fixture.dataManager.CreateUser(userID3, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &uploadLimit,
-			StorageLimit:     &storageLimit,
+			UploadLimitBytes: &uploadLimit,
+			StorageLimitBytes:     &storageLimit,
 		})
 
 		// Create pins for all users
@@ -146,24 +146,24 @@ func TestCheckCIDGroupQuotaAvailability_SomeUsersInsufficient_MultipleIterations
 		userID1 := fixture.dataManager.GenerateUserID()
 		highLimit := int64(10 * units.KB)
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &highLimit,
-			StorageLimit:     &highLimit,
+			UploadLimitBytes: &highLimit,
+			StorageLimitBytes:     &highLimit,
 		})
 
 		// User 2: Medium quota (3 KB), may get filtered out eventually
 		userID2 := fixture.dataManager.GenerateUserID()
 		medLimit := int64(5 * units.KB)
 		fixture.dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &medLimit,
-			StorageLimit:     &medLimit,
+			UploadLimitBytes: &medLimit,
+			StorageLimitBytes:     &medLimit,
 		})
 
 		// User 3: Low quota (1 KB), gets filtered out first
 		userID3 := fixture.dataManager.GenerateUserID()
 		lowLimit := int64(1 * units.KB)
 		fixture.dataManager.CreateUser(userID3, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &lowLimit,
-			StorageLimit:     &lowLimit,
+			UploadLimitBytes: &lowLimit,
+			StorageLimitBytes:     &lowLimit,
 		})
 
 		// Create pins for all users
@@ -197,22 +197,40 @@ func TestCheckCIDGroupQuotaAvailability_AllUsersInsufficient_ReturnsFalse(t *tes
 		fixture := newQuotaIntegrationTestFixture(t, ctx)
 
 		lowLimit := int64(500)
+		
+		// Window configuration for all users
+		windowTypeStr := string(pluginModels.WindowTypeRolling)
+		windowDuration := int64(24)
+		windowStartHour := 0
+		windowTimezone := "UTC"
 
 		userID1 := fixture.dataManager.GenerateUserID()
 		userID2 := fixture.dataManager.GenerateUserID()
 		userID3 := fixture.dataManager.GenerateUserID()
 
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &lowLimit,
-			StorageLimit:     &lowLimit,
+			UploadLimitBytes: &lowLimit,
+			StorageLimitBytes: &lowLimit,
+			WindowType:      &windowTypeStr,
+			WindowDuration:  &windowDuration,
+			WindowStartHour: &windowStartHour,
+			WindowTimezone:  &windowTimezone,
 		})
 		fixture.dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &lowLimit,
-			StorageLimit:     &lowLimit,
+			UploadLimitBytes: &lowLimit,
+			StorageLimitBytes: &lowLimit,
+			WindowType:      &windowTypeStr,
+			WindowDuration:  &windowDuration,
+			WindowStartHour: &windowStartHour,
+			WindowTimezone:  &windowTimezone,
 		})
 		fixture.dataManager.CreateUser(userID3, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &lowLimit,
-			StorageLimit:     &lowLimit,
+			UploadLimitBytes: &lowLimit,
+			StorageLimitBytes: &lowLimit,
+			WindowType:      &windowTypeStr,
+			WindowDuration:  &windowDuration,
+			WindowStartHour: &windowStartHour,
+			WindowTimezone:  &windowTimezone,
 		})
 
 		// Create pins for all users
@@ -280,8 +298,8 @@ func TestCheckCIDGroupQuotaAvailability_SingleUserPinning(t *testing.T) {
 		userID := fixture.dataManager.GenerateUserID()
 		uploadLimit := int64(1 * units.MB)
 		fixture.dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &uploadLimit,
-			StorageLimit:     &uploadLimit,
+			UploadLimitBytes: &uploadLimit,
+			StorageLimitBytes:     &uploadLimit,
 		})
 
 		// Create pin for single user
@@ -310,16 +328,16 @@ func TestCheckCIDGroupQuotaAvailability_TwoUsersMixedQuota(t *testing.T) {
 		userID1 := fixture.dataManager.GenerateUserID()
 		limit1 := int64(1 * units.MB)
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit1,
-			StorageLimit:     &limit1,
+			UploadLimitBytes: &limit1,
+			StorageLimitBytes:     &limit1,
 		})
 
 		// User 2: Low quota user
 		userID2 := fixture.dataManager.GenerateUserID()
 		limit2 := int64(100)
 		fixture.dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit2,
-			StorageLimit:     &limit2,
+			UploadLimitBytes: &limit2,
+			StorageLimitBytes:     &limit2,
 		})
 
 		// Create pins for both users
@@ -357,9 +375,9 @@ func TestCheckCIDGroupQuotaAvailability_UsageTypes(t *testing.T) {
 		storageLimit := int64(10 * units.MB)
 
 		fixture.dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit:   &uploadLimit,
-			DownloadDailyLimit: &downloadLimit,
-			StorageLimit:       &storageLimit,
+			UploadLimitBytes:   &uploadLimit,
+			DownloadLimitBytes: &downloadLimit,
+			StorageLimitBytes:       &storageLimit,
 		})
 
 		// Create pin
@@ -397,8 +415,8 @@ func TestCheckCIDGroupQuotaAvailability_UnlimitedPolicy(t *testing.T) {
 		userID1 := fixture.dataManager.GenerateUserID()
 		limit1 := int64(10 * units.KB)
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit1,
-			StorageLimit:     &limit1,
+			UploadLimitBytes: &limit1,
+			StorageLimitBytes:     &limit1,
 		})
 
 		// User 2: Unlimited policy
@@ -434,12 +452,12 @@ func TestCheckCIDGroupQuotaAccuracy(t *testing.T) {
 		limit := int64(2 * units.KB)
 
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit,
-			StorageLimit:     &limit,
+			UploadLimitBytes: &limit,
+			StorageLimitBytes:     &limit,
 		})
 		fixture.dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit,
-			StorageLimit:     &limit,
+			UploadLimitBytes: &limit,
+			StorageLimitBytes:     &limit,
 		})
 
 		// Create pins for both users
@@ -473,16 +491,16 @@ func TestCheckCIDGroupQuotaAvailability_QuotaDestruction(t *testing.T) {
 		limit := int64(5 * units.KB)
 
 		fixture.dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit,
-			StorageLimit:     &limit,
+			UploadLimitBytes: &limit,
+			StorageLimitBytes:     &limit,
 		})
 		fixture.dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit,
-			StorageLimit:     &limit,
+			UploadLimitBytes: &limit,
+			StorageLimitBytes:     &limit,
 		})
 		fixture.dataManager.CreateUser(userID3, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit,
-			StorageLimit:     &limit,
+			UploadLimitBytes: &limit,
+			StorageLimitBytes:     &limit,
 		})
 
 		// Create pins for all users
@@ -510,9 +528,20 @@ func TestCheckCIDGroupQuotaAvailability_QuotaBoundary(t *testing.T) {
 		userID := fixture.dataManager.GenerateUserID()
 		limit := int64(1024 * 1) // Exactly 1 KB
 
+		// Create user with window configuration
+		// The window configuration is required for limits to be applied
+		windowTypeStr := string(pluginModels.WindowTypeRolling)
+		windowDuration := int64(24)
+		windowStartHour := 0
+		windowTimezone := "UTC"
+		
 		fixture.dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, &testdata.TestUserLimits{
-			UploadDailyLimit: &limit,
-			StorageLimit:     &limit,
+			UploadLimitBytes: &limit,
+			StorageLimitBytes: &limit,
+			WindowType:      &windowTypeStr,
+			WindowDuration:  &windowDuration,
+			WindowStartHour: &windowStartHour,
+			WindowTimezone:  &windowTimezone,
 		})
 
 		// Create pin

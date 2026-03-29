@@ -2,6 +2,7 @@ package policies
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -18,7 +19,7 @@ func TestPolicyIntegration_PolicySwitching_HardLimitsToUnlimited(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
-		uploadDailyLimit := int64(1000)
+		uploadLimit := int64(1000)
 
 		// Create mock services
 		quotaService := pluginCore.NewMockQuotaService(t)
@@ -33,14 +34,12 @@ func TestPolicyIntegration_PolicySwitching_HardLimitsToUnlimited(t *testing.T) {
 		hardLimitsConfig := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-			UploadDailyLimit:  &uploadDailyLimit,
+			UploadLimitBytes:  uint64(uploadLimit),
+			WindowType:        models.WindowTypeCalendarDay,
 		}
 
-		// Mock usage for hard limits check
-		quotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 0,
-		}, nil).Once()
+		// Use mock.Anything for window parameter to match any window structure
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil).Maybe()
 
 		// Test hard limits enforcer
 		hardLimitsEnforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
@@ -68,7 +67,7 @@ func TestPolicyIntegration_PolicySwitching_UnlimitedToThreshold(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
-		uploadDailyLimit := int64(1000)
+		uploadLimit := int64(1000)
 		uploadThreshold := int64(800)
 
 		// Setup mocks
@@ -95,15 +94,13 @@ func TestPolicyIntegration_PolicySwitching_UnlimitedToThreshold(t *testing.T) {
 		thresholdConfig := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  &uploadDailyLimit,
+			UploadLimitBytes:  uint64(uploadLimit),
 			UploadThreshold:   &uploadThreshold,
+			WindowType:        models.WindowTypeCalendarDay,
 		}
 
-		// Mock usage below threshold
-		quotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 0,
-		}, nil).Once()
+		// Use mock.Anything for window parameter to match any window structure
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil).Maybe()
 
 		thresholdEnforcer := NewThresholdPolicyEnforcer(ctx, quotaService)
 		result, err = thresholdEnforcer.CheckUploadQuota(ctx, thresholdConfig, uint64(500))
@@ -123,20 +120,20 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		user2ID := dataManager.NextUserID()
 		user3ID := dataManager.NextUserID()
 
-		uploadDailyLimit := int64(1000)
+		uploadLimit := int64(1000)
 
 		// Delete any existing records to avoid UNIQUE constraint
 		ctx.DB().Where("user_id IN (?, ?, ?)", user1ID, user2ID, user3ID).Delete(&models.UserQuotaConfig{})
 
 		createTestUser(t, ctx, user1ID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			uploadDailyLimit: &uploadDailyLimit,
+			uploadLimit: &uploadLimit,
 		})
 
 		createTestUser(t, ctx, user2ID, models.EnforcementPolicyUnlimited, &testUserLimits{})
 
 		uploadThreshold := int64(800)
 		createTestUser(t, ctx, user3ID, models.EnforcementPolicyThreshold, &testUserLimits{
-			uploadDailyLimit: &uploadDailyLimit,
+			uploadLimit:      &uploadLimit,
 			uploadThreshold:  &uploadThreshold,
 		})
 
@@ -151,7 +148,8 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		mockUsageManager1.EXPECT().GetUserQuotaConfig(ctx, user1ID).Return(&models.UserQuotaConfig{
 			UserID:            user1ID,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-			UploadDailyLimit:  &uploadDailyLimit,
+			UploadLimitBytes:  uint64(uploadLimit),
+			WindowType:        models.WindowTypeCalendarDay,
 		}, nil).Once()
 
 		// Mock GetDefaultQuotaPlan to avoid unexpected calls
@@ -161,16 +159,9 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		config1, err := quotaService1.GetUsageManager().GetUserQuotaConfig(ctx, user1ID)
 		require.NoError(t, err)
 
-		// Mock usage aggregator for hard limits enforcer
-		mockUsageAggregator1 := pluginCore.NewMockUsageAggregator(t)
-		quotaService1.EXPECT().GetUsageAggregator().Return(mockUsageAggregator1).Maybe()
-		mockUsageAggregator1.EXPECT().GetAggregatedUsageByType(mock.Anything, user1ID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
-
-		// Mock GetTodayUsage for hard limits enforcer
-		quotaService1.EXPECT().GetTodayUsage(mock.Anything, user1ID).Return(&pluginCore.Usage{
-			UserID:        user1ID,
-			BytesUploaded: 0,
-		}, nil).Maybe()
+		// Mock methods for hard limits enforcer
+		mockUsageManager1.EXPECT().GetAggregatedUsageByType(mock.Anything, user1ID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+		mockUsageManager1.EXPECT().GetUsageForWindow(mock.Anything, user1ID, pluginCore.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil).Maybe()
 
 		// Hard limits should block when exceeding daily limit
 		result1, err := hardLimitsEnforcer.CheckUploadQuota(ctx, config1, uint64(1500))
@@ -207,21 +198,20 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		mockQuotaPlanManager3 := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService3.EXPECT().GetUsageManager().Return(mockUsageManager3)
 		quotaService3.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager3).Maybe()
+		quotaService3.EXPECT().GetUsageManager().Return(mockUsageManager3).Maybe()
 
 		// Mock GetDefaultQuotaPlan again for the threshold enforcer
 		mockQuotaPlanManager3.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 
-		// Mock GetTodayUsage for threshold enforcer
-		quotaService3.EXPECT().GetTodayUsage(mock.Anything, user3ID).Return(&pluginCore.Usage{
-			UserID:        user3ID,
-			BytesUploaded: 0,
-		}, nil).Maybe()
+		// Mock GetUsageForWindow for threshold enforcer
+		mockUsageManager3.EXPECT().GetUsageForWindow(mock.Anything, user3ID, pluginCore.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil).Maybe()
 
 		mockUsageManager3.EXPECT().GetUserQuotaConfig(ctx, user3ID).Return(&models.UserQuotaConfig{
 			UserID:            user3ID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  &uploadDailyLimit,
+			UploadLimitBytes:  uint64(uploadLimit),
 			UploadThreshold:   &uploadThreshold,
+			WindowType:        models.WindowTypeCalendarDay,
 		}, nil).Once()
 
 		config3, err := quotaService3.GetUsageManager().GetUserQuotaConfig(ctx, user3ID)
@@ -241,13 +231,13 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
-		uploadDailyLimit := int64(1000)
+		uploadLimit := int64(1000)
 
 		// Delete any existing record to avoid UNIQUE constraint
 		ctx.DB().Where("user_id = ?", userID).Delete(&models.UserQuotaConfig{})
 
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			uploadDailyLimit: &uploadDailyLimit,
+			uploadLimit: &uploadLimit,
 		})
 
 		// Create simple mock services with .Maybe() expectations

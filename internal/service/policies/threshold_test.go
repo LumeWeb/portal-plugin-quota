@@ -3,6 +3,7 @@ package policies
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
@@ -62,15 +63,15 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_A
 	config := &models.UserQuotaConfig{
 		UserID:            1,
 		EnforcementPolicy: models.EnforcementPolicyThreshold,
-		UploadDailyLimit:  lo.ToPtr(int64(1000)),
+		UploadLimitBytes: uint64(1000),
 		UploadThreshold:   lo.ToPtr(int64(800)),
+		WindowType:        models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
-		UserID:        1,
-		BytesUploaded: 200,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(200), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckUploadQuota(setup.ctx, config, uint64(500))
 	require.NoError(t, err)
@@ -86,15 +87,15 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integratio
 	config := &models.UserQuotaConfig{
 		UserID:            2,
 		EnforcementPolicy: models.EnforcementPolicyThreshold,
-		UploadDailyLimit:  lo.ToPtr(int64(1000)),
-		UploadThreshold:   lo.ToPtr(int64(800)),
+		UploadLimitBytes: uint64(1000),
+		UploadThreshold:   		lo.ToPtr(int64(800)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage that's close to daily limit
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
-		UserID:        2,
-		BytesUploaded: 800,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(800), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckUploadQuota(setup.ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -109,15 +110,15 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThresholdWarningLevel_Integr
 	config := &models.UserQuotaConfig{
 		UserID:            3,
 		EnforcementPolicy: models.EnforcementPolicyThreshold,
-		UploadDailyLimit:  lo.ToPtr(int64(1000)),
-		UploadThreshold:   lo.ToPtr(int64(800)),
+		UploadLimitBytes: uint64(1000),
+		UploadThreshold:   		lo.ToPtr(int64(800)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage that's at threshold
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
-		UserID:        3,
-		BytesUploaded: 700,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(700), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckUploadQuota(setup.ctx, config, uint64(200))
 	require.NoError(t, err)
@@ -134,15 +135,15 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integration
 	config := &models.UserQuotaConfig{
 		UserID:             1,
 		EnforcementPolicy:  models.EnforcementPolicyThreshold,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadThreshold:  lo.ToPtr(int64(1500)),
+		DownloadLimitBytes: uint64(2000),
+		DownloadThreshold:   		lo.ToPtr(int64(1500)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
-		UserID:          1,
-		BytesDownloaded: 500,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckDownloadQuota(setup.ctx, config, uint64(900))
 	require.NoError(t, err)
@@ -158,15 +159,15 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integrat
 	config := &models.UserQuotaConfig{
 		UserID:             2,
 		EnforcementPolicy:  models.EnforcementPolicyThreshold,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadThreshold:  lo.ToPtr(int64(1500)),
+		DownloadLimitBytes: uint64(2000),
+		DownloadThreshold:   		lo.ToPtr(int64(1500)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage that's close to daily limit
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
-		UserID:          2,
-		BytesDownloaded: 1800,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1800), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckDownloadQuota(setup.ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -181,15 +182,15 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_AtThresholdWarningLevel_Inte
 	config := &models.UserQuotaConfig{
 		UserID:             3,
 		EnforcementPolicy:  models.EnforcementPolicyThreshold,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadThreshold:  lo.ToPtr(int64(1500)),
+		DownloadLimitBytes: uint64(2000),
+		DownloadThreshold:   		lo.ToPtr(int64(1500)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage that's at threshold
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
-		UserID:          3,
-		BytesDownloaded: 1400,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1400), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckDownloadQuota(setup.ctx, config, uint64(200))
 	require.NoError(t, err)
@@ -206,15 +207,15 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integratio
 	config := &models.UserQuotaConfig{
 		UserID:            1,
 		EnforcementPolicy: models.EnforcementPolicyThreshold,
-		StorageLimit:      lo.ToPtr(int64(3000)),
-		StorageThreshold:  lo.ToPtr(int64(2000)),
+		StorageLimitBytes:		uint64(3000),
+		StorageThreshold:  		lo.ToPtr(int64(2000)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
-		UserID:      1,
-		BytesStored: 1000,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckStorageQuota(setup.ctx, config, uint64(900))
 	require.NoError(t, err)
@@ -230,15 +231,15 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integra
 	config := &models.UserQuotaConfig{
 		UserID:            2,
 		EnforcementPolicy: models.EnforcementPolicyThreshold,
-		StorageLimit:      lo.ToPtr(int64(3000)),
-		StorageThreshold:  lo.ToPtr(int64(2000)),
+		StorageLimitBytes:		uint64(3000),
+		StorageThreshold:  		lo.ToPtr(int64(2000)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage that's close to storage limit
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
-		UserID:      2,
-		BytesStored: 2800,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2800), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckStorageQuota(setup.ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -253,15 +254,15 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_AtThresholdWarningLevel_Integ
 	config := &models.UserQuotaConfig{
 		UserID:            3,
 		EnforcementPolicy: models.EnforcementPolicyThreshold,
-		StorageLimit:      lo.ToPtr(int64(3000)),
-		StorageThreshold:  lo.ToPtr(int64(2000)),
+		StorageLimitBytes:		uint64(3000),
+		StorageThreshold:  		lo.ToPtr(int64(2000)),
+		WindowType: models.WindowTypeCalendarDay,
 	}
 
 	// Mock current usage that's at threshold
-	setup.mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
-		UserID:      3,
-		BytesStored: 1900,
-	}, nil).Maybe()
+	// Mock GetUsageForWindow
+	setup.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1900), time.Now(), time.Now(), nil)
+
 
 	result, err := setup.enforcer.CheckStorageQuota(setup.ctx, config, uint64(200))
 	require.NoError(t, err)
@@ -275,35 +276,31 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_AtThresholdWarningLevel_Integ
 func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
-	// Setup base mocks that will be used by all tests
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, mock.Anything, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
-	mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, mock.Anything, models.UsageTypeDownload).Return(uint64(0), nil).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
-
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 
 	t.Run("Within limit below threshold", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadTotalLimit:  lo.ToPtr(int64(5000)),
-			UploadThreshold:   lo.ToPtr(int64(800)), // 80% threshold
+			UploadLimitBytes: uint64(1000),
+			WindowType:		models.WindowTypeLifetime,
+			UploadThreshold:   		lo.ToPtr(int64(800)), // 80% threshold
 		}
 
-		// Mock current usage below threshold
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 300,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(300), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -317,16 +314,25 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadTotalLimit:  lo.ToPtr(int64(5000)),
-			UploadThreshold:   lo.ToPtr(int64(800)), // 80% threshold
+			UploadLimitBytes: uint64(1000),
+			WindowType:		models.WindowTypeLifetime,
+			UploadThreshold:   		lo.ToPtr(int64(800)), // 80% threshold
 		}
 
-		// Mock current usage above threshold but below limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 750,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(750), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -341,16 +347,25 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadTotalLimit:  lo.ToPtr(int64(5000)),
-			UploadThreshold:   lo.ToPtr(int64(800)),
+			UploadLimitBytes: uint64(1000),
+			WindowType:		models.WindowTypeLifetime,
+			UploadThreshold:   		lo.ToPtr(int64(800)),
 		}
 
-		// Mock current usage close to limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 950,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(950), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -363,16 +378,25 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadTotalLimit:  lo.ToPtr(int64(5000)),
+			UploadLimitBytes: uint64(1000),
+			WindowType:		models.WindowTypeLifetime,
 			// No threshold configured
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 300,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(300), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -387,34 +411,35 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 }
 
 // TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed tests the CheckDownloadQuota method with mocks
+// TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed tests the CheckDownloadQuota method with mocks
 func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Within limit below threshold", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			DownloadDailyLimit: lo.ToPtr(int64(2000)),
-			DownloadThreshold:  lo.ToPtr(int64(1600)), // 80% threshold
+			DownloadLimitBytes: uint64(2000),
+			DownloadThreshold:   		lo.ToPtr(int64(1600)), // 80% threshold
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage below threshold
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 500,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 		require.NoError(t, err)
@@ -428,15 +453,25 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			DownloadDailyLimit: lo.ToPtr(int64(2000)),
-			DownloadThreshold:  lo.ToPtr(int64(1600)), // 80% threshold
+			DownloadLimitBytes: uint64(2000),
+			DownloadThreshold:   		lo.ToPtr(int64(1600)), // 80% threshold
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage above threshold but below limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 1500,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1500), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -451,15 +486,25 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			DownloadDailyLimit: lo.ToPtr(int64(2000)),
-			DownloadThreshold:  lo.ToPtr(int64(1600)),
+			DownloadLimitBytes: uint64(2000),
+			DownloadThreshold:   		lo.ToPtr(int64(1600)),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage close to limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 1900,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1900), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -472,15 +517,25 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			DownloadDailyLimit: lo.ToPtr(int64(2000)),
+			DownloadLimitBytes: uint64(2000),
+			WindowType: models.WindowTypeCalendarDay,
 			// No threshold configured
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 500,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 		require.NoError(t, err)
@@ -493,36 +548,34 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		dataManager.Cleanup()
 	})
 }
-
-// TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed tests the CheckStorageQuota method with mocks
 func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Within limit below threshold", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			StorageLimit:      lo.ToPtr(int64(3000)),
-			StorageThreshold:  lo.ToPtr(int64(2400)), // 80% threshold
+			StorageLimitBytes:		uint64(3000),
+			StorageThreshold:  		lo.ToPtr(int64(2400)), // 80% threshold
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage below threshold (1000 + 500 = 1500 < 2400)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:      userID,
-			BytesStored: 1000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(500))
 		require.NoError(t, err)
@@ -536,15 +589,25 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			StorageLimit:      lo.ToPtr(int64(3000)),
-			StorageThreshold:  lo.ToPtr(int64(2400)), // 80% threshold
+			StorageLimitBytes:		uint64(3000),
+			StorageThreshold:  		lo.ToPtr(int64(2400)), // 80% threshold
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage just below threshold (2300 + 200 = 2500 > 2400)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:      userID,
-			BytesStored: 2300,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2300), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -559,15 +622,25 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			StorageLimit:      lo.ToPtr(int64(3000)),
-			StorageThreshold:  lo.ToPtr(int64(2400)),
+			StorageLimitBytes:		uint64(3000),
+			StorageThreshold:  		lo.ToPtr(int64(2400)),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage close to limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:      userID,
-			BytesStored: 2900,
-		}, nil)
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2900), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -575,40 +648,70 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
 	})
 
+	t.Run("No threshold configured", func(t *testing.T) {
+		userID := dataManager.NextUserID()
+		config := &models.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: models.EnforcementPolicyThreshold,
+			StorageLimitBytes:		uint64(3000),
+			WindowType: models.WindowTypeCalendarDay,
+			// No threshold configured
+		}
+
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+
+		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(500))
+		require.NoError(t, err)
+		assert.True(t, result.Allowed)
+		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
+		assert.Nil(t, result.Details.Threshold)
+	})
+
 	t.Cleanup(func() {
 		dataManager.Cleanup()
 	})
 }
-
-// TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning tests threshold warning behavior
 func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Warning at exactly threshold", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadThreshold:   lo.ToPtr(int64(800)),
+			UploadLimitBytes: uint64(1000),
+			UploadThreshold:   		lo.ToPtr(int64(800)),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage exactly at threshold
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 800,
-		}, nil)
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(800), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -621,15 +724,25 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *te
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadThreshold:   lo.ToPtr(int64(800)),
+			UploadLimitBytes: uint64(1000),
+			UploadThreshold:   		lo.ToPtr(int64(800)),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage just below threshold
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 799,
-		}, nil)
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(799), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -642,15 +755,25 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *te
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000)),
-			UploadThreshold:   lo.ToPtr(int64(0)),
+			UploadLimitBytes: uint64(1000),
+			UploadThreshold:   		lo.ToPtr(int64(0)),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 100,
-		}, nil)
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(100), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -667,89 +790,101 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *te
 
 // TestThresholdPolicyEnforcer_UploadSuccessDimensionAware tests dimension-aware success responses for uploads
 func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Only daily limit exists - reports daily usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+			UploadLimitBytes: uint64(10000),
 			UploadThreshold:   nil,
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
-		assert.Equal(t, uint64(*config.UploadDailyLimit), *result.Details.Limit)
+		assert.Equal(t, uint64(config.UploadLimitBytes), *result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
 
-	t.Run("Only total limit exists - reports total usage", func(t *testing.T) {
+	t.Run("Lifetime window limit exists - reports lifetime usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadTotalLimit:  lo.ToPtr(int64(50000)),
+			UploadLimitBytes: uint64(50000),
 			UploadThreshold:   nil,
+			WindowType: models.WindowTypeLifetime,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
 
-		totalUsage := uint64(25000)
-		// Only one call expected during quota check
-		mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, userID, models.UsageTypeUpload).Return(totalUsage, nil).Once()
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(25000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, totalUsage, result.Details.CurrentUsage)
-		assert.Equal(t, uint64(*config.UploadTotalLimit), *result.Details.Limit)
+		assert.Equal(t, uint64(25000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(config.UploadLimitBytes), *result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
 
-	t.Run("Neither daily nor total limit exists", func(t *testing.T) {
+	t.Run("No limit configured - returns zero usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+		// Setup mocks - no GetUsageManager call expected when no limit is configured
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(0), result.Details.CurrentUsage)
 		assert.Nil(t, result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
@@ -761,89 +896,101 @@ func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
 
 // TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware tests dimension-aware success responses for downloads
 func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Only daily limit exists - reports daily usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			DownloadDailyLimit: lo.ToPtr(int64(10000)),
+			DownloadLimitBytes: uint64(10000),
 			DownloadThreshold:  nil,
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
-		assert.Equal(t, uint64(*config.DownloadDailyLimit), *result.Details.Limit)
+		assert.Equal(t, uint64(config.DownloadLimitBytes), *result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
 
-	t.Run("Only total limit exists - reports total usage", func(t *testing.T) {
+	t.Run("Lifetime window limit exists - reports lifetime usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			DownloadTotalLimit: lo.ToPtr(int64(50000)),
+			DownloadLimitBytes: uint64(50000),
 			DownloadThreshold:  nil,
+			WindowType: models.WindowTypeLifetime,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
 
-		totalUsage := uint64(25000)
-		// Only one call expected during quota check
-		mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, userID, models.UsageTypeDownload).Return(totalUsage, nil).Once()
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(25000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, totalUsage, result.Details.CurrentUsage)
-		assert.Equal(t, uint64(*config.DownloadTotalLimit), *result.Details.Limit)
+		assert.Equal(t, uint64(25000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(config.DownloadLimitBytes), *result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
 
-	t.Run("Neither daily nor total limit exists", func(t *testing.T) {
+	t.Run("No limit configured - returns zero usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+		// Setup mocks - no GetUsageManager call expected when no limit is configured
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(0), result.Details.CurrentUsage)
 		assert.Nil(t, result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
@@ -855,63 +1002,67 @@ func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
 
 // TestThresholdPolicyEnforcer_StorageSuccessDimensionAware tests dimension-aware success responses for storage
 func TestThresholdPolicyEnforcer_StorageSuccessDimensionAware(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-	mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, mock.Anything, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
-	mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, mock.Anything, models.UsageTypeDownload).Return(uint64(0), nil).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Storage limit exists - reports storage usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			StorageLimit:      lo.ToPtr(int64(10000)),
+			StorageLimitBytes:		uint64(10000),
 			StorageThreshold:  nil,
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:      userID,
-			BytesStored: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
-		assert.Equal(t, uint64(*config.StorageLimit), *result.Details.Limit)
+		assert.Equal(t, uint64(config.StorageLimitBytes), *result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
 
-	t.Run("No storage limit exists", func(t *testing.T) {
+	t.Run("No storage limit configured - returns zero usage", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:      userID,
-			BytesStored: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+
+		// Setup mocks - no GetUsageManager call expected when no limit is configured
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
 		assert.True(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
-		assert.Equal(t, uint64(5000), result.Details.CurrentUsage)
+		assert.Equal(t, uint64(0), result.Details.CurrentUsage)
 		assert.Nil(t, result.Details.Limit)
 		assert.Nil(t, result.Details.Threshold)
 	})
@@ -993,32 +1144,32 @@ func TestThresholdPolicyEnforcer_OverflowPrevention(t *testing.T) {
 
 // TestThresholdPolicyEnforcer_EdgeCases tests edge cases and boundary conditions
 func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
-	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-
-	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 	t.Run("Current usage exactly equals limit", func(t *testing.T) {
 		userID := dataManager.NextUserID()
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+			UploadLimitBytes: uint64(10000),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage exactly at limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 10000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(10000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1031,14 +1182,24 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+			UploadLimitBytes: uint64(10000),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage one byte under limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 9999,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(9999), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1051,14 +1212,24 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(10000)),
+			UploadLimitBytes: uint64(10000),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1071,14 +1242,24 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(1000000000)), // Large but valid int64
+			UploadLimitBytes: uint64(1000000000), // Large but valid int64
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
-		// Mock large current usage
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 500000000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500000000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1000000))
 		require.NoError(t, err)
@@ -1091,21 +1272,30 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			UploadDailyLimit:  lo.ToPtr(int64(5000)),
-			UploadTotalLimit:  lo.ToPtr(int64(50000)),
+			UploadLimitBytes: uint64(5000),
+			WindowType:		models.WindowTypeLifetime,
 		}
 
-		// Mock current usage exactly at daily limit
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 5000,
-		}, nil).Once()
+		// Create fresh mocks for this subtest
+		mockQuotaService := pluginCore.NewMockQuotaService(t)
+		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockUsageManager = pluginCore.NewMockUsageManager(t)
+
+		// Setup mocks
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+
+		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
 		assert.False(t, result.Allowed)
 		assert.Equal(t, models.QuotaCheckReasonLimitExceeded, result.Reason)
-		assert.Equal(t, uint64(*config.UploadDailyLimit), *result.Details.Limit)
+		assert.Equal(t, uint64(config.UploadLimitBytes), *result.Details.Limit)
 	})
 
 	t.Cleanup(func() {
@@ -1131,21 +1321,22 @@ func TestThresholdPolicyEnforcer_ResolveEffectiveLimits_CustomLimits_Unit_Succes
 		config := &models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyThreshold,
-			StorageLimit:       lo.ToPtr(int64(1000)),
-			UploadDailyLimit:   lo.ToPtr(int64(500)),
-			DownloadDailyLimit: lo.ToPtr(int64(750)),
-			StorageThreshold:   lo.ToPtr(int64(800)),
-			UploadThreshold:    lo.ToPtr(int64(400)),
-			DownloadThreshold:  lo.ToPtr(int64(600)),
+			StorageLimitBytes:		uint64(1000),
+			UploadLimitBytes: uint64(500),
+			DownloadLimitBytes: uint64(750),
+			StorageThreshold:  		lo.ToPtr(int64(800)),
+			UploadThreshold:   		lo.ToPtr(int64(400)),
+			DownloadThreshold:   		lo.ToPtr(int64(600)),
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyThreshold)
 		assert.NoError(t, err)
 		assert.Equal(t, userID, limits.UserID)
 		assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyThreshold), limits.EnforcementPolicy)
-		assert.Equal(t, uint64(1000), *limits.StorageLimit)
-		assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
-		assert.Equal(t, uint64(750), *limits.DownloadDailyLimit)
+		assert.Equal(t, uint64(1000), limits.StorageLimitConfig.Bytes)
+		assert.Equal(t, uint64(500), limits.UploadLimitConfig.Bytes)
+		assert.Equal(t, uint64(750), limits.DownloadLimitConfig.Bytes)
 		assert.Equal(t, uint64(800), *limits.StorageThreshold)
 		assert.Equal(t, uint64(400), *limits.UploadThreshold)
 		assert.Equal(t, uint64(600), *limits.DownloadThreshold)
@@ -1156,16 +1347,17 @@ func TestThresholdPolicyEnforcer_ResolveEffectiveLimits_CustomLimits_Unit_Succes
 		config := &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyThreshold,
-			StorageLimit:      lo.ToPtr(int64(1000)),
-			UploadDailyLimit:  lo.ToPtr(int64(500)),
+			StorageLimitBytes:		uint64(1000),
+			UploadLimitBytes: uint64(500),
 			// Thresholds are nil
+			WindowType: models.WindowTypeCalendarDay,
 		}
 
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyThreshold)
 		assert.NoError(t, err)
 		assert.Equal(t, userID, limits.UserID)
-		assert.Equal(t, uint64(1000), *limits.StorageLimit)
-		assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
+		assert.Equal(t, uint64(1000), limits.StorageLimitConfig.Bytes)
+		assert.Equal(t, uint64(500), limits.UploadLimitConfig.Bytes)
 		assert.Nil(t, limits.StorageThreshold)
 		assert.Nil(t, limits.UploadThreshold)
 	})

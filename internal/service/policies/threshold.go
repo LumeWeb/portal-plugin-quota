@@ -49,82 +49,38 @@ func (t *ThresholdPolicyEnforcer) CheckUploadQuota(ctx context.Context, config *
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get today's usage
-		usage, err := t.quotaService.GetTodayUsage(ctx, config.UserID)
+		// Get upload limit from config
+		uploadLimit := t.extractLimitBytes(limits.UploadLimitConfig)
+		if uploadLimit != nil {
+			// Get usage for upload window
+			windowUsage, err := t.getUsageForWindow(ctx, config.UserID, limits.UploadLimitConfig, models.UsageTypeUpload, 0)
+			if err != nil {
+				return pluginCore.QuotaCheckResult{}, err
+			}
+
+			result := t.checkThresholdWithLimit(
+				windowUsage,
+				requestedBytes,
+				limits.UploadThreshold,
+				*uploadLimit,
+				models.EnforcementPolicyThreshold,
+			)
+			if result != nil {
+				return *result, nil
+			}
+		}
+
+		// Create success result
+		windowUsage, err := t.getUsageForWindow(ctx, config.UserID, limits.UploadLimitConfig, models.UsageTypeUpload, 0)
 		if err != nil {
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Cache total usage if we need to check total limits or use in details
-		var totalUsage uint64
-		haveTotal := false
-
-		// Check daily upload limit
-		if limits.UploadDailyLimit != nil {
-			result := t.checkThresholdWithLimit(
-				usage.BytesUploaded,
-				requestedBytes,
-				limits.UploadThreshold,
-				*limits.UploadDailyLimit,
-				models.EnforcementPolicyThreshold,
-			)
-			if result != nil {
-				return *result, nil
-			}
-		}
-
-		// Check total upload limit
-		if limits.UploadTotalLimit != nil {
-			tu, err := t.quotaService.GetUsageManager().GetTotalBytesByType(ctx, config.UserID, models.UsageTypeUpload)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, err
-			}
-			totalUsage = tu
-			haveTotal = true
-
-			result := t.checkThresholdWithLimit(
-				totalUsage,
-				requestedBytes,
-				limits.UploadThreshold,
-				*limits.UploadTotalLimit,
-				models.EnforcementPolicyThreshold,
-			)
-			if result != nil {
-				return *result, nil
-			}
-		}
-
-		// Create success result with current usage and limit, but no threshold
-		var details pluginCore.QuotaCheckDetails
-		if limits.UploadDailyLimit != nil {
-			details = pluginCore.QuotaCheckDetails{
-				CurrentUsage: usage.BytesUploaded,
-				Limit:        limits.UploadDailyLimit,
-				Policy:       models.EnforcementPolicyThreshold,
-				Threshold:    nil, // Explicitly set to nil when no warning
-			}
-		} else if limits.UploadTotalLimit != nil {
-			if !haveTotal {
-				// Re-fetch total usage for consistency with test expectations
-				tu, err := t.quotaService.GetUsageManager().GetTotalBytesByType(ctx, config.UserID, models.UsageTypeUpload)
-				if err != nil {
-					return pluginCore.QuotaCheckResult{}, err
-				}
-				totalUsage = tu
-			}
-			details = pluginCore.QuotaCheckDetails{
-				CurrentUsage: totalUsage,
-				Limit:        limits.UploadTotalLimit,
-				Policy:       models.EnforcementPolicyThreshold,
-				Threshold:    nil, // Explicitly set to nil when no warning
-			}
-		} else {
-			details = pluginCore.QuotaCheckDetails{
-				CurrentUsage: usage.BytesUploaded,
-				Limit:        nil,
-				Policy:       models.EnforcementPolicyThreshold,
-				Threshold:    nil, // Explicitly set to nil when no warning
-			}
+		details := pluginCore.QuotaCheckDetails{
+			CurrentUsage: windowUsage,
+			Limit:        uploadLimit,
+			Policy:       models.EnforcementPolicyThreshold,
+			Threshold:    nil, // Explicitly set to nil when no warning
 		}
 		return t.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyThreshold, details), nil
 	})
@@ -153,82 +109,38 @@ func (t *ThresholdPolicyEnforcer) CheckDownloadQuota(ctx context.Context, config
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get today's usage
-		usage, err := t.quotaService.GetTodayUsage(ctx, config.UserID)
+		// Get download limit from config
+		downloadLimit := t.extractLimitBytes(limits.DownloadLimitConfig)
+		if downloadLimit != nil {
+			// Get usage for download window
+			windowUsage, err := t.getUsageForWindow(ctx, config.UserID, limits.DownloadLimitConfig, models.UsageTypeDownload, 0)
+			if err != nil {
+				return pluginCore.QuotaCheckResult{}, err
+			}
+
+			result := t.checkThresholdWithLimit(
+				windowUsage,
+				requestedBytes,
+				limits.DownloadThreshold,
+				*downloadLimit,
+				models.EnforcementPolicyThreshold,
+			)
+			if result != nil {
+				return *result, nil
+			}
+		}
+
+		// Create success result
+		windowUsage, err := t.getUsageForWindow(ctx, config.UserID, limits.DownloadLimitConfig, models.UsageTypeDownload, 0)
 		if err != nil {
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Cache total usage if we need to check total limits or use in details
-		var totalUsage uint64
-		haveTotal := false
-
-		// Check daily download limit
-		if limits.DownloadDailyLimit != nil {
-			result := t.checkThresholdWithLimit(
-				usage.BytesDownloaded,
-				requestedBytes,
-				limits.DownloadThreshold,
-				*limits.DownloadDailyLimit,
-				models.EnforcementPolicyThreshold,
-			)
-			if result != nil {
-				return *result, nil
-			}
-		}
-
-		// Check total download limit
-		if limits.DownloadTotalLimit != nil {
-			tu, err := t.quotaService.GetUsageManager().GetTotalBytesByType(ctx, config.UserID, models.UsageTypeDownload)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, err
-			}
-			totalUsage = tu
-			haveTotal = true
-
-			result := t.checkThresholdWithLimit(
-				totalUsage,
-				requestedBytes,
-				limits.DownloadThreshold,
-				*limits.DownloadTotalLimit,
-				models.EnforcementPolicyThreshold,
-			)
-			if result != nil {
-				return *result, nil
-			}
-		}
-
-		// Create success result with current usage and limit, but no threshold
-		var details pluginCore.QuotaCheckDetails
-		if limits.DownloadDailyLimit != nil {
-			details = pluginCore.QuotaCheckDetails{
-				CurrentUsage: usage.BytesDownloaded,
-				Limit:        limits.DownloadDailyLimit,
-				Policy:       models.EnforcementPolicyThreshold,
-				Threshold:    nil, // Explicitly set to nil when no warning
-			}
-		} else if limits.DownloadTotalLimit != nil {
-			if !haveTotal {
-				// Re-fetch total usage for consistency with test expectations
-				tu, err := t.quotaService.GetUsageManager().GetTotalBytesByType(ctx, config.UserID, models.UsageTypeDownload)
-				if err != nil {
-					return pluginCore.QuotaCheckResult{}, err
-				}
-				totalUsage = tu
-			}
-			details = pluginCore.QuotaCheckDetails{
-				CurrentUsage: totalUsage,
-				Limit:        limits.DownloadTotalLimit,
-				Policy:       models.EnforcementPolicyThreshold,
-				Threshold:    nil, // Explicitly set to nil when no warning
-			}
-		} else {
-			details = pluginCore.QuotaCheckDetails{
-				CurrentUsage: usage.BytesDownloaded,
-				Limit:        nil,
-				Policy:       models.EnforcementPolicyThreshold,
-				Threshold:    nil, // Explicitly set to nil when no warning
-			}
+		details := pluginCore.QuotaCheckDetails{
+			CurrentUsage: windowUsage,
+			Limit:        downloadLimit,
+			Policy:       models.EnforcementPolicyThreshold,
+			Threshold:    nil, // Explicitly set to nil when no warning
 		}
 		return t.createQuotaCheckResult(true, models.QuotaCheckReasonOK, models.EnforcementPolicyThreshold, details), nil
 	})
@@ -257,19 +169,20 @@ func (t *ThresholdPolicyEnforcer) CheckStorageQuota(ctx context.Context, config 
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get today's usage
-		usage, err := t.quotaService.GetTodayUsage(ctx, config.UserID)
-		if err != nil {
-			return pluginCore.QuotaCheckResult{}, err
-		}
+		// Get storage limit from config
+		storageLimit := t.extractLimitBytes(limits.StorageLimitConfig)
+		if storageLimit != nil {
+			// Get usage for storage window
+			windowUsage, err := t.getUsageForWindow(ctx, config.UserID, limits.StorageLimitConfig, models.UsageTypeStorageAdd, 0)
+			if err != nil {
+				return pluginCore.QuotaCheckResult{}, err
+			}
 
-		// Check storage limit
-		if limits.StorageLimit != nil {
 			result := t.checkThresholdWithLimit(
-				usage.BytesStored,
+				windowUsage,
 				requestedBytes,
 				limits.StorageThreshold,
-				*limits.StorageLimit,
+				*storageLimit,
 				models.EnforcementPolicyThreshold,
 			)
 			if result != nil {
@@ -277,10 +190,15 @@ func (t *ThresholdPolicyEnforcer) CheckStorageQuota(ctx context.Context, config 
 			}
 		}
 
-		// Create success result with current usage and limit, but no threshold
+		// Create success result
+		windowUsage, err := t.getUsageForWindow(ctx, config.UserID, limits.StorageLimitConfig, models.UsageTypeStorageAdd, 0)
+		if err != nil {
+			return pluginCore.QuotaCheckResult{}, err
+		}
+
 		details := pluginCore.QuotaCheckDetails{
-			CurrentUsage: usage.BytesStored,
-			Limit:        limits.StorageLimit,
+			CurrentUsage: windowUsage,
+			Limit:        storageLimit,
 			Policy:       models.EnforcementPolicyThreshold,
 			Threshold:    nil, // Explicitly set to nil when no warning
 		}
@@ -384,4 +302,36 @@ func (t *ThresholdPolicyEnforcer) GetUsageHistory(ctx context.Context, userID ui
 	defer span.End()
 
 	return t.quotaService.GetUsageManager().GetUsageHistory(ctx, userID, period, usageType)
+}
+
+// extractLimitBytes extracts the byte limit from a LimitConfig
+func (t *ThresholdPolicyEnforcer) extractLimitBytes(limitConfig *pluginCore.Limit) *uint64 {
+	if limitConfig == nil {
+		return nil
+	}
+	return &limitConfig.Bytes
+}
+
+// getUsageForWindow gets usage for the configured window, falls back to provided default usage
+func (t *ThresholdPolicyEnforcer) getUsageForWindow(
+	ctx context.Context,
+	userID uint,
+	limitConfig *pluginCore.Limit,
+	usageType models.UsageType,
+	defaultUsage uint64,
+) (uint64, error) {
+	if limitConfig == nil || limitConfig.Window.IsNil() {
+		// No window configured, use default usage
+		return defaultUsage, nil
+	}
+
+	// Get usage for the configured window
+	usageAggregator := t.quotaService.GetUsageManager()
+	windowUsage, _, _, err := usageAggregator.GetUsageForWindow(
+		ctx, userID, pluginCore.UsageType(usageType), limitConfig.Window)
+	if err != nil {
+		return 0, err
+	}
+
+	return windowUsage, nil
 }

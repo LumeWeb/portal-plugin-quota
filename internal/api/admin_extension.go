@@ -259,22 +259,31 @@ func (e *QuotaAdminExtension) handleListPlans(c echo.Context) error {
 			return e.quotaService.ListQuotaPlans(ctx.Request().Context(), filters, sorts, pagination)
 		},
 		func(plan *models.QuotaPlan) dto.QuotaPlanResponse {
+			// Build window type pointer
+			var windowType *string
+			if plan.WindowType != "" {
+				wt := plan.WindowType.String()
+				windowType = &wt
+			}
+
 			return dto.QuotaPlanResponse{
-				ID:                 plan.ID,
-				Name:               plan.Name,
-				Description:        plan.Description,
-				StorageLimit:       &plan.StorageLimit,
-				UploadDailyLimit:   &plan.UploadDailyLimit,
-				DownloadDailyLimit: &plan.DownloadDailyLimit,
-				UploadTotalLimit:   &plan.UploadTotalLimit,
-				DownloadTotalLimit: &plan.DownloadTotalLimit,
-				StorageThreshold:   plan.StorageThreshold,
-				UploadThreshold:    plan.UploadThreshold,
-				DownloadThreshold:  plan.DownloadThreshold,
-				IsDefault:          plan.IsDefault,
-				IsActive:           plan.IsActive != nil && *plan.IsActive,
-				CreatedAt:          plan.CreatedAt,
-				UpdatedAt:          plan.UpdatedAt,
+				ID:                plan.ID,
+				Name:              plan.Name,
+				Description:       plan.Description,
+				WindowType:        windowType,
+				WindowDuration:    plan.WindowDuration,
+				WindowStartHour:   plan.WindowStartHour,
+				WindowTimezone:    plan.WindowTimezone,
+				StorageLimitBytes: &plan.StorageLimitBytes,
+				UploadLimitBytes:  &plan.UploadLimitBytes,
+				DownloadLimitBytes: &plan.DownloadLimitBytes,
+				StorageThreshold:  plan.StorageThreshold,
+				UploadThreshold:   plan.UploadThreshold,
+				DownloadThreshold: plan.DownloadThreshold,
+				IsDefault:         plan.IsDefault,
+				IsActive:          plan.IsActive != nil && *plan.IsActive,
+				CreatedAt:         plan.CreatedAt,
+				UpdatedAt:         plan.UpdatedAt,
 			}
 		},
 	)
@@ -291,18 +300,24 @@ func (e *QuotaAdminExtension) handleCreatePlan(c echo.Context) error {
 	}
 
 	plan := &models.QuotaPlan{
-		Name:               req.Name,
-		Description:        req.Description,
-		StorageLimit:       int64PtrValue(req.StorageLimit),
-		UploadDailyLimit:   int64PtrValue(req.UploadDailyLimit),
-		DownloadDailyLimit: int64PtrValue(req.DownloadDailyLimit),
-		UploadTotalLimit:   int64PtrValue(req.UploadTotalLimit),
-		DownloadTotalLimit: int64PtrValue(req.DownloadTotalLimit),
-		StorageThreshold:   req.StorageThreshold,
-		UploadThreshold:    req.UploadThreshold,
-		DownloadThreshold:  req.DownloadThreshold,
-		IsDefault:          false,
-		IsActive:           req.IsActive,
+		Name:              req.Name,
+		Description:       req.Description,
+		WindowDuration:    req.WindowDuration,
+		WindowStartHour:   req.WindowStartHour,
+		WindowTimezone:    req.WindowTimezone,
+		StorageLimitBytes: uint64PtrValue(req.StorageLimitBytes),
+		UploadLimitBytes:  uint64PtrValue(req.UploadLimitBytes),
+		DownloadLimitBytes: uint64PtrValue(req.DownloadLimitBytes),
+		StorageThreshold:  req.StorageThreshold,
+		UploadThreshold:   req.UploadThreshold,
+		DownloadThreshold: req.DownloadThreshold,
+		IsDefault:         false,
+		IsActive:          req.IsActive,
+	}
+	
+	// Set WindowType if provided
+	if req.WindowType != nil {
+		plan.WindowType = models.WindowType(*req.WindowType)
 	}
 
 	if err := e.quotaService.CreateQuotaPlan(reqCtx, plan); err != nil {
@@ -376,14 +391,26 @@ func (e *QuotaAdminExtension) handleUpdatePlan(c echo.Context) error {
 
 	plan.Name = req.Name
 	plan.Description = req.Description
-	plan.StorageLimit = int64PtrValue(req.StorageLimit)
-	plan.UploadDailyLimit = int64PtrValue(req.UploadDailyLimit)
-	plan.DownloadDailyLimit = int64PtrValue(req.DownloadDailyLimit)
-	plan.UploadTotalLimit = int64PtrValue(req.UploadTotalLimit)
-	plan.DownloadTotalLimit = int64PtrValue(req.DownloadTotalLimit)
+	
+	// Set window configuration fields
+	if req.WindowType != nil {
+		plan.WindowType = models.WindowType(*req.WindowType)
+	}
+	plan.WindowDuration = req.WindowDuration
+	plan.WindowStartHour = req.WindowStartHour
+	plan.WindowTimezone = req.WindowTimezone
+	
+	// Set byte limits
+	plan.StorageLimitBytes = uint64PtrValue(req.StorageLimitBytes)
+	plan.UploadLimitBytes = uint64PtrValue(req.UploadLimitBytes)
+	plan.DownloadLimitBytes = uint64PtrValue(req.DownloadLimitBytes)
+	
+	// Set thresholds
 	plan.StorageThreshold = req.StorageThreshold
 	plan.UploadThreshold = req.UploadThreshold
 	plan.DownloadThreshold = req.DownloadThreshold
+	
+	// Set active status
 	plan.IsActive = req.IsActive
 
 	if err := e.quotaService.UpdateQuotaPlan(reqCtx, planID, plan); err != nil {
@@ -458,21 +485,30 @@ func (e *QuotaAdminExtension) handleListUserQuotaConfigs(c echo.Context) error {
 			return e.quotaService.ListUserQuotaConfigs(ctx.Request().Context(), filters, sorts, pagination)
 		},
 		func(config *models.UserQuotaConfig) dto.UserQuotaConfigResponse {
+			// Build window type pointer
+			var windowType *string
+			if config.WindowType != "" {
+				wt := config.WindowType.String()
+				windowType = &wt
+			}
+
 			return dto.UserQuotaConfigResponse{
-				ID:                 config.ID,
-				UserID:             config.UserID,
-				EnforcementPolicy:  string(config.EnforcementPolicy),
-				QuotaPlanID:        config.QuotaPlanID,
-				StorageLimit:       config.StorageLimit,
-				UploadDailyLimit:   config.UploadDailyLimit,
-				DownloadDailyLimit: config.DownloadDailyLimit,
-				UploadTotalLimit:   config.UploadTotalLimit,
-				DownloadTotalLimit: config.DownloadTotalLimit,
-				StorageThreshold:   config.StorageThreshold,
-				UploadThreshold:    config.UploadThreshold,
-				DownloadThreshold:  config.DownloadThreshold,
-				CreatedAt:          config.CreatedAt,
-				UpdatedAt:          config.UpdatedAt,
+				ID:                config.ID,
+				UserID:            config.UserID,
+				EnforcementPolicy: string(config.EnforcementPolicy),
+				QuotaPlanID:       config.QuotaPlanID,
+				WindowType:        windowType,
+				WindowDuration:    config.WindowDuration,
+				WindowStartHour:   config.WindowStartHour,
+				WindowTimezone:    config.WindowTimezone,
+				StorageLimitBytes: &config.StorageLimitBytes,
+				UploadLimitBytes:  &config.UploadLimitBytes,
+				DownloadLimitBytes: &config.DownloadLimitBytes,
+				StorageThreshold:  config.StorageThreshold,
+				UploadThreshold:   config.UploadThreshold,
+				DownloadThreshold: config.DownloadThreshold,
+				CreatedAt:         config.CreatedAt,
+				UpdatedAt:         config.UpdatedAt,
 			}
 		},
 	)
@@ -499,11 +535,13 @@ func (e *QuotaAdminExtension) handleUpdateUserQuotaConfig(c echo.Context) error 
 
 	update.EnforcementPolicy = req.EnforcementPolicy
 	update.QuotaPlanID = req.QuotaPlanID
-	update.StorageLimit = req.StorageLimit
-	update.UploadDailyLimit = req.UploadDailyLimit
-	update.DownloadDailyLimit = req.DownloadDailyLimit
-	update.UploadTotalLimit = req.UploadTotalLimit
-	update.DownloadTotalLimit = req.DownloadTotalLimit
+	update.WindowType = req.WindowType
+	update.WindowDuration = req.WindowDuration
+	update.WindowStartHour = req.WindowStartHour
+	update.WindowTimezone = req.WindowTimezone
+	update.StorageLimitBytes = req.StorageLimitBytes
+	update.UploadLimitBytes = req.UploadLimitBytes
+	update.DownloadLimitBytes = req.DownloadLimitBytes
 	update.StorageThreshold = req.StorageThreshold
 	update.UploadThreshold = req.UploadThreshold
 	update.DownloadThreshold = req.DownloadThreshold
@@ -792,4 +830,20 @@ func parseGrantType(s string) (models.GrantType, error) {
 	default:
 		return "", fmt.Errorf("invalid grant type: %s", s)
 	}
+}
+
+// Helper functions for new DTO field conversions
+
+func uint64PtrValue(ptr *uint64) uint64 {
+	if ptr == nil {
+		return 0
+	}
+	return *ptr
+}
+
+func uintPtrValue(ptr *uint) uint {
+	if ptr == nil {
+		return 0
+	}
+	return *ptr
 }

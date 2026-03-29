@@ -29,28 +29,34 @@ var (
 
 // QuotaPlanRequest describes a quota plan for creation/update
 type QuotaPlanRequest struct {
-	Name               string  `json:"name"`
-	Description        string  `json:"description"`
-	StorageLimit       *int64  `json:"storage_limit"`
-	UploadDailyLimit   *int64  `json:"upload_daily_limit"`
-	DownloadDailyLimit *int64  `json:"download_daily_limit"`
-	UploadTotalLimit   *int64  `json:"upload_total_limit"`
-	DownloadTotalLimit *int64  `json:"download_total_limit"`
-	StorageThreshold   *int64  `json:"storage_threshold"`
-	UploadThreshold    *int64  `json:"upload_threshold"`
-	DownloadThreshold  *int64  `json:"download_threshold"`
-	IsActive           *bool   `json:"is_active"`
+	Name       string  `json:"name"`
+	Description string  `json:"description"`
+	// Window configuration
+	WindowType      *string  `json:"window_type"`
+	WindowDuration  *int64   `json:"window_duration"`
+	WindowStartHour *int     `json:"window_start_hour"`
+	WindowTimezone  *string  `json:"window_timezone"`
+	// Byte limits
+	StorageLimitBytes   *uint64 `json:"storage_limit_bytes"`
+	UploadLimitBytes    *uint64 `json:"upload_limit_bytes"`
+	DownloadLimitBytes  *uint64 `json:"download_limit_bytes"`
+	StorageThreshold    *int64  `json:"storage_threshold"`
+	UploadThreshold     *int64  `json:"upload_threshold"`
+	DownloadThreshold   *int64  `json:"download_threshold"`
+	IsActive            *bool   `json:"is_active"`
 }
 
 func (r *QuotaPlanRequest) Schema() *z.StructSchema {
 	return z.Struct(z.Shape{
 		"Name":               z.String().Required().Min(1),
 		"Description":        z.String().Optional(),
-		"StorageLimit":       z.Ptr(z.Int64().GTE(0)),
-		"UploadDailyLimit":   z.Ptr(z.Int64().GTE(0)),
-		"DownloadDailyLimit": z.Ptr(z.Int64().GTE(0)),
-		"UploadTotalLimit":   z.Ptr(z.Int64().GTE(0)),
-		"DownloadTotalLimit": z.Ptr(z.Int64().GTE(0)),
+		"WindowType":         z.Ptr(z.String()),
+		"WindowDuration":     z.Ptr(z.Int64()),
+		"WindowStartHour":    z.Ptr(z.Int()),
+		"WindowTimezone":     z.Ptr(z.String()),
+		"StorageLimitBytes":  z.Ptr(z.UintLike[uint64]()),
+		"UploadLimitBytes":   z.Ptr(z.UintLike[uint64]()),
+		"DownloadLimitBytes": z.Ptr(z.UintLike[uint64]()),
 		"StorageThreshold":   z.Ptr(z.Int64().GTE(0)),
 		"UploadThreshold":    z.Ptr(z.Int64().GTE(0)),
 		"DownloadThreshold":  z.Ptr(z.Int64().GTE(0)),
@@ -67,14 +73,18 @@ type QuotaPlanResponse struct {
 	ID                 uint      `json:"id"`
 	Name               string    `json:"name"`
 	Description        string    `json:"description"`
-	StorageLimit       *int64    `json:"storage_limit"`
-	UploadDailyLimit   *int64    `json:"upload_daily_limit"`
-	DownloadDailyLimit *int64    `json:"download_daily_limit"`
-	UploadTotalLimit   *int64    `json:"upload_total_limit"`
-	DownloadTotalLimit *int64    `json:"download_total_limit"`
-	StorageThreshold   *int64    `json:"storage_threshold"`
-	UploadThreshold    *int64    `json:"upload_threshold"`
-	DownloadThreshold  *int64    `json:"download_threshold"`
+	// Window configuration
+	WindowType      *string  `json:"window_type"`
+	WindowDuration  *int64   `json:"window_duration"`
+	WindowStartHour *int     `json:"window_start_hour"`
+	WindowTimezone  *string  `json:"window_timezone"`
+	// Byte limits
+	StorageLimitBytes   *uint64 `json:"storage_limit_bytes"`
+	UploadLimitBytes    *uint64 `json:"upload_limit_bytes"`
+	DownloadLimitBytes  *uint64 `json:"download_limit_bytes"`
+	StorageThreshold    *int64  `json:"storage_threshold"`
+	UploadThreshold     *int64  `json:"upload_threshold"`
+	DownloadThreshold   *int64  `json:"download_threshold"`
 	IsDefault          bool      `json:"is_default"`
 	IsActive           bool      `json:"is_active"`
 	CreatedAt          time.Time `json:"created_at"`
@@ -88,14 +98,26 @@ func (r *QuotaPlanResponse) FromModel(model *models.QuotaPlan) error {
 	r.ID = model.ID
 	r.Name = model.Name
 	r.Description = model.Description
-	r.StorageLimit = &model.StorageLimit
-	r.UploadDailyLimit = &model.UploadDailyLimit
-	r.DownloadDailyLimit = &model.DownloadDailyLimit
-	r.UploadTotalLimit = &model.UploadTotalLimit
-	r.DownloadTotalLimit = &model.DownloadTotalLimit
+	
+	// Window configuration
+	if model.WindowType != "" {
+		windowType := model.WindowType.String()
+		r.WindowType = &windowType
+	}
+	r.WindowDuration = model.WindowDuration
+	r.WindowStartHour = model.WindowStartHour
+	r.WindowTimezone = model.WindowTimezone
+	
+	// Byte limits
+	r.StorageLimitBytes = &model.StorageLimitBytes
+	r.UploadLimitBytes = &model.UploadLimitBytes
+	r.DownloadLimitBytes = &model.DownloadLimitBytes
+	
+	// Thresholds
 	r.StorageThreshold = model.StorageThreshold
 	r.UploadThreshold = model.UploadThreshold
 	r.DownloadThreshold = model.DownloadThreshold
+	
 	r.IsDefault = model.IsDefault
 	r.IsActive = model.IsActive != nil && *model.IsActive
 	r.CreatedAt = model.CreatedAt
@@ -269,20 +291,23 @@ func (r ReconcileResponse) FromModel(_ ReconcileResponse) error {
 }
 
 // UserQuotaConfigResponse represents a user quota configuration
-// Note: Uses pointer for UserID to avoid gorm.Model embedding issues
 type UserQuotaConfigResponse struct {
 	ID                 uint      `json:"id"`
 	UserID             uint      `json:"user_id"`
 	EnforcementPolicy  string    `json:"enforcement_policy"`
 	QuotaPlanID        *uint64   `json:"quota_plan_id,omitempty"`
-	StorageLimit       *int64    `json:"storage_limit,omitempty"`
-	UploadDailyLimit   *int64    `json:"upload_daily_limit,omitempty"`
-	DownloadDailyLimit *int64    `json:"download_daily_limit,omitempty"`
-	UploadTotalLimit   *int64    `json:"upload_total_limit,omitempty"`
-	DownloadTotalLimit *int64    `json:"download_total_limit,omitempty"`
-	StorageThreshold   *int64    `json:"storage_threshold,omitempty"`
-	UploadThreshold    *int64    `json:"upload_threshold,omitempty"`
-	DownloadThreshold  *int64    `json:"download_threshold,omitempty"`
+	// Window configuration
+	WindowType      *string  `json:"window_type,omitempty"`
+	WindowDuration  *int64   `json:"window_duration,omitempty"`
+	WindowStartHour *int     `json:"window_start_hour,omitempty"`
+	WindowTimezone  *string  `json:"window_timezone,omitempty"`
+	// Byte limits
+	StorageLimitBytes   *uint64 `json:"storage_limit_bytes,omitempty"`
+	UploadLimitBytes    *uint64 `json:"upload_limit_bytes,omitempty"`
+	DownloadLimitBytes  *uint64 `json:"download_limit_bytes,omitempty"`
+	StorageThreshold    *int64  `json:"storage_threshold,omitempty"`
+	UploadThreshold     *int64  `json:"upload_threshold,omitempty"`
+	DownloadThreshold   *int64  `json:"download_threshold,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
@@ -295,11 +320,20 @@ func (r *UserQuotaConfigResponse) FromModel(model *models.UserQuotaConfig) error
 	r.UserID = model.UserID
 	r.EnforcementPolicy = string(model.EnforcementPolicy)
 	r.QuotaPlanID = model.QuotaPlanID
-	r.StorageLimit = model.StorageLimit
-	r.UploadDailyLimit = model.UploadDailyLimit
-	r.DownloadDailyLimit = model.DownloadDailyLimit
-	r.UploadTotalLimit = model.UploadTotalLimit
-	r.DownloadTotalLimit = model.DownloadTotalLimit
+	
+	// Window configuration
+	if model.WindowType != "" {
+		windowType := model.WindowType.String()
+		r.WindowType = &windowType
+	}
+	r.WindowDuration = model.WindowDuration
+	r.WindowStartHour = model.WindowStartHour
+	r.WindowTimezone = model.WindowTimezone
+	
+	// Byte limits
+	r.StorageLimitBytes = &model.StorageLimitBytes
+	r.UploadLimitBytes = &model.UploadLimitBytes
+	r.DownloadLimitBytes = &model.DownloadLimitBytes
 	r.StorageThreshold = model.StorageThreshold
 	r.UploadThreshold = model.UploadThreshold
 	r.DownloadThreshold = model.DownloadThreshold
@@ -325,25 +359,31 @@ type UserQuotaConfigListResponse struct {
 type UserQuotaConfigUpdateRequest struct {
 	EnforcementPolicy  *models.EnforcementPolicy `json:"enforcement_policy,omitempty"`
 	QuotaPlanID        *uint64                   `json:"quota_plan_id,omitempty"`
-	StorageLimit       *int64                    `json:"storage_limit,omitempty"`
-	UploadDailyLimit   *int64                    `json:"upload_daily_limit,omitempty"`
-	DownloadDailyLimit *int64                    `json:"download_daily_limit,omitempty"`
-	UploadTotalLimit   *int64                    `json:"upload_total_limit,omitempty"`
-	DownloadTotalLimit *int64                    `json:"download_total_limit,omitempty"`
-	StorageThreshold   *int64                    `json:"storage_threshold,omitempty"`
-	UploadThreshold    *int64                    `json:"upload_threshold,omitempty"`
-	DownloadThreshold  *int64                    `json:"download_threshold,omitempty"`
+	// Window configuration
+	WindowType      *string  `json:"window_type,omitempty"`
+	WindowDuration  *int64   `json:"window_duration,omitempty"`
+	WindowStartHour *int     `json:"window_start_hour,omitempty"`
+	WindowTimezone  *string  `json:"window_timezone,omitempty"`
+	// Byte limits
+	StorageLimitBytes   *uint64 `json:"storage_limit_bytes,omitempty"`
+	UploadLimitBytes    *uint64 `json:"upload_limit_bytes,omitempty"`
+	DownloadLimitBytes  *uint64 `json:"download_limit_bytes,omitempty"`
+	StorageThreshold    *int64  `json:"storage_threshold,omitempty"`
+	UploadThreshold     *int64  `json:"upload_threshold,omitempty"`
+	DownloadThreshold   *int64  `json:"download_threshold,omitempty"`
 }
 
 func (r *UserQuotaConfigUpdateRequest) Schema() *z.StructSchema {
 	return z.Struct(z.Shape{
 		"EnforcementPolicy":  config.ZogStringLike[models.EnforcementPolicy]().Optional(),
 		"QuotaPlanID":        z.Ptr(z.UintLike[uint64]()),
-		"StorageLimit":       z.Ptr(z.Int64().GTE(0)),
-		"UploadDailyLimit":   z.Ptr(z.Int64().GTE(0)),
-		"DownloadDailyLimit": z.Ptr(z.Int64().GTE(0)),
-		"UploadTotalLimit":   z.Ptr(z.Int64().GTE(0)),
-		"DownloadTotalLimit": z.Ptr(z.Int64().GTE(0)),
+		"WindowType":         z.Ptr(z.String()),
+		"WindowDuration":     z.Ptr(z.Int64()),
+		"WindowStartHour":    z.Ptr(z.Int()),
+		"WindowTimezone":     z.Ptr(z.String()),
+		"StorageLimitBytes":  z.Ptr(z.Int64()),
+		"UploadLimitBytes":   z.Ptr(z.Int64()),
+		"DownloadLimitBytes": z.Ptr(z.Int64()),
 		"StorageThreshold":   z.Ptr(z.Int64().GTE(0)),
 		"UploadThreshold":    z.Ptr(z.Int64().GTE(0)),
 		"DownloadThreshold":  z.Ptr(z.Int64().GTE(0)),

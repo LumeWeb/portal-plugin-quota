@@ -17,24 +17,22 @@ import (
 )
 
 // newHardLimitsTest creates a test harness with all required mocks for hard limits policy tests
-func newHardLimitsTest(t *testing.T) (coreTesting.TestContext, *pluginCore.MockQuotaService, *pluginCore.MockUsageManager, *pluginCore.MockQuotaPlanManager, *pluginCore.MockUsageAggregator, *HardLimitsPolicyEnforcer) {
+func newHardLimitsTest(t *testing.T) (coreTesting.TestContext, *pluginCore.MockQuotaService, *pluginCore.MockUsageManager, *pluginCore.MockQuotaPlanManager, *HardLimitsPolicyEnforcer) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	qs := pluginCore.NewMockQuotaService(t)
 	um := pluginCore.NewMockUsageManager(t)
 	qpm := pluginCore.NewMockQuotaPlanManager(t)
-	ua := pluginCore.NewMockUsageAggregator(t)
 
 	qs.EXPECT().GetUsageManager().Return(um).Maybe()
 	qs.EXPECT().GetQuotaPlanManager().Return(qpm).Maybe()
-	qs.EXPECT().GetUsageAggregator().Return(ua).Maybe()
 
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, qs)
-	return ctx, qs, um, qpm, ua, enforcer
+	return ctx, qs, um, qpm, enforcer
 }
 
 // TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error tests upload with nil config
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error(t *testing.T) {
-	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
+	ctx, _, um, _, enforcer := newHardLimitsTest(t)
 	um.EXPECT().RecordUpload(ctx, uint(0), uint(0), uint64(0), "").Return(nil).Maybe()
 
 	result, err := enforcer.CheckUploadQuota(ctx, nil, uint64(500))
@@ -44,26 +42,32 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error(t *testi
 
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allowed tests the CheckDownloadQuota method with mocks - within daily limit case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allowed(t *testing.T) {
-	ctx, qs, _, qpm, ua, enforcer := newHardLimitsTest(t)
+	ctx, _, um, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	// Use fixed test user ID
 	userID := dataManager.NextUserID()
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:             userID,
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadTotalLimit: lo.ToPtr(int64(10000)),
+		DownloadLimitBytes: uint64(2000),
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
-
-	qs.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-		UserID:          userID,
-		BytesDownloaded: 500,
-	}, nil)
 
 	// Mock quota plan manager calls
 	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-	ua.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(500), nil)
+
+	// Mock usage aggregator to return window-based usage
+	now := time.Now()
+	windowStart := now.Add(-86400 * time.Second)
+	um.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeDownload, mock.Anything).Return(uint64(500), windowStart, now, nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 	require.NoError(t, err)
@@ -76,26 +80,33 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allow
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Blocked tests the CheckDownloadQuota method with mocks - exceeding daily limit case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Blocked(t *testing.T) {
 	// Setup all mocks
-	ctx, qs, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, um, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	// Generate unique user ID per test
 	userID := dataManager.NextUserID()
+
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:             userID,
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadTotalLimit: lo.ToPtr(int64(10000)),
+		DownloadLimitBytes: uint64(2000),
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
-
-	// Mock service calls
-	qs.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-		UserID:          userID,
-		BytesDownloaded: 1800,
-	}, nil)
 
 	// Mock default quota plan lookup to return not found
 	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+
+	// Mock usage aggregator to return window-based usage
+	now := time.Now()
+	windowStart := now.Add(-86400 * time.Second)
+	um.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeDownload, mock.Anything).Return(uint64(1800), windowStart, now, nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -107,14 +118,21 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Bl
 
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error tests the CheckDownloadQuota method with mocks - invalid bytes case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *testing.T) {
-	ctx, _, _, _, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
+
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
 
 	config := &models.UserQuotaConfig{
 		UserID:             dataManager.NextUserID(),
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadTotalLimit: lo.ToPtr(int64(10000)),
+		DownloadLimitBytes: uint64(2000),
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(0))
@@ -127,7 +145,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *
 
 // TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error tests the CheckDownloadQuota method with mocks - nil config case
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *testing.T) {
-	ctx, _, _, _, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, nil, uint64(500))
@@ -139,7 +157,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *tes
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_Unit_Success tests the getEffectiveLimits method with quota plan that has nil limits
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_Unit_Success(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -151,31 +169,37 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_
 	}
 
 	// Plan with some zero limits (can't use nil for int64 fields)
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 1},
-		StorageLimit:       5000,
-		UploadDailyLimit:   1000,
-		DownloadDailyLimit: 0, // zero means disabled
-		UploadTotalLimit:   10000,
-		DownloadTotalLimit: 0, // zero means disabled
+		StorageLimitBytes:  5000,
+		UploadLimitBytes:   1000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 0, // zero means disabled
 	}
 
 	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(5000), *limits.StorageLimit)
-	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
-	assert.Nil(t, limits.DownloadDailyLimit) // Should be nil
-	assert.Equal(t, uint64(10000), *limits.UploadTotalLimit)
-	assert.Nil(t, limits.DownloadTotalLimit) // Should be nil
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(5000), limits.StorageLimitConfig.Bytes)
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(1000), limits.UploadLimitConfig.Bytes)
+	assert.Nil(t, limits.DownloadLimitConfig) // Should be nil
 
 	dataManager.Cleanup()
 }
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Success tests the getEffectiveLimits method with quota plan limits
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Success(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -186,13 +210,19 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Su
 		QuotaPlanID:       &planID,
 	}
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 1},
-		StorageLimit:       5000,
-		UploadDailyLimit:   1000,
-		DownloadDailyLimit: 2000,
-		UploadTotalLimit:   10000,
-		DownloadTotalLimit: 20000,
+		StorageLimitBytes:  5000,
+		UploadLimitBytes:   1000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 2000,
 		IsActive:           lo.ToPtr(true),
 	}
 
@@ -200,55 +230,64 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Su
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(5000), *limits.StorageLimit)
-	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
-	assert.Equal(t, uint64(2000), *limits.DownloadDailyLimit)
-	assert.Equal(t, uint64(10000), *limits.UploadTotalLimit)
-	assert.Equal(t, uint64(20000), *limits.DownloadTotalLimit)
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(5000), limits.StorageLimitConfig.Bytes)
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(1000), limits.UploadLimitConfig.Bytes)
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(2000), limits.DownloadLimitConfig.Bytes)
 
 	dataManager.Cleanup()
 }
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Unit_Success tests the getEffectiveLimits method with custom limits overriding plan limits
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Unit_Success(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
-	customStorageLimit := int64(3000)
+	customStorageLimit := uint64(3000)
+
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		StorageLimit:      &customStorageLimit,
+		StorageLimitBytes: customStorageLimit,
 		QuotaPlanID:       &planID,
 	}
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 1},
-		StorageLimit:       5000,
-		UploadDailyLimit:   1000,
-		DownloadDailyLimit: 2000,
-		UploadTotalLimit:   10000,
-		DownloadTotalLimit: 20000,
+		StorageLimitBytes:  5000,
+		UploadLimitBytes:   1000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 2000,
 	}
 
 	qpm.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(3000), *limits.StorageLimit)        // Custom value
-	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)    // Plan value
-	assert.Equal(t, uint64(2000), *limits.DownloadDailyLimit)  // Plan value
-	assert.Equal(t, uint64(10000), *limits.UploadTotalLimit)   // Plan value
-	assert.Equal(t, uint64(20000), *limits.DownloadTotalLimit) // Plan value
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(3000), limits.StorageLimitConfig.Bytes) // Custom value
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(1000), limits.UploadLimitConfig.Bytes) // Plan value
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(2000), limits.DownloadLimitConfig.Bytes) // Plan value
 
 	dataManager.Cleanup()
 }
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Success tests the getEffectiveLimits method with default plan when no custom plan
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Success(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -257,13 +296,19 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Succes
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 	}
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 1},
-		StorageLimit:       5000,
-		UploadDailyLimit:   1000,
-		DownloadDailyLimit: 2000,
-		UploadTotalLimit:   10000,
-		DownloadTotalLimit: 20000,
+		StorageLimitBytes:  5000,
+		UploadLimitBytes:   1000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 2000,
 	}
 
 	// Mock default quota plan lookup
@@ -271,18 +316,19 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Succes
 
 	limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(5000), *limits.StorageLimit)
-	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
-	assert.Equal(t, uint64(2000), *limits.DownloadDailyLimit)
-	assert.Equal(t, uint64(10000), *limits.UploadTotalLimit)
-	assert.Equal(t, uint64(20000), *limits.DownloadTotalLimit)
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(5000), limits.StorageLimitConfig.Bytes)
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(1000), limits.UploadLimitConfig.Bytes)
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(2000), limits.DownloadLimitConfig.Bytes)
 
 	dataManager.Cleanup()
 }
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Unit_Error tests the getEffectiveLimits method with inactive default plan
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Unit_Error(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -310,7 +356,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Uni
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit_Error tests the getEffectiveLimits method when no limits are configured
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit_Error(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -331,7 +377,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit
 
 // TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error tests the getEffectiveLimits method when quota plan is not found
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -354,7 +400,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error
 
 // TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error tests upload quota check when plan is not found
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error(t *testing.T) {
-	ctx, _, _, qpm, _, enforcer := newHardLimitsTest(t)
+	ctx, _, _, qpm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -378,7 +424,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error(t *te
 
 // TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success tests the GetDetailedUsage method with mocks
 func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
-	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
+	ctx, _, um, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -418,7 +464,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 
 // TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success tests the GetCurrentUsage method with mocks
 func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
-	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
+	ctx, _, um, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -445,7 +491,7 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
 
 // TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success tests the GetUsageHistory method with mocks
 func TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success(t *testing.T) {
-	ctx, _, um, _, _, enforcer := newHardLimitsTest(t)
+	ctx, _, um, _, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()

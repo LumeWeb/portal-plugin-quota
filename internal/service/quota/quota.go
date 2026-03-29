@@ -29,7 +29,6 @@ type QuotaServiceDefault struct {
 	configManager   pluginCore.ConfigManager
 	planManager     pluginCore.QuotaPlanManager
 	limitResolver   pluginCore.LimitResolver
-	usageAggregator pluginCore.UsageAggregator
 	uploadService   core.UploadService
 }
 
@@ -46,9 +45,6 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 			// Initialize managers
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
-
-			// Initialize usage aggregator (usageManager implements UsageAggregator interface)
-			service.usageAggregator = service.usageManager
 
 			// Initialize limit resolver
 			service.limitResolver = policies.NewLimitResolver(ctx, service)
@@ -437,11 +433,13 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 				// Note: IsDefault is not updated here unless handled by SetDefaultQuotaPlan
 				existing.Name = plan.Name
 				existing.Description = plan.Description
-				existing.StorageLimit = plan.StorageLimit
-				existing.UploadDailyLimit = plan.UploadDailyLimit
-				existing.DownloadDailyLimit = plan.DownloadDailyLimit
-				existing.UploadTotalLimit = plan.UploadTotalLimit
-				existing.DownloadTotalLimit = plan.DownloadTotalLimit
+				existing.WindowType = plan.WindowType
+				existing.WindowDuration = plan.WindowDuration
+				existing.WindowStartHour = plan.WindowStartHour
+				existing.WindowTimezone = plan.WindowTimezone
+				existing.StorageLimitBytes = plan.StorageLimitBytes
+				existing.UploadLimitBytes = plan.UploadLimitBytes
+				existing.DownloadLimitBytes = plan.DownloadLimitBytes
 				existing.StorageThreshold = plan.StorageThreshold
 				existing.UploadThreshold = plan.UploadThreshold
 				existing.DownloadThreshold = plan.DownloadThreshold
@@ -724,20 +722,26 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 	if update.QuotaPlanID != nil {
 		updates["quota_plan_id"] = *update.QuotaPlanID
 	}
-	if update.StorageLimit != nil {
-		updates["storage_limit"] = update.StorageLimit
+	if update.WindowType != nil {
+		updates["window_type"] = *update.WindowType
 	}
-	if update.UploadDailyLimit != nil {
-		updates["upload_daily_limit"] = update.UploadDailyLimit
+	if update.WindowDuration != nil {
+		updates["window_duration"] = update.WindowDuration
 	}
-	if update.DownloadDailyLimit != nil {
-		updates["download_daily_limit"] = update.DownloadDailyLimit
+	if update.WindowStartHour != nil {
+		updates["window_start_hour"] = update.WindowStartHour
 	}
-	if update.UploadTotalLimit != nil {
-		updates["upload_total_limit"] = update.UploadTotalLimit
+	if update.WindowTimezone != nil {
+		updates["window_timezone"] = update.WindowTimezone
 	}
-	if update.DownloadTotalLimit != nil {
-		updates["download_total_limit"] = update.DownloadTotalLimit
+	if update.StorageLimitBytes != nil {
+		updates["storage_limit_bytes"] = *update.StorageLimitBytes
+	}
+	if update.UploadLimitBytes != nil {
+		updates["upload_limit_bytes"] = *update.UploadLimitBytes
+	}
+	if update.DownloadLimitBytes != nil {
+		updates["download_limit_bytes"] = *update.DownloadLimitBytes
 	}
 	if update.StorageThreshold != nil {
 		updates["storage_threshold"] = update.StorageThreshold
@@ -1420,9 +1424,7 @@ func (s *QuotaServiceDefault) GetGrantManager() pluginCore.GrantManager {
 	return s.grantManager
 }
 
-func (s *QuotaServiceDefault) GetUsageAggregator() pluginCore.UsageAggregator {
-	return s.usageAggregator
-}
+
 
 func (s *QuotaServiceDefault) GetQuotaPlanManager() pluginCore.QuotaPlanManager {
 	return s.planManager

@@ -1,85 +1,69 @@
 package models
 
 import (
+	"fmt"
 	"gorm.io/gorm"
 )
 
-// QuotaPlan - Reusable quota configuration templates (for subscription-style models)
+// QuotaPlan - Reusable quota configuration templates with window-based limits
 type QuotaPlan struct {
 	gorm.Model
-	Name               string `gorm:"uniqueIndex"`
-	Description        string
-	StorageLimit       int64
-	UploadDailyLimit   int64
-	DownloadDailyLimit int64
-	UploadTotalLimit   int64
-	DownloadTotalLimit int64
-	StorageThreshold   *int64
-	UploadThreshold    *int64
-	DownloadThreshold  *int64
-	IsDefault          bool
-	IsActive           *bool
+	Name       string
+	Description string
+	IsDefault   bool
+	IsActive    *bool
+
+	// Window configuration (shared across all limits)
+	WindowType      WindowType
+	WindowDuration  *int64
+	WindowStartHour *int
+	WindowTimezone  *string
+
+	// Byte limits (all use the same window configuration above)
+	StorageLimitBytes   uint64
+	UploadLimitBytes    uint64
+	DownloadLimitBytes  uint64
+
+	// Thresholds (for THRESHOLD policy)
+	StorageThreshold  *int64
+	UploadThreshold   *int64
+	DownloadThreshold *int64
 }
 
-// BeforeDelete validates the QuotaPlan model before deletion
-func (q *QuotaPlan) BeforeDelete(tx *gorm.DB) error {
-	// Prevent deletion if this is the default plan
-	if q.IsDefault {
-		return ErrCannotDeleteDefaultPlan
+// TableName sets the table name for QuotaPlan
+func (QuotaPlan) TableName() string {
+	return "quota_plans"
+}
+
+// validateWindow validates the window configuration
+func (q *QuotaPlan) validateWindow() error {
+	// Validate window type
+	if q.WindowType != "" && !q.WindowType.IsValid() {
+		return fmt.Errorf("invalid window type: %s", q.WindowType)
 	}
 
-	// Check if any UserQuotaConfig references this plan
-	var count int64
-	if err := tx.Model(&UserQuotaConfig{}).Where("quota_plan_id = ?", q.ID).Count(&count).Error; err != nil {
-		return err
+	// For ROLLING windows, duration must be positive
+	if q.WindowType == WindowTypeRolling && q.WindowDuration != nil {
+		if *q.WindowDuration <= 0 {
+			return fmt.Errorf("ROLLING window requires positive duration")
+		}
 	}
 
-	if count > 0 {
-		return ErrCannotDeleteReferencedPlan
+	// Validate start hour
+	if q.WindowStartHour != nil && (*q.WindowStartHour < 0 || *q.WindowStartHour > 23) {
+		return fmt.Errorf("start_hour must be 0-23")
 	}
 
 	return nil
 }
 
-// BeforeSave validates the QuotaPlan model before both create and update operations
-func (q *QuotaPlan) BeforeSave(tx *gorm.DB) error {
-	// Default active unless explicitly set (only runs for create since updates preserve existing value)
-	if q.IsActive == nil {
-		q.IsActive = new(true)
-	}
-
-	// Name must not be empty (applies to both create and update)
-	if q.Name == "" {
-		return ErrInvalidPlanName
-	}
-
-	// Validate limits are not unreasonably negative
-	if q.StorageLimit < -1 {
-		return ErrInvalidStorageLimit
-	}
-
-	if q.UploadDailyLimit < -1 {
-		return ErrInvalidUploadDailyLimit
-	}
-
-	if q.DownloadDailyLimit < -1 {
-		return ErrInvalidDownloadDailyLimit
-	}
-
-	if q.UploadTotalLimit < -1 {
-		return ErrInvalidUploadTotalLimit
-	}
-
-	if q.DownloadTotalLimit < -1 {
-		return ErrInvalidDownloadTotalLimit
-	}
-
-	// Validate thresholds
+// validateThresholds validates threshold values against limits
+func (q *QuotaPlan) validateThresholds() error {
 	if q.StorageThreshold != nil {
 		if *q.StorageThreshold < 0 {
 			return ErrInvalidStorageThreshold
 		}
-		if q.StorageLimit > 0 && *q.StorageThreshold > q.StorageLimit {
+		if q.StorageLimitBytes > 0 && uint64(*q.StorageThreshold) > q.StorageLimitBytes {
 			return ErrThresholdExceedsLimit
 		}
 	}
@@ -88,7 +72,7 @@ func (q *QuotaPlan) BeforeSave(tx *gorm.DB) error {
 		if *q.UploadThreshold < 0 {
 			return ErrInvalidUploadThreshold
 		}
-		if q.UploadDailyLimit > 0 && *q.UploadThreshold > q.UploadDailyLimit {
+		if q.UploadLimitBytes > 0 && uint64(*q.UploadThreshold) > q.UploadLimitBytes {
 			return ErrThresholdExceedsLimit
 		}
 	}
@@ -97,9 +81,48 @@ func (q *QuotaPlan) BeforeSave(tx *gorm.DB) error {
 		if *q.DownloadThreshold < 0 {
 			return ErrInvalidDownloadThreshold
 		}
-		if q.DownloadDailyLimit > 0 && *q.DownloadThreshold > q.DownloadDailyLimit {
+		if q.DownloadLimitBytes > 0 && uint64(*q.DownloadThreshold) > q.DownloadLimitBytes {
 			return ErrThresholdExceedsLimit
 		}
+	}
+
+	return nil
+}
+
+// BeforeSave validates the QuotaPlan model before both create and update operations
+func (q *QuotaPlan) BeforeSave(tx *gorm.DB) error {
+	if q.IsActive == nil {
+		q.IsActive = new(true)
+	}
+
+	if q.Name == "" {
+		return ErrInvalidPlanName
+	}
+
+	if err := q.validateWindow(); err != nil {
+		return err
+	}
+
+	if err := q.validateThresholds(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// BeforeDelete validates the QuotaPlan model before deletion
+func (q *QuotaPlan) BeforeDelete(tx *gorm.DB) error {
+	if q.IsDefault {
+		return ErrCannotDeleteDefaultPlan
+	}
+
+	var count int64
+	if err := tx.Model(&UserQuotaConfig{}).Where("quota_plan_id = ?", q.ID).Count(&count).Error; err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return ErrCannotDeleteReferencedPlan
 	}
 
 	return nil

@@ -19,34 +19,31 @@ import (
 type MockSetup struct {
 	QuotaService     *pluginCore.MockQuotaService
 	UsageManager     *pluginCore.MockUsageManager
-	UsageAggregator  *pluginCore.MockUsageAggregator
 	GrantManager     *pluginCore.MockGrantManager
 	QuotaPlanManager *pluginCore.MockQuotaPlanManager
 }
 
 // testUserLimits represents test user quota limits (lowercase version)
 type testUserLimits struct {
-	storageLimit       *int64
-	uploadDailyLimit   *int64
-	uploadTotalLimit   *int64
-	downloadDailyLimit *int64
-	downloadTotalLimit *int64
-	storageThreshold   *int64
-	uploadThreshold    *int64
-	downloadThreshold  *int64
-	quotaPlanID        *uint64
+	storageLimit      *int64
+	uploadLimit       *int64
+	downloadLimit     *int64
+	storageThreshold  *int64
+	uploadThreshold   *int64
+	downloadThreshold *int64
+	quotaPlanID       *uint64
+	windowType        *string
+	windowDuration    *int64
 }
 
 // testPlanLimits represents quota limits for a test quota plan (lowercase version)
 type testPlanLimits struct {
-	storageLimit       int64
-	uploadDailyLimit   int64
-	downloadDailyLimit int64
-	uploadTotalLimit   int64
-	downloadTotalLimit int64
-	storageThreshold   *int64
-	uploadThreshold    *int64
-	downloadThreshold  *int64
+	storageLimit     int64
+	uploadLimit      int64
+	downloadLimit    int64
+	storageThreshold *int64
+	uploadThreshold  *int64
+	downloadThreshold *int64
 }
 
 // SetupMocks creates and configures common mocks for policy enforcer tests
@@ -55,7 +52,6 @@ func SetupMocks(t *testing.T) *MockSetup {
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockGrantManager := pluginCore.NewMockGrantManager(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
 
 	// Setup base mock expectations
 	mockQuotaService.On("GetUsageManager").Return(mockUsageManager).Maybe()
@@ -65,7 +61,6 @@ func SetupMocks(t *testing.T) *MockSetup {
 		UsageManager:     mockUsageManager,
 		GrantManager:     mockGrantManager,
 		QuotaPlanManager: mockQuotaPlanManager,
-		UsageAggregator:  mockUsageAggregator,
 	}
 }
 
@@ -77,15 +72,27 @@ func createTestUser(t *testing.T, ctx coreTesting.TestContext, userID uint, poli
 	}
 
 	if limits != nil {
-		cfg.StorageLimit = limits.storageLimit
-		cfg.UploadDailyLimit = limits.uploadDailyLimit
-		cfg.DownloadDailyLimit = limits.downloadDailyLimit
-		cfg.UploadTotalLimit = limits.uploadTotalLimit
-		cfg.DownloadTotalLimit = limits.downloadTotalLimit
+		if limits.storageLimit != nil {
+			cfg.StorageLimitBytes = uint64(*limits.storageLimit)
+		}
+		if limits.uploadLimit != nil {
+			cfg.UploadLimitBytes = uint64(*limits.uploadLimit)
+		}
+		if limits.downloadLimit != nil {
+			cfg.DownloadLimitBytes = uint64(*limits.downloadLimit)
+		}
 		cfg.StorageThreshold = limits.storageThreshold
 		cfg.UploadThreshold = limits.uploadThreshold
 		cfg.DownloadThreshold = limits.downloadThreshold
 		cfg.QuotaPlanID = limits.quotaPlanID
+		
+		// Set window configuration if provided
+		if limits.windowType != nil {
+			cfg.WindowType = models.WindowType(*limits.windowType)
+		}
+		if limits.windowDuration != nil {
+			cfg.WindowDuration = limits.windowDuration
+		}
 	}
 
 	err := ctx.DB().Create(cfg).Error
@@ -94,14 +101,14 @@ func createTestUser(t *testing.T, ctx coreTesting.TestContext, userID uint, poli
 }
 
 // CreateTestQuotaPlan creates a test QuotaPlan with the specified parameters
-func CreateTestQuotaPlan(id uint, storageLimit, uploadDailyLimit, downloadDailyLimit, uploadTotalLimit, downloadTotalLimit int64, isActive *bool) *models.QuotaPlan {
+func CreateTestQuotaPlan(id uint, storageLimitBytes, uploadLimitBytes, downloadLimitBytes int64, windowDuration *int64, windowType string, isActive *bool) *models.QuotaPlan {
 	return &models.QuotaPlan{
 		Model:              gorm.Model{ID: uint(id)},
-		StorageLimit:       storageLimit,
-		UploadDailyLimit:   uploadDailyLimit,
-		DownloadDailyLimit: downloadDailyLimit,
-		UploadTotalLimit:   uploadTotalLimit,
-		DownloadTotalLimit: downloadTotalLimit,
+		StorageLimitBytes:  uint64(storageLimitBytes),
+		UploadLimitBytes:   uint64(uploadLimitBytes),
+		DownloadLimitBytes: uint64(downloadLimitBytes),
+		WindowDuration:     windowDuration,
+		WindowType:         models.WindowType(windowType),
 		IsActive:           isActive,
 	}
 }
@@ -111,11 +118,9 @@ func createTestQuotaPlan(t *testing.T, ctx coreTesting.TestContext, name string,
 	plan := &models.QuotaPlan{
 		Name:               name,
 		Description:        "Test plan",
-		StorageLimit:       limits.storageLimit,
-		UploadDailyLimit:   limits.uploadDailyLimit,
-		DownloadDailyLimit: limits.downloadDailyLimit,
-		UploadTotalLimit:   limits.uploadTotalLimit,
-		DownloadTotalLimit: limits.downloadTotalLimit,
+		StorageLimitBytes:  uint64(limits.storageLimit),
+		UploadLimitBytes:   uint64(limits.uploadLimit),
+		DownloadLimitBytes: uint64(limits.downloadLimit),
 		StorageThreshold:   limits.storageThreshold,
 		UploadThreshold:    limits.uploadThreshold,
 		DownloadThreshold:  limits.downloadThreshold,
@@ -302,7 +307,7 @@ func createMockGrantManager(t *testing.T) *pluginCore.MockGrantManager {
 }
 
 // RunBoundaryConditionTests executes common boundary condition tests for quota policies
-func RunBoundaryConditionTests(t *testing.T, ctx context.Context, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy, usageAgg *pluginCore.MockUsageAggregator) {
+func RunBoundaryConditionTests(t *testing.T, ctx context.Context, enforcer pluginCore.PolicyEnforcer, policy models.EnforcementPolicy, usageAgg *pluginCore.MockUsageManager) {
 	tests := []struct {
 		name            string
 		userID          uint
@@ -380,11 +385,10 @@ func RunBoundaryConditionTests(t *testing.T, ctx context.Context, enforcer plugi
 			config := &models.UserQuotaConfig{
 				UserID:            test.userID,
 				EnforcementPolicy: policy,
-				UploadDailyLimit:  lo.ToPtr(test.dailyLimit),
-				UploadTotalLimit:  lo.ToPtr(test.totalLimit),
+				UploadLimitBytes:				uint64(test.dailyLimit),
 			}
 
-			// Stub usage aggregation calls if MockUsageAggregator is provided
+			// Stub usage aggregation calls if MockUsageManager is provided
 			if usageAgg != nil {
 				usageAgg.EXPECT().GetAggregatedUsageByType(ctx, test.userID, models.UsageTypeUpload).Return(test.currentUsage, nil).Maybe()
 			}
@@ -421,11 +425,15 @@ func RunInvalidLimitValueTests(t *testing.T, ctx context.Context, enforcer plugi
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			var uploadLimitBytes uint64
+			if test.dailyLimit != nil {
+				uploadLimitBytes = uint64(*test.dailyLimit)
+			}
+
 			config := &models.UserQuotaConfig{
 				UserID:            2,
 				EnforcementPolicy: policy,
-				UploadDailyLimit:  test.dailyLimit,
-				UploadTotalLimit:  test.totalLimit,
+				UploadLimitBytes:  uploadLimitBytes,
 			}
 
 			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
@@ -444,11 +452,9 @@ func RunUsageRecordingTests(t *testing.T, ctx context.Context, enforcer pluginCo
 		Return(&models.UserQuotaConfig{
 			UserID:             userID,
 			EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-			StorageLimit:       lo.ToPtr(int64(-1)),
-			UploadDailyLimit:   lo.ToPtr(int64(-1)),
-			DownloadDailyLimit: lo.ToPtr(int64(-1)),
-			UploadTotalLimit:   lo.ToPtr(int64(-1)),
-			DownloadTotalLimit: lo.ToPtr(int64(-1)),
+			StorageLimitBytes:				0,
+			UploadLimitBytes:				0,
+			DownloadLimitBytes:				0,
 		}, nil).
 		Maybe()
 

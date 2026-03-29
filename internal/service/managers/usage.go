@@ -534,6 +534,43 @@ func (um *UsageManager) isUniqueConstraintViolation(err error) bool {
 	return isDBConstraint || isModelValidation
 }
 
+// GetUsageForWindow returns the usage for a specific user, usage type, and time window
+// Implements core.UsageManager.GetUsageForWindow
+func (um *UsageManager) GetUsageForWindow(ctx context.Context, userID uint, usageType pluginCore.UsageType, window pluginCore.LimitWindow) (uint64, time.Time, time.Time, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetUsageForWindow")
+	defer span.End()
+
+	if err := um.validateUserID(userID); err != nil {
+		return 0, time.Time{}, time.Time{}, err
+	}
+
+	// Validate the window configuration
+	if err := window.Validate(); err != nil {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("invalid window configuration: %w", err)
+	}
+
+	// Calculate window bounds
+	now := time.Now().UTC()
+	startTime, endTime, err := window.GetWindowBounds(now)
+	if err != nil {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("failed to get window bounds: %w", err)
+	}
+
+	// Query usage within the window
+	var total uint64
+	err = um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
+		Where("user_id = ? AND type = ? AND timestamp >= ? AND timestamp < ?", 
+			userID, pluginModels.UsageType(usageType), startTime, endTime).
+		Select("COALESCE(SUM(bytes), 0)").
+		Scan(&total).Error
+
+	if err != nil {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("failed to aggregate usage for window: %w", err)
+	}
+
+	return total, startTime, endTime, nil
+}
+
 // GetCurrentUsage retrieves the current daily usage for a user
 func (um *UsageManager) GetCurrentUsage(ctx context.Context, userID uint) (*pluginCore.Usage, error) {
 	ctx, span := core.TraceMethod(ctx, "UsageManager.GetCurrentUsage")

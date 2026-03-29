@@ -231,19 +231,6 @@ func (e *QuotaAdminExtension) buildRoutes() []router.Route {
 			router.WithRequestBody(&dto.CleanupRequest{}, "Cleanup options", true),
 			router.WithSuccessResponse(http.StatusOK, "Cleanup result", router.WithJSONContent(&dto.CleanupResponse{})),
 		),
-		e.newRoute(http.MethodGet, "/system/config", e.handleGetSystemConfig,
-			router.WithSummary("Get system configuration"),
-			router.WithDescription("Get current quota system configuration"),
-			router.WithTags("quota", "system"),
-			router.WithSuccessResponse(http.StatusOK, "System configuration", router.WithJSONContent(&dto.QuotaConfigResponse{})),
-		),
-		e.newRoute(http.MethodPut, "/system/config", e.handleUpdateSystemConfig,
-			router.WithSummary("Update system configuration"),
-			router.WithDescription("Update quota system configuration"),
-			router.WithTags("quota", "system"),
-			router.WithRequestBody(&dto.QuotaConfigUpdateRequest{}, "System configuration", true),
-			router.WithSuccessResponse(http.StatusOK, "System configuration updated", router.WithJSONContent(&dto.QuotaConfigResponse{})),
-		),
 	}
 }
 
@@ -764,79 +751,6 @@ func (e *QuotaAdminExtension) handleCleanup(c echo.Context) error {
 
 	response := dto.CleanupResponse{
 		RecordsDeleted: deletedCount,
-	}
-
-	return httputil.EncodeResponse(ctx, response, response)
-}
-
-func (e *QuotaAdminExtension) handleGetSystemConfig(c echo.Context) error {
-	ctx := httputil.Context(c)
-	reqCtx := ctx.Context.Request().Context()
-
-	defaultPlan, err := e.quotaService.GetDefaultQuotaPlan(reqCtx)
-
-	var planID *uint
-	var planName string
-	if err == nil && defaultPlan != nil {
-		pid := uint(defaultPlan.ID)
-		planID = &pid
-		planName = defaultPlan.Name
-	}
-
-	enableEnforcement, retentionDays := e.quotaService.GetSystemConfig(reqCtx)
-
-	response := dto.QuotaConfigResponse{
-		DefaultPlanID:         planID,
-		DefaultPlanName:       planName,
-		EnableQuotaEnforcement: enableEnforcement,
-		StorageRetentionDays:  retentionDays,
-	}
-
-	return httputil.EncodeResponse(ctx, response, response)
-}
-
-func (e *QuotaAdminExtension) handleUpdateSystemConfig(c echo.Context) error {
-	ctx := httputil.Context(c)
-	reqCtx := ctx.Context.Request().Context()
-
-	var req dto.QuotaConfigUpdateRequest
-	_, ok := httputil.DecodeAndValidateRequest[*dto.QuotaConfigUpdateRequest, *dto.QuotaConfigUpdateRequest](ctx, &req)
-	if !ok {
-		return nil
-	}
-
-	if req.DefaultPlanID != nil {
-		if err := e.quotaService.SetDefaultQuotaPlan(reqCtx, *req.DefaultPlanID); err != nil {
-			e.Logger().Error("failed to set default plan", zap.Error(err))
-			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
-		}
-	}
-
-	if req.EnableQuotaEnforcement != nil {
-		if err := e.quotaService.SetQuotaEnforcement(reqCtx, *req.EnableQuotaEnforcement); err != nil {
-			e.Logger().Error("failed to set quota enforcement", zap.Error(err))
-			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
-		}
-	}
-
-	if req.StorageRetentionDays != nil {
-		if err := e.quotaService.SetStorageRetentionDays(reqCtx, *req.StorageRetentionDays); err != nil {
-			e.Logger().Error("failed to set storage retention days", zap.Error(err))
-			apiErr := NewError(ErrKeyConfigUpdateFailed, err)
-			return ctx.Error(apiErr, apiErr.HttpStatus())
-		}
-	}
-
-	response := dto.QuotaConfigResponse{
-		DefaultPlanID:         req.DefaultPlanID,
-		EnableQuotaEnforcement: req.EnableQuotaEnforcement != nil && *req.EnableQuotaEnforcement,
-		StorageRetentionDays:  30,
-	}
-
-	if req.StorageRetentionDays != nil {
-		response.StorageRetentionDays = *req.StorageRetentionDays
 	}
 
 	return httputil.EncodeResponse(ctx, response, response)

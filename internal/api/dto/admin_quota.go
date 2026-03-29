@@ -20,8 +20,6 @@ var (
 	_ httputil.DTORequest[*ReconcileRequest] = (*ReconcileRequest)(nil)
 	_ httputil.DTOValidator = (*CleanupRequest)(nil)
 	_ httputil.DTORequest[*CleanupRequest] = (*CleanupRequest)(nil)
-	_ httputil.DTOValidator = (*QuotaConfigUpdateRequest)(nil)
-	_ httputil.DTORequest[*QuotaConfigUpdateRequest] = (*QuotaConfigUpdateRequest)(nil)
 	_ httputil.DTOValidator = (*UserQuotaConfigUpdateRequest)(nil)
 	_ httputil.DTORequest[*UserQuotaConfigUpdateRequest] = (*UserQuotaConfigUpdateRequest)(nil)
 	_ httputil.DTOValidator = (*UserQuotaConfigListRequest)(nil)
@@ -219,37 +217,6 @@ func (r *AllowanceGrantResponse) FromModel(model *models.AllowanceGrant) error {
 type AllowanceListResponse struct {
 	Grants []AllowanceGrantResponse `json:"data"`
 	Total  int                      `json:"total"`
-}
-
-// QuotaConfigUpdateRequest represents a request to update system quota configuration
-type QuotaConfigUpdateRequest struct {
-	DefaultPlanID          *uint `json:"default_plan_id"`
-	EnableQuotaEnforcement *bool `json:"enable_quota_enforcement"`
-	StorageRetentionDays   *int  `json:"storage_retention_days"`
-}
-
-func (r *QuotaConfigUpdateRequest) Schema() *z.StructSchema {
-	return z.Struct(z.Shape{
-		"DefaultPlanID":          z.Ptr(z.UintLike[uint]()),
-		"EnableQuotaEnforcement": z.Ptr(z.Bool()),
-		"StorageRetentionDays":   z.Ptr(z.IntLike[int]().GTE(1).LTE(36500)),
-	})
-}
-
-func (r *QuotaConfigUpdateRequest) ToModel() (*QuotaConfigUpdateRequest, error) {
-	return r, nil
-}
-
-// QuotaConfigResponse represents system quota configuration
-type QuotaConfigResponse struct {
-	DefaultPlanID         *uint  `json:"default_plan_id"`
-	DefaultPlanName       string `json:"default_plan_name,omitempty"`
-	EnableQuotaEnforcement bool   `json:"enable_quota_enforcement"`
-	StorageRetentionDays  int    `json:"storage_retention_days"`
-}
-
-func (r QuotaConfigResponse) FromModel(_ QuotaConfigResponse) error {
-	return nil
 }
 
 // CleanupRequest represents a request for cleanup operation

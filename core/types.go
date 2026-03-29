@@ -9,6 +9,18 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
 
+// Re-export WindowType from models for API consumers
+type WindowType = models.WindowType
+
+const (
+	WindowTypeRolling      WindowType = models.WindowTypeRolling
+	WindowTypeCalendarDay  WindowType = models.WindowTypeCalendarDay
+	WindowTypeCalendarWeek WindowType = models.WindowTypeCalendarWeek
+	WindowTypeCalendarMonth WindowType = models.WindowTypeCalendarMonth
+	WindowTypeCalendarYear WindowType = models.WindowTypeCalendarYear
+	WindowTypeLifetime     = models.WindowTypeLifetime
+)
+
 // QuotaCheckResult represents the result of a quota check
 type QuotaCheckResult struct {
 	Allowed bool
@@ -170,16 +182,7 @@ const (
 )
 
 // WindowType defines the type of time window for limit enforcement
-type WindowType string
 
-const (
-	WindowTypeRolling      WindowType = "ROLLING"      // Rolling window: last N seconds
-	WindowTypeCalendarDay  WindowType = "DAY"          // Calendar day (resets at midnight)
-	WindowTypeCalendarWeek WindowType = "WEEK"         // Calendar week
-	WindowTypeCalendarMonth WindowType = "MONTH"       // Calendar month (resets 1st of month)
-	WindowTypeCalendarYear WindowType = "YEAR"         // Calendar year (resets Jan 1st)
-	WindowTypeLifetime     WindowType = "LIFETIME"     // All-time usage
-)
 
 // LimitWindow defines a time window for limit enforcement
 type LimitWindow struct {
@@ -231,6 +234,9 @@ func (w *LimitWindow) Validate() error {
 	case WindowTypeCalendarWeek:
 		if w.StartDay != nil && (*w.StartDay < 0 || *w.StartDay > 6) {
 			return fmt.Errorf("WEEK window start_day must be 0-6 (Sunday=0)")
+		}
+		if w.StartHour != nil && (*w.StartHour < 0 || *w.StartHour > 23) {
+			return fmt.Errorf("start_hour must be 0-23")
 		}
 	case WindowTypeCalendarDay, WindowTypeCalendarMonth, WindowTypeCalendarYear:
 		if w.StartHour != nil && (*w.StartHour < 0 || *w.StartHour > 23) {

@@ -334,7 +334,20 @@ func (e *QuotaExtension) getLimitBytes(limitConfig *quotaCore.Limit) *uint64 {
 // getUsageForLimit gets usage and window info for a specific limit
 func (e *QuotaExtension) getUsageForLimit(ctx httputil.RequestContext, userID uint, limitConfig *quotaCore.Limit, usageType quotaCore.UsageType) (uint64, *dto.WindowInfo, error) {
 	if limitConfig == nil || limitConfig.Window.IsNil() {
-		return 0, nil, nil
+		// No window limit configured - get lifetime usage for this type
+		lifetimeWindow := quotaCore.LimitWindow{
+			Type: quotaCore.WindowTypeLifetime,
+		}
+		totalUsage, _, _, err := e.quotaService.GetUsageManager().GetUsageForWindow(
+			ctx.Request().Context(),
+			userID,
+			usageType,
+			lifetimeWindow,
+		)
+		if err != nil {
+			return 0, nil, err
+		}
+		return totalUsage, nil, nil
 	}
 
 	// Get usage for this window

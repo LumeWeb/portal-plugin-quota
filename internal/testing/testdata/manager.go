@@ -125,6 +125,23 @@ func (tdm *TestDataManager) CreateUser(userID uint, policy pluginModels.Enforcem
 		}
 	}
 
+	// Set default window configuration to ensure valid database state
+	if cfg.WindowType == "" {
+		cfg.WindowType = pluginModels.WindowTypeLifetime
+	}
+	if cfg.WindowDuration == nil {
+		duration := int64(86400)
+		cfg.WindowDuration = &duration
+	}
+	if cfg.WindowStartHour == nil {
+		startHour := 0
+		cfg.WindowStartHour = &startHour
+	}
+	if cfg.WindowTimezone == nil {
+		timezone := "UTC"
+		cfg.WindowTimezone = &timezone
+	}
+
 	err := tdm.ctx.DB().Create(cfg).Error
 	require.NoError(tdm.ctx.T(), err, "Failed to create user quota config")
 

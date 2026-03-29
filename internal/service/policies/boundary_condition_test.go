@@ -102,9 +102,9 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			// Set limit based on dailyLimit (using daily window type)
 			// Note: New design uses single limit with window type
 			uploadLimit := uint64(test.dailyLimit)
-			windowType := models.WindowTypeCalendarDay // Default to daily window
-			windowDuration := int64(86400)             // 1 day in seconds
-			
+			windowType := models.WindowTypeCalendarDay // Calendar-aligned day window
+			windowDuration := int64(0)                  // Calendar windows don't use duration
+
 			config := &models.UserQuotaConfig{
 				UserID:            userID,
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
@@ -133,8 +133,22 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			// Setup window-based usage queries
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			now := time.Now()
-			windowStart := now.Add(-24 * time.Hour)
-			mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, pluginCore.UsageTypeUpload, window).Return(test.currentUsage, windowStart, now, nil)
+			// Calculate window bounds based on window type
+			var windowStart, windowEnd time.Time
+			if windowType == models.WindowTypeLifetime {
+				windowStart = time.Time{}
+				windowEnd = now
+			} else if windowType == models.WindowTypeCalendarDay {
+				// Calendar day starts at midnight today
+				windowStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+				// Window ends at midnight next day
+				windowEnd = windowStart.AddDate(0, 0, 1)
+			} else {
+				// Rolling window
+				windowStart = now.Add(-24 * time.Hour)
+				windowEnd = now
+			}
+			mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, pluginCore.UsageTypeUpload, window).Return(test.currentUsage, windowStart, windowEnd, nil)
 
 			result, err := enforcer.CheckUploadQuota(ctx, config, test.requestBytes)
 			if test.expectError {

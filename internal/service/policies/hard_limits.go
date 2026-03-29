@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal/core"
@@ -50,68 +49,31 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(ctx context.Context, config 
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get today's usage
-		usage, err := h.quotaService.GetTodayUsage(ctx, config.UserID)
-		if err != nil {
-			return pluginCore.QuotaCheckResult{}, err
-		}
+		// Check upload limit (window-based)
+		if limits.UploadLimitConfig != nil && limits.UploadLimitConfig.Bytes > 0 {
+			windowLimits := *limits.UploadLimitConfig
 
-		// Check daily upload limit
-		if limits.UploadDailyLimit != nil {
-			limitValue := uint64(*limits.UploadDailyLimit)
-
-			if limitValue == 0 {
-				// Limit is 0, which means disabled - deny the operation
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: usage.BytesUploaded,
-						Limit:        lo.ToPtr(uint64(0)),
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
-			} else if limitValue < usage.BytesUploaded || requestedBytes > limitValue-usage.BytesUploaded {
-				// Normal limit check for positive values using overflow-safe subtraction
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: usage.BytesUploaded,
-						Limit:        &limitValue,
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
+			// Validate window configuration
+			if err := windowLimits.Window.Validate(); err != nil {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid upload window configuration: %w", err)
 			}
-		}
 
-		// Check total upload limit against aggregated usage
-		if limits.UploadTotalLimit != nil {
-			aggregatedUsage, err := h.quotaService.GetUsageAggregator().GetAggregatedUsageByType(ctx, config.UserID, models.UsageTypeUpload)
+			// Query usage for this window
+			currentUsage, _, _, err := h.quotaService.GetUsageManager().GetUsageForWindow(
+				ctx, config.UserID, models.UsageTypeUpload, windowLimits.Window)
 			if err != nil {
-				return pluginCore.QuotaCheckResult{}, err
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get usage for upload window: %w", err)
 			}
 
-			limitValue := uint64(*limits.UploadTotalLimit)
+			limitValue := windowLimits.Bytes
 
-			if limitValue == 0 {
-				// Limit is 0, which means disabled - deny the operation
+			// Normal limit check for positive values using overflow-safe subtraction
+			if limitValue < currentUsage || requestedBytes > limitValue-currentUsage {
 				return h.createFailureResult(
 					models.QuotaCheckReasonLimitExceeded,
 					models.EnforcementPolicyHardLimits,
 					pluginCore.QuotaCheckDetails{
-						CurrentUsage: aggregatedUsage,
-						Limit:        lo.ToPtr(uint64(0)),
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
-			} else if limitValue < aggregatedUsage || requestedBytes > limitValue-aggregatedUsage {
-				// Normal limit check for positive values using overflow-safe subtraction
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: aggregatedUsage,
+						CurrentUsage: currentUsage,
 						Limit:        &limitValue,
 						Policy:       models.EnforcementPolicyHardLimits,
 					},
@@ -147,66 +109,31 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(ctx context.Context, confi
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get today's usage
-		usage, err := h.quotaService.GetTodayUsage(ctx, config.UserID)
-		if err != nil {
-			return pluginCore.QuotaCheckResult{}, err
-		}
+		// Check download limit (window-based)
+		if limits.DownloadLimitConfig != nil && limits.DownloadLimitConfig.Bytes > 0 {
+			windowLimits := *limits.DownloadLimitConfig
 
-		// Check daily download limit
-		if limits.DownloadDailyLimit != nil {
-			limitValue := uint64(*limits.DownloadDailyLimit)
-			if limitValue == 0 {
-				// Limit is 0, which means disabled - deny the operation
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: usage.BytesDownloaded,
-						Limit:        lo.ToPtr(uint64(0)),
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
-			} else if limitValue < usage.BytesDownloaded || requestedBytes > limitValue-usage.BytesDownloaded {
-				// Normal limit check for positive values using overflow-safe subtraction
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: usage.BytesDownloaded,
-						Limit:        &limitValue,
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
+			// Validate window configuration
+			if err := windowLimits.Window.Validate(); err != nil {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid download window configuration: %w", err)
 			}
-		}
 
-		// Check total download limit against aggregated usage
-		if limits.DownloadTotalLimit != nil {
-			aggregatedUsage, err := h.quotaService.GetUsageAggregator().GetAggregatedUsageByType(ctx, config.UserID, models.UsageTypeDownload)
+			// Query usage for this window
+			currentUsage, _, _, err := h.quotaService.GetUsageManager().GetUsageForWindow(
+				ctx, config.UserID, models.UsageTypeDownload, windowLimits.Window)
 			if err != nil {
-				return pluginCore.QuotaCheckResult{}, err
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get usage for download window: %w", err)
 			}
 
-			limitValue := uint64(*limits.DownloadTotalLimit)
-			if limitValue == 0 {
-				// Limit is 0, which means disabled - deny the operation
+			limitValue := windowLimits.Bytes
+
+			// Normal limit check for positive values using overflow-safe subtraction
+			if limitValue < currentUsage || requestedBytes > limitValue-currentUsage {
 				return h.createFailureResult(
 					models.QuotaCheckReasonLimitExceeded,
 					models.EnforcementPolicyHardLimits,
 					pluginCore.QuotaCheckDetails{
-						CurrentUsage: aggregatedUsage,
-						Limit:        lo.ToPtr(uint64(0)),
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
-			} else if limitValue < aggregatedUsage || requestedBytes > limitValue-aggregatedUsage {
-				// Normal limit check for positive values using overflow-safe subtraction
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: aggregatedUsage,
+						CurrentUsage: currentUsage,
 						Limit:        &limitValue,
 						Policy:       models.EnforcementPolicyHardLimits,
 					},
@@ -242,33 +169,31 @@ func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(ctx context.Context, config
 			return pluginCore.QuotaCheckResult{}, err
 		}
 
-		// Get current usage
-		usage, err := h.quotaService.GetTodayUsage(ctx, config.UserID)
-		if err != nil {
-			return pluginCore.QuotaCheckResult{}, err
-		}
+		// Check storage limit (window-based)
+		if limits.StorageLimitConfig != nil && limits.StorageLimitConfig.Bytes > 0 {
+			windowLimits := *limits.StorageLimitConfig
 
-		// Check storage limit
-		if limits.StorageLimit != nil {
-			limitValue := uint64(*limits.StorageLimit)
-			if limitValue == 0 {
-				// Limit is 0, which means disabled - deny the operation
+			// Validate window configuration
+			if err := windowLimits.Window.Validate(); err != nil {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid storage window configuration: %w", err)
+			}
+
+			// Query usage for this window
+			currentUsage, _, _, err := h.quotaService.GetUsageManager().GetUsageForWindow(
+				ctx, config.UserID, models.UsageTypeStorageAdd, windowLimits.Window)
+			if err != nil {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get usage for storage window: %w", err)
+			}
+
+			limitValue := windowLimits.Bytes
+
+			// Normal limit check for positive values using overflow-safe subtraction
+			if limitValue < currentUsage || requestedBytes > limitValue-currentUsage {
 				return h.createFailureResult(
 					models.QuotaCheckReasonLimitExceeded,
 					models.EnforcementPolicyHardLimits,
 					pluginCore.QuotaCheckDetails{
-						CurrentUsage: usage.BytesStored,
-						Limit:        lo.ToPtr(uint64(0)),
-						Policy:       models.EnforcementPolicyHardLimits,
-					},
-				), nil
-			} else if limitValue < usage.BytesStored || requestedBytes > limitValue-usage.BytesStored {
-				// Normal limit check for positive values using overflow-safe subtraction
-				return h.createFailureResult(
-					models.QuotaCheckReasonLimitExceeded,
-					models.EnforcementPolicyHardLimits,
-					pluginCore.QuotaCheckDetails{
-						CurrentUsage: usage.BytesStored,
+						CurrentUsage: currentUsage,
 						Limit:        &limitValue,
 						Policy:       models.EnforcementPolicyHardLimits,
 					},

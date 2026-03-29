@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
@@ -27,66 +28,62 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 		requestBytes    uint64
 		expectedAllowed bool
 		expectedReason  models.QuotaCheckReason
+		expectError     bool
 	}{
 		{
-			name:            "Zero limit (disabled)",
-			userID:          1,
-			dailyLimit:      0, // Disabled
-			totalLimit:      5000,
-			currentUsage:    100,
-			requestBytes:    500,
-			expectedAllowed: false,
-			expectedReason:  models.QuotaCheckReasonLimitExceeded,
-		},
-		{
-			name:            "Negative one limit (unlimited)",
-			userID:          2,
-			dailyLimit:      -1, // Unlimited
-			totalLimit:      -1, // Unlimited
-			currentUsage:    100,
-			requestBytes:    500,
-			expectedAllowed: true,
-			expectedReason:  models.QuotaCheckReasonOK,
-		},
-		{
-			name:            "Exactly at limit",
-			userID:          3,
-			dailyLimit:      1000,
-			totalLimit:      5000,
-			currentUsage:    1000, // Exactly at daily limit
-			requestBytes:    1,
-			expectedAllowed: false,
-			expectedReason:  models.QuotaCheckReasonLimitExceeded,
-		},
-		{
 			name:            "One byte under limit",
-			userID:          4,
+			userID:          1,
 			dailyLimit:      1000,
 			totalLimit:      5000,
 			currentUsage:    999, // One byte under daily limit
 			requestBytes:    1,
 			expectedAllowed: true,
 			expectedReason:  models.QuotaCheckReasonOK,
+			expectError:     false,
 		},
 		{
-			name:            "Maximum uint64 bytes",
-			userID:          5,
-			dailyLimit:      -1, // Unlimited
-			totalLimit:      -1, // Unlimited
-			currentUsage:    100,
-			requestBytes:    math.MaxUint64, // Maximum uint64
+			name:            "Exactly at limit",
+			userID:          2,
+			dailyLimit:      1000,
+			totalLimit:      5000,
+			currentUsage:    1000, // Exactly at daily limit
+			requestBytes:    1,
+			expectedAllowed: false,
+			expectedReason:  models.QuotaCheckReasonLimitExceeded,
+			expectError:     false,
+		},
+		{
+			name:            "One byte over limit",
+			userID:          3,
+			dailyLimit:      1000,
+			totalLimit:      5000,
+			currentUsage:    1000, // At daily limit
+			requestBytes:    2,    // One byte over
+			expectedAllowed: false,
+			expectedReason:  models.QuotaCheckReasonLimitExceeded,
+			expectError:     false,
+		},
+		{
+			name:            "Large request within limit",
+			userID:          4,
+			dailyLimit:      5000,
+			totalLimit:      10000,
+			currentUsage:    0,
+			requestBytes:    4000,
 			expectedAllowed: true,
 			expectedReason:  models.QuotaCheckReasonOK,
+			expectError:     false,
 		},
 		{
-			name:            "Mixed limit types (zero and unlimited)",
-			userID:          6,
-			dailyLimit:      0,  // Disabled
-			totalLimit:      -1, // Unlimited
-			currentUsage:    100,
-			requestBytes:    500,
-			expectedAllowed: false, // Daily limit is disabled (0)
+			name:            "Large request exceeds limit",
+			userID:          5,
+			dailyLimit:      5000,
+			totalLimit:      10000,
+			currentUsage:    1000,
+			requestBytes:    5000,
+			expectedAllowed: false,
 			expectedReason:  models.QuotaCheckReasonLimitExceeded,
+			expectError:     false,
 		},
 	}
 
@@ -102,34 +99,49 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 			userID := dataManager.NextUserID()
+			// Set limit based on dailyLimit (using daily window type)
+			// Note: New design uses single limit with window type
+			uploadLimit := uint64(test.dailyLimit)
+			windowType := models.WindowTypeCalendarDay // Default to daily window
+			windowDuration := int64(86400)             // 1 day in seconds
+			
 			config := &models.UserQuotaConfig{
 				UserID:            userID,
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
-				UploadDailyLimit:  lo.ToPtr(test.dailyLimit),
-				UploadTotalLimit:  lo.ToPtr(test.totalLimit),
+				UploadLimitBytes:  uploadLimit,
+				WindowType:        windowType,
+				WindowDuration:    &windowDuration,
 			}
 
-			mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-				UserID:        userID,
-				BytesUploaded: test.currentUsage,
-			}, nil)
 			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-			mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 
-			// Setup aggregator mocks as optional
-			mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-			mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator).Maybe()
-			mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeUpload).Return(test.currentUsage, nil).Maybe()
+			// Build window from config parameters
+			var window pluginCore.LimitWindow
+			if windowType == models.WindowTypeLifetime {
+				window = pluginCore.LimitWindow{
+					Type:     pluginCore.WindowTypeLifetime,
+					Duration: lo.ToPtr(int64(0)),
+				}
+			} else {
+				window = pluginCore.LimitWindow{
+					Type:     pluginCore.WindowTypeCalendarDay,
+					Duration: lo.ToPtr(windowDuration),
+				}
+			}
+
+			// Setup window-based usage queries
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			now := time.Now()
+			windowStart := now.Add(-24 * time.Hour)
+			mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, pluginCore.UsageTypeUpload, window).Return(test.currentUsage, windowStart, now, nil)
 
 			result, err := enforcer.CheckUploadQuota(ctx, config, test.requestBytes)
-			if test.requestBytes == 0 {
+			if test.expectError {
+				assert.Error(t, err)
+			} else if test.requestBytes == 0 {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "bytes must be greater than 0")
-			} else if test.name == "Threshold above limit is invalid configuration" {
-				// This test case expects an error due to invalid configuration
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "threshold cannot exceed limit")
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, test.expectedAllowed, result.Allowed)
@@ -154,7 +166,6 @@ func TestThresholdPolicyEnforcer_BoundaryConditions(t *testing.T) {
 		expectedReason    models.QuotaCheckReason
 		expectError       bool
 		skipGetTodayUsage bool
-		skipTotalLimit    bool
 	}{
 		{
 			name:            "Zero threshold always warns",
@@ -179,39 +190,14 @@ func TestThresholdPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name:            "Threshold above limit is invalid configuration",
-			userID:          3,
-			dailyLimit:      1000,
-			threshold:       lo.ToPtr(int64(2000)), // Invalid: threshold > limit
-			currentUsage:    500,
-			requestBytes:    100,
-			expectedAllowed: false,
-			expectedReason:  "",
-			expectError:     true,
-			// Don't set up mocks since error happens during limit resolution
-			skipGetTodayUsage: true,
-			skipTotalLimit:    true,
-		},
-		{
 			name:            "Threshold nil means no warning",
-			userID:          4,
+			userID:          3,
 			dailyLimit:      1000,
 			threshold:       nil, // No threshold set
 			currentUsage:    100,
 			requestBytes:    500,
 			expectedAllowed: true,
 			expectedReason:  models.QuotaCheckReasonOK,
-			expectError:     false,
-		},
-		{
-			name:            "Negative one limit means unlimited",
-			userID:          5,
-			dailyLimit:      -1, // Unlimited - becomes nil after resolution
-			threshold:       lo.ToPtr(int64(100)),
-			currentUsage:    100,
-			requestBytes:    500,
-			expectedAllowed: true,
-			expectedReason:  models.QuotaCheckReasonWarningThreshold, // Threshold applies to total limit (5000), 100+500=600 > 100 threshold
 			expectError:     false,
 		},
 	}
@@ -225,31 +211,48 @@ func TestThresholdPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
 			enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 			userID := dataManager.NextUserID()
+			// Set limit based on dailyLimit (using daily window type)
+			uploadLimit := uint64(test.dailyLimit)
+			windowType := models.WindowTypeCalendarDay
+			windowDuration := int64(86400)
+			
 			config := &models.UserQuotaConfig{
 				UserID:            userID,
 				EnforcementPolicy: models.EnforcementPolicyThreshold,
-				UploadDailyLimit:  lo.ToPtr(test.dailyLimit),
+				UploadLimitBytes:  uploadLimit,
+				WindowType:        windowType,
+				WindowDuration:    &windowDuration,
 				UploadThreshold:   test.threshold,
 			}
 
-			// Only set up UploadTotalLimit if not skipping it
-			if !test.skipTotalLimit {
-				config.UploadTotalLimit = lo.ToPtr(int64(5000))
-			}
-
-			// Only set up GetTodayUsage mock if not skipping it
+			// Only set up mocks if the error doesn't happen early
 			if !test.skipGetTodayUsage {
-				mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-					UserID:        userID,
-					BytesUploaded: test.currentUsage,
-				}, nil)
+				mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+				mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+
+				// Build window from config parameters
+				var window pluginCore.LimitWindow
+				if windowType == models.WindowTypeLifetime {
+					window = pluginCore.LimitWindow{
+						Type:     pluginCore.WindowTypeLifetime,
+						Duration: lo.ToPtr(int64(0)),
+					}
+				} else {
+					window = pluginCore.LimitWindow{
+						Type:     pluginCore.WindowTypeCalendarDay,
+						Duration: lo.ToPtr(windowDuration),
+					}
+				}
+
+				// Setup window-based usage queries
+				now := time.Now()
+				windowStart := now.Add(-24 * time.Hour)
+				mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, pluginCore.UsageTypeUpload, window).Return(test.currentUsage, windowStart, now, nil)
 			}
-			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-			mockUsageManager.EXPECT().GetTotalBytesByType(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 
 			result, err := enforcer.CheckUploadQuota(ctx, config, test.requestBytes)
 			if test.requestBytes == 0 {
@@ -640,16 +643,25 @@ func TestHardLimitsPolicyEnforcer_ErrorHandling(t *testing.T) {
 		expectError  bool
 	}{
 		{
-			name: "GetTodayUsage error should propagate",
+			name: "GetUsageManager error should propagate",
 			setupMock: func(mqs *pluginCore.MockQuotaService, ctx coreTesting.TestContext) {
 				mockUsageManager := pluginCore.NewMockUsageManager(t)
 				mqs.EXPECT().GetUsageManager().Return(mockUsageManager)
 				mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 				mqs.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-				mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-				mqs.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(nil, errors.New("usage fetch failed"))
+				mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+				mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), errors.New("usage fetch failed"))
 			},
-			config:       &models.UserQuotaConfig{UserID: 1, EnforcementPolicy: models.EnforcementPolicyHardLimits, UploadDailyLimit: lo.ToPtr(int64(1000))},
+			config:       func() *models.UserQuotaConfig {
+			dur := int64(86400)
+			return &models.UserQuotaConfig{
+				UserID:            1,
+				EnforcementPolicy: models.EnforcementPolicyHardLimits,
+				UploadLimitBytes:  uint64(1000),
+				WindowType:        models.WindowTypeCalendarDay,
+				WindowDuration:    &dur,
+			}
+		}(),
 			requestBytes: 100,
 			expectError:  true,
 		},

@@ -47,11 +47,30 @@ func TestConfigManager_ResolveEffectiveLimits_UserWithPlan_Success(t *testing.T)
 
 		// Setup mock expectations
 		expectedLimits := &pluginCore.EffectiveLimits{
-			StorageLimit:       lo.ToPtr(uint64(1000000)),
-			UploadDailyLimit:   lo.ToPtr(uint64(500000)),
-			DownloadDailyLimit: lo.ToPtr(uint64(500000)),
-			UploadTotalLimit:   lo.ToPtr(uint64(10000000)),
-			DownloadTotalLimit: lo.ToPtr(uint64(10000000)),
+			StorageLimitConfig: &pluginCore.Limit{
+				Bytes: uint64(1000000),
+				Window: pluginCore.LimitWindow{
+					Type: pluginCore.WindowTypeLifetime,
+				},
+				Priority: 0,
+			},
+			UploadLimitConfig: &pluginCore.Limit{
+				Bytes: uint64(500000),
+				Window: pluginCore.LimitWindow{
+					Type: pluginCore.WindowTypeLifetime,
+				},
+				Priority: 0,
+			},
+			DownloadLimitConfig: &pluginCore.Limit{
+				Bytes: uint64(500000),
+				Window: pluginCore.LimitWindow{
+					Type: pluginCore.WindowTypeLifetime,
+				},
+				Priority: 0,
+			},
+			HasStorageLimitConfig:   true,
+			HasUploadLimitConfig:    true,
+			HasDownloadLimitConfig:  true,
 		}
 
 		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, userConfig, pluginModels.EnforcementPolicyHardLimits).Return(expectedLimits, nil)
@@ -96,11 +115,30 @@ func TestConfigManager_ResolveEffectiveLimits_UserWithoutPlan_Success(t *testing
 
 		// Setup mock expectations
 		expectedLimits := &pluginCore.EffectiveLimits{
-			StorageLimit:       lo.ToPtr(uint64(100000)),
-			UploadDailyLimit:   lo.ToPtr(uint64(50000)),
-			DownloadDailyLimit: lo.ToPtr(uint64(50000)),
-			UploadTotalLimit:   lo.ToPtr(uint64(1000000)),
-			DownloadTotalLimit: lo.ToPtr(uint64(1000000)),
+			StorageLimitConfig: &pluginCore.Limit{
+				Bytes: uint64(100000),
+				Window: pluginCore.LimitWindow{
+					Type: pluginCore.WindowTypeLifetime,
+				},
+				Priority: 0,
+			},
+			UploadLimitConfig: &pluginCore.Limit{
+				Bytes: uint64(50000),
+				Window: pluginCore.LimitWindow{
+					Type: pluginCore.WindowTypeLifetime,
+				},
+				Priority: 0,
+			},
+			DownloadLimitConfig: &pluginCore.Limit{
+				Bytes: uint64(50000),
+				Window: pluginCore.LimitWindow{
+					Type: pluginCore.WindowTypeLifetime,
+				},
+				Priority: 0,
+			},
+			HasStorageLimitConfig:  true,
+			HasUploadLimitConfig:   true,
+			HasDownloadLimitConfig: true,
 		}
 
 		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, userConfig, pluginModels.EnforcementPolicyHardLimits).Return(expectedLimits, nil)

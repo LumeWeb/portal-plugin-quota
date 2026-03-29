@@ -75,20 +75,14 @@ func (tdm *TestDataManager) CreateUser(userID uint, policy pluginModels.Enforcem
 	}
 
 	if limits != nil {
-		if limits.StorageLimit != nil {
-			cfg.StorageLimit = limits.StorageLimit
+		if limits.StorageLimitBytes != nil {
+			cfg.StorageLimitBytes = uint64(*limits.StorageLimitBytes)
 		}
-		if limits.UploadDailyLimit != nil {
-			cfg.UploadDailyLimit = limits.UploadDailyLimit
+		if limits.UploadLimitBytes != nil {
+			cfg.UploadLimitBytes = uint64(*limits.UploadLimitBytes)
 		}
-		if limits.DownloadDailyLimit != nil {
-			cfg.DownloadDailyLimit = limits.DownloadDailyLimit
-		}
-		if limits.UploadTotalLimit != nil {
-			cfg.UploadTotalLimit = limits.UploadTotalLimit
-		}
-		if limits.DownloadTotalLimit != nil {
-			cfg.DownloadTotalLimit = limits.DownloadTotalLimit
+		if limits.DownloadLimitBytes != nil {
+			cfg.DownloadLimitBytes = uint64(*limits.DownloadLimitBytes)
 		}
 		if limits.StorageThreshold != nil {
 			cfg.StorageThreshold = limits.StorageThreshold
@@ -101,6 +95,33 @@ func (tdm *TestDataManager) CreateUser(userID uint, policy pluginModels.Enforcem
 		}
 		if limits.QuotaPlanID != nil {
 			cfg.QuotaPlanID = limits.QuotaPlanID
+		}
+		if limits.WindowType != nil {
+			cfg.WindowType = pluginModels.WindowType(*limits.WindowType)
+		} else {
+			// Set default window type to prevent validation errors during window-based limits
+			cfg.WindowType = pluginModels.WindowTypeLifetime
+		}
+		if limits.WindowDuration != nil {
+			cfg.WindowDuration = limits.WindowDuration
+		} else {
+			// Set default window duration (24 hours for DAY type)
+			duration := int64(86400)
+			cfg.WindowDuration = &duration
+		}
+		if limits.WindowStartHour != nil {
+			cfg.WindowStartHour = limits.WindowStartHour
+		} else {
+			// Set default start hour
+			startHour := 0
+			cfg.WindowStartHour = &startHour
+		}
+		if limits.WindowTimezone != nil {
+			cfg.WindowTimezone = limits.WindowTimezone
+		} else {
+			// Set default timezone
+			timezone := "UTC"
+			cfg.WindowTimezone = &timezone
 		}
 	}
 
@@ -120,15 +141,20 @@ func (tdm *TestDataManager) CreateDefaultUser() *pluginModels.UserQuotaConfig {
 }
 
 // CreateQuotaPlan creates a test quota plan and tracks it for cleanup
-func (tdm *TestDataManager) CreateQuotaPlan(name string, storageLimit, uploadDailyLimit, downloadDailyLimit, uploadTotalLimit, downloadTotalLimit int64, isDefault bool) *pluginModels.QuotaPlan {
+func (tdm *TestDataManager) CreateQuotaPlan(name string, storageLimit, uploadLimit, downloadLimit int64, isDefault bool) *pluginModels.QuotaPlan {
+	duration := int64(24)
+	startHour := 0
+	timezone := "UTC"
 	plan := &pluginModels.QuotaPlan{
 		Name:               name,
 		Description:        "Test plan",
-		StorageLimit:       storageLimit,
-		UploadDailyLimit:   uploadDailyLimit,
-		DownloadDailyLimit: downloadDailyLimit,
-		UploadTotalLimit:   uploadTotalLimit,
-		DownloadTotalLimit: downloadTotalLimit,
+		StorageLimitBytes:  uint64(storageLimit),
+		UploadLimitBytes:   uint64(uploadLimit),
+		DownloadLimitBytes: uint64(downloadLimit),
+		WindowType:         pluginModels.WindowTypeRolling,
+		WindowDuration:     &duration,
+		WindowStartHour:    &startHour,
+		WindowTimezone:     &timezone,
 		IsDefault:          isDefault,
 		IsActive:           lo.ToPtr(true),
 	}
@@ -284,13 +310,15 @@ func (tdm *TestDataManager) TrackCreatedUsageDetail(usageDetailID uint) {
 
 // TestUserLimits represents test user quota limits
 type TestUserLimits struct {
-	StorageLimit       *int64
-	UploadDailyLimit   *int64
-	UploadTotalLimit   *int64
-	DownloadDailyLimit *int64
-	DownloadTotalLimit *int64
-	StorageThreshold   *int64
-	UploadThreshold    *int64
-	DownloadThreshold  *int64
-	QuotaPlanID        *uint64
+	StorageLimitBytes   *int64
+	UploadLimitBytes    *int64
+	DownloadLimitBytes  *int64
+	StorageThreshold    *int64
+	UploadThreshold     *int64
+	DownloadThreshold   *int64
+	QuotaPlanID         *uint64
+	WindowType          *string
+	WindowDuration      *int64
+	WindowStartHour     *int
+	WindowTimezone      *string
 }

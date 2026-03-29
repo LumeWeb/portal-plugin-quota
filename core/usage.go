@@ -54,9 +54,10 @@ type UsageManager interface {
 
 	// GetAggregatedUsageByType returns the aggregated usage for a specific user and usage type
 	GetAggregatedUsageByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error)
+	
+	// GetUsageForWindow returns the usage for a specific user, usage type, and time window
+	// Returns (totalBytes, windowStart, windowEnd, error)
+	GetUsageForWindow(ctx context.Context, userID uint, usageType UsageType, window LimitWindow) (uint64, time.Time, time.Time, error)
 }
 
-// UsageAggregator defines the interface for aggregating usage data
-type UsageAggregator interface {
-	GetAggregatedUsageByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error)
-}
+

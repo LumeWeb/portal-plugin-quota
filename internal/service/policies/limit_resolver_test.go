@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/docker/go-units"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -20,13 +19,21 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_CustomLimitsOnly
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 	config := &models.UserQuotaConfig{
 		UserID:             1,
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		StorageLimit:       intPtr(1000),
-		UploadDailyLimit:   intPtr(500),
-		DownloadDailyLimit: intPtr(2000),
+		StorageLimitBytes:  1000,
+		UploadLimitBytes:   500,
+		DownloadLimitBytes: 2000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
 
 	// Mock default quota plan lookup to return not found
@@ -36,12 +43,15 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_CustomLimitsOnly
 	require.NoError(t, err)
 	assert.Equal(t, uint(1), limits.UserID)
 	assert.Equal(t, pluginCore.EnforcementPolicy(models.EnforcementPolicyHardLimits), limits.EnforcementPolicy)
-	assert.Equal(t, uint64(1000), *limits.StorageLimit)
-	assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
-	assert.Equal(t, uint64(2000), *limits.DownloadDailyLimit)
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(1000), limits.StorageLimitConfig.Bytes)
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(500), limits.UploadLimitConfig.Bytes)
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(2000), limits.DownloadLimitConfig.Bytes)
 	assert.True(t, limits.HasStorageLimitConfig)
-	assert.True(t, limits.HasUploadDailyLimitConfig)
-	assert.True(t, limits.HasDownloadDailyLimitConfig)
+	assert.True(t, limits.HasUploadLimitConfig)
+	assert.True(t, limits.HasDownloadLimitConfig)
 }
 
 func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_PlanLimitsWithCustomOverrides(t *testing.T) {
@@ -55,14 +65,22 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_PlanLimitsWithCu
 		UserID:            2,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 		QuotaPlanID:       &planID,
-		StorageLimit:      intPtr(3000), // Custom override
+		StorageLimitBytes: uint64(3000), // Custom override
 	}
+
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
 
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 42},
-		StorageLimit:       1000,
-		UploadDailyLimit:   500,
-		DownloadDailyLimit: 2000,
+		StorageLimitBytes:  1000,
+		UploadLimitBytes:   500,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 2000,
 		IsActive:           lo.ToPtr(true),
 	}
 
@@ -70,9 +88,12 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_PlanLimitsWithCu
 
 	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(3000), *limits.StorageLimit)       // Custom value
-	assert.Equal(t, uint64(500), *limits.UploadDailyLimit)    // Plan value
-	assert.Equal(t, uint64(2000), *limits.DownloadDailyLimit) // Plan value
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(3000), limits.StorageLimitConfig.Bytes) // Custom value
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(500), limits.UploadLimitConfig.Bytes) // Plan value
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(2000), limits.DownloadLimitConfig.Bytes) // Plan value
 	assert.Equal(t, &planID, limits.QuotaPlanID)
 }
 
@@ -87,11 +108,19 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanWhenN
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 	}
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 1},
-		StorageLimit:       5000,
-		UploadDailyLimit:   1000,
-		DownloadDailyLimit: 3000,
+		StorageLimitBytes:  5000,
+		UploadLimitBytes:   1000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 3000,
 		IsActive:           lo.ToPtr(true),
 	}
 
@@ -99,9 +128,12 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanWhenN
 
 	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(5000), *limits.StorageLimit)
-	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
-	assert.Equal(t, uint64(3000), *limits.DownloadDailyLimit)
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(5000), limits.StorageLimitConfig.Bytes)
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(1000), limits.UploadLimitConfig.Bytes)
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(3000), limits.DownloadLimitConfig.Bytes)
 }
 
 func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_ErrorWhenNoLimitsConfigured(t *testing.T) {
@@ -134,11 +166,19 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanProvi
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
 	}
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	plan := &models.QuotaPlan{
 		Model:              gorm.Model{ID: 1},
-		StorageLimit:       5000,
-		UploadDailyLimit:   1000,
-		DownloadDailyLimit: 3000,
+		StorageLimitBytes:  5000,
+		UploadLimitBytes:   1000,
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
+		DownloadLimitBytes: 3000,
 		IsActive:           lo.ToPtr(true),
 	}
 
@@ -146,9 +186,12 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_HardLimits_DefaultPlanProvi
 
 	limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyHardLimits)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(5000), *limits.StorageLimit)
-	assert.Equal(t, uint64(1000), *limits.UploadDailyLimit)
-	assert.Equal(t, uint64(3000), *limits.DownloadDailyLimit)
+	assert.NotNil(t, limits.StorageLimitConfig)
+	assert.Equal(t, uint64(5000), limits.StorageLimitConfig.Bytes)
+	assert.NotNil(t, limits.UploadLimitConfig)
+	assert.Equal(t, uint64(1000), limits.UploadLimitConfig.Bytes)
+	assert.NotNil(t, limits.DownloadLimitConfig)
+	assert.Equal(t, uint64(3000), limits.DownloadLimitConfig.Bytes)
 }
 
 func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
@@ -169,22 +212,31 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
 
 		storageThreshold := int64(800)
 		uploadThreshold := int64(400)
+		windowDuration := int64(86400)
+		windowStartHour := 0
+		timezone := "UTC"
 
 		plan := &models.QuotaPlan{
-			Model:            gorm.Model{ID: 42},
-			StorageLimit:     1000,
-			UploadDailyLimit: 500,
-			StorageThreshold: &storageThreshold,
-			UploadThreshold:  &uploadThreshold,
-			IsActive:         lo.ToPtr(true),
+			Model:             gorm.Model{ID: 42},
+			StorageLimitBytes: 1000,
+			UploadLimitBytes:  500,
+			WindowType:        models.WindowTypeCalendarDay,
+			WindowDuration:    &windowDuration,
+			WindowStartHour:   &windowStartHour,
+			WindowTimezone:    &timezone,
+			StorageThreshold:  &storageThreshold,
+			UploadThreshold:   &uploadThreshold,
+			IsActive:          lo.ToPtr(true),
 		}
 
 		mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 
 		limits, err := resolver.ResolveEffectiveLimits(ctx.GetContext(), config, models.EnforcementPolicyThreshold)
 		require.NoError(t, err)
-		assert.Equal(t, uint64(1000), *limits.StorageLimit)
-		assert.Equal(t, uint64(500), *limits.UploadDailyLimit)
+		assert.NotNil(t, limits.StorageLimitConfig)
+		assert.Equal(t, uint64(1000), limits.StorageLimitConfig.Bytes)
+		assert.NotNil(t, limits.UploadLimitConfig)
+		assert.Equal(t, uint64(500), limits.UploadLimitConfig.Bytes)
 		assert.Equal(t, uint64(800), *limits.StorageThreshold)
 		assert.Equal(t, uint64(400), *limits.UploadThreshold)
 		assert.True(t, limits.HasStorageThresholdConfig)
@@ -203,10 +255,10 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
 
 		planThreshold := int64(800)
 		plan := &models.QuotaPlan{
-			Model:            gorm.Model{ID: 42},
-			StorageLimit:     1000,
-			StorageThreshold: &planThreshold,
-			IsActive:         lo.ToPtr(true),
+			Model:             gorm.Model{ID: 42},
+			StorageLimitBytes: 1000,
+			StorageThreshold:  &planThreshold,
+			IsActive:          lo.ToPtr(true),
 		}
 
 		mockQuotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
@@ -217,80 +269,9 @@ func TestDefaultLimitResolver_ResolveEffectiveLimits_Threshold(t *testing.T) {
 	})
 }
 
-func TestDefaultLimitResolver_ValidateThresholdVsLimit(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	resolver := NewLimitResolver(ctx, mockQuotaService)
-
-	t.Run("Valid threshold", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(ctx, 800, 1000, "storage threshold")
-		assert.NoError(t, err)
-	})
-
-	t.Run("Threshold exceeds limit", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(ctx, 1200, 1000, "storage threshold")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "threshold cannot exceed limit")
-	})
-
-	t.Run("Unlimited limit", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(ctx, 2000, -1, "storage threshold")
-		assert.NoError(t, err)
-	})
-
-	t.Run("Disabled limit", func(t *testing.T) {
-		err := resolver.ValidateThresholdVsLimit(ctx, 1000, 0, "storage threshold")
-		assert.NoError(t, err) // Should skip validation when limit is disabled
-	})
-}
-
-func TestDefaultLimitResolver_ApplyLimit(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	resolver := NewLimitResolver(ctx, mockQuotaService)
-
-	t.Run("Positive value", func(t *testing.T) {
-		var limit *uint64
-		err := resolver.ApplyLimit(ctx, &limit, 1000, "test limit")
-		assert.NoError(t, err)
-		assert.Equal(t, uint64(1000), *limit)
-	})
-
-	t.Run("Unlimited value", func(t *testing.T) {
-		var limit *uint64
-		err := resolver.ApplyLimit(ctx, &limit, -1, "test limit")
-		assert.NoError(t, err)
-		assert.Nil(t, limit)
-	})
-
-	t.Run("Zero value", func(t *testing.T) {
-		var limit *uint64
-		err := resolver.ApplyLimit(ctx, &limit, 0, "test limit")
-		assert.NoError(t, err)
-		assert.Equal(t, uint64(0), *limit)
-	})
-
-	t.Run("Zero value with treatZeroAsNil", func(t *testing.T) {
-		var limit *uint64
-		err := resolver.ApplyLimit(ctx, &limit, 0, "test limit", pluginCore.WithTreatZeroAsNil())
-		assert.NoError(t, err)
-		assert.Nil(t, limit)
-	})
-
-	t.Run("Invalid negative value", func(t *testing.T) {
-		var limit *uint64
-		err := resolver.ApplyLimit(ctx, &limit, -2, "test limit")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "must be -1, 0, or positive")
-	})
-
-	t.Run("Unreasonably large value", func(t *testing.T) {
-		var limit *uint64
-		err := resolver.ApplyLimit(ctx, &limit, int64(2*units.PiB), "test limit")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unreasonably large")
-	})
-}
+// ValidateThresholdVsLimit and ApplyLimit methods removed from LimitResolver interface
+// as part of window-based limits simplification. These tests have been removed.
+// Threshold validation is now handled by EvaluateThreshold in core/types.go
 
 func TestEvaluateThreshold(t *testing.T) {
 	t.Run("Always warn threshold", func(t *testing.T) {
@@ -386,77 +367,63 @@ func TestDefaultLimitResolver_applyPlanLimits_HasConfigFlags(t *testing.T) {
 	resolver := NewLimitResolver(ctx, mockQuotaService)
 
 	t.Run("AllPlanLimitsExplicitlySet", func(t *testing.T) {
-		// Test with all plan limit values explicitly set
+		// Test with all plan limit values explicitly set using window-based schema
+		windowType := models.WindowTypeRolling
+		windowDuration := int64(86400) // 1 day
 		plan := &models.QuotaPlan{
-			StorageLimit:       -1,  // unlimited
-			UploadDailyLimit:   0,   // disabled
-			DownloadDailyLimit: 100, // normal value
-			UploadTotalLimit:   -1,  // unlimited
-			DownloadTotalLimit: 0,   // disabled
+			StorageLimitBytes:  100, // normal value
+			UploadLimitBytes:   0,   // disabled
+			DownloadLimitBytes: 100, // normal value
+			WindowType:         windowType,
+			WindowDuration:     &windowDuration,
 		}
 
 		limits := &pluginCore.EffectiveLimits{}
-		err := resolver.applyPlanLimits(limits, plan)
-		require.NoError(t, err)
+		resolver.applyPlanLimits(limits, plan, models.EnforcementPolicyHardLimits)
 
-		// All flags should be true since the fields were explicitly provided in the plan
-		assert.True(t, limits.HasStorageLimitConfig)
-		assert.True(t, limits.HasUploadDailyLimitConfig)
-		assert.True(t, limits.HasDownloadDailyLimitConfig)
-		assert.True(t, limits.HasUploadTotalLimitConfig)
-		assert.True(t, limits.HasDownloadTotalLimitConfig)
+		// Flags reflect what's actually configured (> 0 values)
+		assert.True(t, limits.HasStorageLimitConfig)    // 100 > 0, so it's configured
+		assert.False(t, limits.HasUploadLimitConfig)    // 0 means disabled, not configured
+		assert.True(t, limits.HasDownloadLimitConfig)   // 100 > 0, so it's configured
 
-		// StorageLimit and UploadTotalLimit should be nil (unlimited)
-		assert.Nil(t, limits.StorageLimit)
-		assert.Nil(t, limits.UploadTotalLimit)
+		// UploadLimitConfig should be nil (disabled/zero)
+		assert.Nil(t, limits.UploadLimitConfig)
 
-		// UploadDailyLimit and DownloadTotalLimit should be nil (disabled/zero)
-		assert.Nil(t, limits.UploadDailyLimit)
-		assert.Nil(t, limits.DownloadTotalLimit)
-
-		// DownloadDailyLimit should be set to the value
-		assert.NotNil(t, limits.DownloadDailyLimit)
-		assert.Equal(t, uint64(100), *limits.DownloadDailyLimit)
+		// StorageLimitConfig and DownloadLimitConfig should be set to their values
+		assert.NotNil(t, limits.StorageLimitConfig)
+		assert.NotNil(t, limits.DownloadLimitConfig)
+		assert.Equal(t, uint64(100), limits.StorageLimitConfig.Bytes)
+		assert.Equal(t, uint64(100), limits.DownloadLimitConfig.Bytes)
 	})
 
 	t.Run("PlanWithMixedValues", func(t *testing.T) {
-		// Test with mixed plan limit values
-		storageThreshold := int64(500)
+		// Test with mixed plan limit values using window-based schema
+		windowDuration := int64(86400)
 		plan := &models.QuotaPlan{
-			StorageLimit:       1000,
-			UploadDailyLimit:   -1, // unlimited
-			DownloadDailyLimit: 0,  // disabled
-			StorageThreshold:   &storageThreshold,
+			StorageLimitBytes: 1000,
+			UploadLimitBytes:  0, // disabled
+			WindowDuration:    &windowDuration,
 		}
 
 		limits := &pluginCore.EffectiveLimits{}
-		err := resolver.applyPlanLimits(limits, plan)
-		require.NoError(t, err)
+		resolver.applyPlanLimits(limits, plan, models.EnforcementPolicyHardLimits)
 
-		// All limit config flags should be true
+		// Limit config flags should reflect what's configured
 		assert.True(t, limits.HasStorageLimitConfig)
-		assert.True(t, limits.HasUploadDailyLimitConfig)
-		assert.True(t, limits.HasDownloadDailyLimitConfig)
-
-		// Total limits weren't set in plan, but we still mark them as configured
-		// since they exist in the plan structure
-		assert.True(t, limits.HasUploadTotalLimitConfig)
-		assert.True(t, limits.HasDownloadTotalLimitConfig)
+		assert.False(t, limits.HasUploadLimitConfig)
+		assert.False(t, limits.HasDownloadLimitConfig)
 
 		// Check the actual values
-		assert.NotNil(t, limits.StorageLimit)
-		assert.Equal(t, uint64(1000), *limits.StorageLimit)
+		assert.NotNil(t, limits.StorageLimitConfig)
+		assert.Equal(t, uint64(1000), limits.StorageLimitConfig.Bytes)
 
-		assert.Nil(t, limits.UploadDailyLimit)   // -1 becomes nil (unlimited)
-		assert.Nil(t, limits.DownloadDailyLimit) // 0 becomes nil (disabled)
+		assert.Nil(t, limits.UploadLimitConfig) // 0 becomes nil (disabled)
 
-		// Total limits default to 0, so they become nil with TreatZeroAsNil behavior
-		assert.Nil(t, limits.UploadTotalLimit)
-		assert.Nil(t, limits.DownloadTotalLimit)
+		// DownloadLimitConfig wasn't explicitly set in plan
+		assert.Nil(t, limits.DownloadLimitConfig)
 
-		// Threshold should be set
-		assert.True(t, limits.HasStorageThresholdConfig)
-		assert.NotNil(t, limits.StorageThreshold)
-		assert.Equal(t, uint64(500), *limits.StorageThreshold)
+		// Thresholds are only set for Threshold policy, not HardLimits
+		assert.Nil(t, limits.StorageThreshold)
 	})
+
 }

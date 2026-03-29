@@ -1905,52 +1905,6 @@ func (_c *MockQuotaService_GetTodayUsage_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
-// GetUsageAggregator provides a mock function for the type MockQuotaService
-func (_mock *MockQuotaService) GetUsageAggregator() UsageAggregator {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetUsageAggregator")
-	}
-
-	var r0 UsageAggregator
-	if returnFunc, ok := ret.Get(0).(func() UsageAggregator); ok {
-		r0 = returnFunc()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(UsageAggregator)
-		}
-	}
-	return r0
-}
-
-// MockQuotaService_GetUsageAggregator_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageAggregator'
-type MockQuotaService_GetUsageAggregator_Call struct {
-	*mock.Call
-}
-
-// GetUsageAggregator is a helper method to define mock.On call
-func (_e *MockQuotaService_Expecter) GetUsageAggregator() *MockQuotaService_GetUsageAggregator_Call {
-	return &MockQuotaService_GetUsageAggregator_Call{Call: _e.mock.On("GetUsageAggregator")}
-}
-
-func (_c *MockQuotaService_GetUsageAggregator_Call) Run(run func()) *MockQuotaService_GetUsageAggregator_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockQuotaService_GetUsageAggregator_Call) Return(usageAggregator UsageAggregator) *MockQuotaService_GetUsageAggregator_Call {
-	_c.Call.Return(usageAggregator)
-	return _c
-}
-
-func (_c *MockQuotaService_GetUsageAggregator_Call) RunAndReturn(run func() UsageAggregator) *MockQuotaService_GetUsageAggregator_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetUsageHistory provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetUsageHistory(ctx context.Context, userID uint, period int, usageType UsageType) ([]*UsagePoint, error) {
 	ret := _mock.Called(ctx, userID, period, usageType)

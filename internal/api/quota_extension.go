@@ -141,21 +141,33 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 		}
 
 	case models.EnforcementPolicyHardLimits, models.EnforcementPolicyThreshold:
-		// HARD_LIMITS and THRESHOLD: Show effective limits and current usage
-		usage, err := e.quotaService.GetUsageManager().GetCurrentUsage(ctx.Request().Context(), userID)
-		if err != nil {
-			return e.handleQuotaError(ctx, "failed to get current usage", err)
-		}
-
+		// HARD_LIMITS and THRESHOLD: Show effective limits and window-based usage
 		limits, err := e.quotaService.GetConfigManager().ResolveEffectiveLimits(ctx.Request().Context(), userID)
 		if err != nil {
 			return e.handleQuotaError(ctx, "failed to resolve effective limits", err)
 		}
 
+		// Get window-specific usage and window info for each limit type
+		uploadUsage, uploadWindow, err := e.getUsageForLimit(ctx, userID, limits.UploadLimitConfig, quotaCore.UsageTypeUpload)
+		if err != nil {
+			return e.handleQuotaError(ctx, "failed to get upload usage", err)
+		}
+
+		downloadUsage, downloadWindow, err := e.getUsageForLimit(ctx, userID, limits.DownloadLimitConfig, quotaCore.UsageTypeDownload)
+		if err != nil {
+			return e.handleQuotaError(ctx, "failed to get download usage", err)
+		}
+
+		storageUsage, storageWindow, err := e.getUsageForLimit(ctx, userID, limits.StorageLimitConfig, quotaCore.UsageTypeStorageAdd)
+		if err != nil {
+			return e.handleQuotaError(ctx, "failed to get storage usage", err)
+		}
+
+		// Build response with window information
 		response = dto.QuotaStatusResponse{
-			Upload:   e.buildLimitedStatus(usage.BytesUploaded, limits.UploadDailyLimit, limits.UploadThreshold),
-			Download: e.buildLimitedStatus(usage.BytesDownloaded, limits.DownloadDailyLimit, limits.DownloadThreshold),
-			Storage:  e.buildLimitedStatus(usage.BytesStored, limits.StorageLimit, nil),
+			Upload:   e.buildLimitedStatusWithWindow(uploadUsage, e.getLimitBytes(limits.UploadLimitConfig), limits.UploadThreshold, uploadWindow),
+			Download: e.buildLimitedStatusWithWindow(downloadUsage, e.getLimitBytes(limits.DownloadLimitConfig), limits.DownloadThreshold, downloadWindow),
+			Storage:  e.buildLimitedStatusWithWindow(storageUsage, e.getLimitBytes(limits.StorageLimitConfig), limits.StorageThreshold, storageWindow),
 		}
 
 	default:
@@ -308,5 +320,88 @@ func (e *QuotaExtension) buildLimitedStatus(used uint64, limit, threshold *uint6
 		Remaining:  remaining,
 		Percentage: percentage,
 		Threshold:  threshold,
+	}
+}
+
+// getLimitBytes extracts the byte limit from a LimitConfig
+func (e *QuotaExtension) getLimitBytes(limitConfig *quotaCore.Limit) *uint64 {
+	if limitConfig == nil {
+		return nil
+	}
+	return &limitConfig.Bytes
+}
+
+// getUsageForLimit gets usage and window info for a specific limit
+func (e *QuotaExtension) getUsageForLimit(ctx httputil.RequestContext, userID uint, limitConfig *quotaCore.Limit, usageType quotaCore.UsageType) (uint64, *dto.WindowInfo, error) {
+	if limitConfig == nil || limitConfig.Window.IsNil() {
+		return 0, nil, nil
+	}
+
+	// Get usage for this window
+	currentUsage, startTime, endTime, err := e.quotaService.GetUsageManager().GetUsageForWindow(
+		ctx.Request().Context(),
+		userID,
+		usageType,
+		limitConfig.Window,
+	)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// Build window info
+	windowInfo := &dto.WindowInfo{
+		Type: string(limitConfig.Window.Type),
+	}
+
+	// Add start/end dates for all windows
+	if !startTime.IsZero() {
+		startDate := startTime.Format(time.RFC3339)
+		windowInfo.StartDate = &startDate
+	}
+	if !endTime.IsZero() {
+		endDate := endTime.Format(time.RFC3339)
+		windowInfo.EndDate = &endDate
+	}
+
+	// Add duration for rolling windows
+	if limitConfig.Window.Type == quotaCore.WindowTypeRolling && limitConfig.Window.Duration != nil {
+		windowInfo.Duration = limitConfig.Window.Duration
+	}
+
+	// Add timezone if configured
+	if limitConfig.Window.Timezone != nil {
+		windowInfo.Timezone = limitConfig.Window.Timezone
+	}
+
+	return currentUsage, windowInfo, nil
+}
+
+// buildLimitedStatusWithWindow builds quota type status with window information
+func (e *QuotaExtension) buildLimitedStatusWithWindow(used uint64, limit, threshold *uint64, window *dto.WindowInfo) dto.QuotaTypeStatus {
+	var remaining *uint64
+	var percentage *int
+
+	// Calculate remaining if limit is set
+	if limit != nil {
+		if used < *limit {
+			r := *limit - used
+			remaining = &r
+		} else {
+			zero := uint64(0)
+			remaining = &zero
+		}
+
+		// Calculate percentage
+		p := e.calculateProgress(used, *limit)
+		percentage = &p
+	}
+
+	return dto.QuotaTypeStatus{
+		Used:       used,
+		Limit:      limit,
+		Remaining:  remaining,
+		Percentage: percentage,
+		Threshold:  threshold,
+		Window:     window,
 	}
 }

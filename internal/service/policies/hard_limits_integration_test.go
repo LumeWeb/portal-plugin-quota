@@ -2,8 +2,8 @@ package policies
 
 import (
 	"testing"
+	"time"
 
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -21,25 +21,31 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_
 	ctx, _ := coreTesting.NewTestContext(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:            1,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		UploadDailyLimit:  lo.ToPtr(int64(1000)),
-		UploadTotalLimit:  lo.ToPtr(int64(5000)),
+		UploadLimitBytes:  uint64(1000),
+		WindowType:        models.WindowTypeCalendarDay,
+		WindowDuration:    &windowDuration,
+		WindowStartHour:   &windowStartHour,
+		WindowTimezone:    &timezone,
 	}
 
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	// Mock current usage
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
-		UserID:        1,
-		BytesUploaded: 200,
-	}, nil)
 
-	// Mock aggregated usage for total limit check
-	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(1), models.UsageTypeUpload).Return(uint64(200), nil)
-	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+	// Mock usage for the window
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeUpload, window).Return(uint64(200), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 	require.NoError(t, err)
@@ -56,20 +62,30 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integrati
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:            2,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		UploadDailyLimit:  lo.ToPtr(int64(1000)),
-		UploadTotalLimit:  lo.ToPtr(int64(5000)),
+		UploadLimitBytes:  uint64(1000),
+		WindowType:        models.WindowTypeCalendarDay,
+		WindowDuration:    &windowDuration,
+		WindowStartHour:   &windowStartHour,
+		WindowTimezone:    &timezone,
 	}
 
 	// Mock current usage that's close to daily limit
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
-		UserID:        2,
-		BytesUploaded: 800,
-	}, nil)
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeUpload, window).Return(uint64(800), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -85,23 +101,30 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingTotalLimit_Integrati
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:            3,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		UploadDailyLimit:  lo.ToPtr(int64(10000)),
-		UploadTotalLimit:  lo.ToPtr(int64(1000)),
+		UploadLimitBytes:  uint64(10000),
+		WindowType:        models.WindowTypeCalendarDay,
+		WindowDuration:    &windowDuration,
+		WindowStartHour:   &windowStartHour,
+		WindowTimezone:    &timezone,
 	}
 
-	// Mock current usage that's close to total limit
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
-		UserID:        3,
-		BytesUploaded: 900,
-	}, nil)
+	// Mock current usage that's close to the limit
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(3), models.UsageTypeUpload).Return(uint64(900), nil)
-	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(3), models.UsageTypeUpload, window).Return(uint64(9900), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
 	require.NoError(t, err)
@@ -116,25 +139,30 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integratio
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:             1,
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadTotalLimit: lo.ToPtr(int64(10000)),
+		DownloadLimitBytes: uint64(2000),
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
 
 	// Mock current usage
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
-		UserID:          1,
-		BytesDownloaded: 500,
-	}, nil)
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-
-	// Mock usage aggregator for total limit check
-	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(1), models.UsageTypeDownload).Return(uint64(500), nil)
-	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeDownload, window).Return(uint64(500), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 	require.NoError(t, err)
@@ -151,20 +179,30 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integra
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:             2,
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		DownloadDailyLimit: lo.ToPtr(int64(2000)),
-		DownloadTotalLimit: lo.ToPtr(int64(10000)),
+		DownloadLimitBytes: uint64(2000),
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
 
 	// Mock current usage that's close to daily limit
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
-		UserID:          2,
-		BytesDownloaded: 1800,
-	}, nil)
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeDownload, window).Return(uint64(1800), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -180,24 +218,30 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingTotalLimit_Integra
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
+
 	config := &models.UserQuotaConfig{
 		UserID:             3,
 		EnforcementPolicy:  models.EnforcementPolicyHardLimits,
-		DownloadDailyLimit: lo.ToPtr(int64(10000)),
-		DownloadTotalLimit: lo.ToPtr(int64(2000)),
+		DownloadLimitBytes: uint64(10000),
+		WindowType:         models.WindowTypeCalendarDay,
+		WindowDuration:     &windowDuration,
+		WindowStartHour:    &windowStartHour,
+		WindowTimezone:     &timezone,
 	}
 
 	// Mock current usage that's close to total limit
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(3)).Return(&pluginCore.Usage{
-		UserID:          3,
-		BytesDownloaded: 1900,
-	}, nil)
-
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-	mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, uint(3), models.UsageTypeDownload).Return(uint64(1900), nil)
-	mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(3), models.UsageTypeDownload, window).Return(uint64(9900), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(200))
 	require.NoError(t, err)
@@ -212,19 +256,29 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integrati
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
 	config := &models.UserQuotaConfig{
 		UserID:            1,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		StorageLimit:      lo.ToPtr(int64(3000)),
+		StorageLimitBytes: uint64(3000),
+		WindowType:        models.WindowTypeCalendarDay,
+		WindowDuration:    &windowDuration,
+		WindowStartHour:   &windowStartHour,
+		WindowTimezone:    &timezone,
 	}
 
-	// Mock current usage
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(1)).Return(&pluginCore.Usage{
-		UserID:      1,
-		BytesStored: 1000,
-	}, nil)
+	// Mock current usage for the window
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeStorageAdd, window).Return(uint64(500), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckStorageQuota(ctx, config, uint64(1500))
 	require.NoError(t, err)
@@ -240,20 +294,30 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integr
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 	ctx, _ := coreTesting.NewTestContext(t)
 	enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
+	windowDuration := int64(86400)
+	windowStartHour := 0
+	timezone := "UTC"
 
 	config := &models.UserQuotaConfig{
 		UserID:            2,
 		EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		StorageLimit:      lo.ToPtr(int64(3000)),
+		StorageLimitBytes: uint64(3000),
+		WindowType:        models.WindowTypeCalendarDay,
+		WindowDuration:    &windowDuration,
+		WindowStartHour:   &windowStartHour,
+		WindowTimezone:    &timezone,
 	}
 
-	// Mock current usage that's close to storage limit
-	mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(2)).Return(&pluginCore.Usage{
-		UserID:      2,
-		BytesStored: 2800,
-	}, nil)
+	// Mock current usage close to the limit
+	window := pluginCore.LimitWindow{
+		Type:      pluginCore.WindowType(config.WindowType.String()),
+		Duration:  config.WindowDuration,
+		StartHour: config.WindowStartHour,
+		Timezone:  config.WindowTimezone,
+	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
+	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeStorageAdd, window).Return(uint64(2800), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckStorageQuota(ctx, config, uint64(300))
 	require.NoError(t, err)
@@ -276,12 +340,14 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_SuccessfulUploadRecording_Integra
 
 		// Create a test user
 		userID := dataManager.NextUserID()
-		uploadDailyLimit := int64(1000)
-		uploadTotalLimit := int64(5000)
+		uploadLimit := int64(1000)
+		windowDuration := int64(86400)
+		windowType := string(models.WindowTypeCalendarDay)
 
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			uploadDailyLimit: &uploadDailyLimit,
-			uploadTotalLimit: &uploadTotalLimit,
+			uploadLimit: &uploadLimit,
+			windowDuration: &windowDuration,
+			windowType: &windowType,
 		})
 		config := &models.UserQuotaConfig{}
 		err := ctx.DB().Where("user_id = ?", userID).First(config).Error
@@ -290,13 +356,16 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_SuccessfulUploadRecording_Integra
 		// Set up remaining mock expectations
 		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 0,
-		}, nil)
-		mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-		mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil)
-		mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
+
+		// Mock usage for the window
+		window := pluginCore.LimitWindow{
+			Type:      pluginCore.WindowType(config.WindowType.String()),
+			Duration:  config.WindowDuration,
+			StartHour: config.WindowStartHour,
+			Timezone:  config.WindowTimezone,
+		}
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeUpload, window).Return(uint64(0), time.Now(), time.Now(), nil)
+
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 		mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uint(100), uint64(500), "127.0.0.1").Return(nil)
 		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{
@@ -332,12 +401,14 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_ExceedsQuota_Integration_Error(t 
 
 		// Create a test user
 		userID := dataManager.NextUserID()
-		uploadDailyLimit := int64(1000)
-		uploadTotalLimit := int64(5000)
+		uploadLimit := int64(1000)
+		windowDuration := int64(86400)
+		windowType := string(models.WindowTypeCalendarDay)
 
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			uploadDailyLimit: &uploadDailyLimit,
-			uploadTotalLimit: &uploadTotalLimit,
+			uploadLimit: &uploadLimit,
+			windowDuration: &windowDuration,
+			windowType: &windowType,
 		})
 		config := &models.UserQuotaConfig{}
 		err := ctx.DB().Where("user_id = ?", userID).First(config).Error
@@ -346,11 +417,16 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_ExceedsQuota_Integration_Error(t 
 		// Set up remaining mock expectations
 		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:        userID,
-			BytesUploaded: 900,
-		}, nil)
-		// Note: GetUsageAggregator and GetAggregatedUsageByType are not called because daily limit check fails first
+
+		// Mock usage for the window
+		window := pluginCore.LimitWindow{
+			Type:      pluginCore.WindowType(config.WindowType.String()),
+			Duration:  config.WindowDuration,
+			StartHour: config.WindowStartHour,
+			Timezone:  config.WindowTimezone,
+		}
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeUpload, window).Return(uint64(900), time.Now(), time.Now(), nil)
+
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 
 		// Test upload that exceeds quota
@@ -377,12 +453,14 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_SuccessfulDownloadRecording_Int
 
 		// Create a test user
 		userID := dataManager.NextUserID()
-		downloadDailyLimit := int64(2000)
-		downloadTotalLimit := int64(10000)
+		downloadLimit := int64(2000)
+		windowDuration := int64(86400)
+		windowType := string(models.WindowTypeCalendarDay)
 
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			downloadDailyLimit: &downloadDailyLimit,
-			downloadTotalLimit: &downloadTotalLimit,
+			downloadLimit:  &downloadLimit,
+			windowDuration: &windowDuration,
+			windowType:     &windowType,
 		})
 		config := &models.UserQuotaConfig{}
 		err := ctx.DB().Where("user_id = ?", userID).First(config).Error
@@ -391,15 +469,18 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_SuccessfulDownloadRecording_Int
 		// Set up remaining mock expectations
 		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(userID)).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 0,
-		}, nil)
-		mockUsageAggregator := pluginCore.NewMockUsageAggregator(t)
-		mockUsageAggregator.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(0), nil)
-		mockQuotaService.EXPECT().GetUsageAggregator().Return(mockUsageAggregator)
-		mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uint(200), uint64(1000), "127.0.0.1").Return(nil)
+
+		// Mock usage for the window
+		window := pluginCore.LimitWindow{
+			Type:      pluginCore.WindowType(config.WindowType.String()),
+			Duration:  config.WindowDuration,
+			StartHour: config.WindowStartHour,
+			Timezone:  config.WindowTimezone,
+		}
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeDownload, window).Return(uint64(0), time.Now(), time.Now(), nil)
+
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
+		mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uint(200), uint64(1000), "127.0.0.1").Return(nil)
 		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{
 			UserID:          userID,
 			BytesDownloaded: 1000,
@@ -433,26 +514,33 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_ExceedsQuota_Integration_Error(
 
 		// Create a test user
 		userID := dataManager.NextUserID()
-		downloadDailyLimit := int64(1000)
-		downloadTotalLimit := int64(5000)
+		downloadLimit := int64(1000)
+		windowDuration := int64(86400)
+		windowType := string(models.WindowTypeCalendarDay)
 
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			downloadDailyLimit: &downloadDailyLimit,
-			downloadTotalLimit: &downloadTotalLimit,
+			downloadLimit:  &downloadLimit,
+			windowDuration: &windowDuration,
+			windowType:     &windowType,
 		})
 		config := &models.UserQuotaConfig{}
 		err := ctx.DB().Where("user_id = ?", userID).First(config).Error
 		require.NoError(t, err)
 
 		// Set up remaining mock expectations
-		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, userID).Return(&pluginCore.Usage{
-			UserID:          userID,
-			BytesDownloaded: 900,
-		}, nil)
-		// Note: GetUsageAggregator and GetAggregatedUsageByType are not called because daily limit check fails first
+
+		// Mock usage for the window
+		window := pluginCore.LimitWindow{
+			Type:      pluginCore.WindowType(config.WindowType.String()),
+			Duration:  config.WindowDuration,
+			StartHour: config.WindowStartHour,
+			Timezone:  config.WindowTimezone,
+		}
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeDownload, window).Return(uint64(900), time.Now(), time.Now(), nil)
+
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 
 		// Test download that exceeds quota
 		err = enforcer.RecordDownload(ctx, userID, 201, 1500, "127.0.0.1")
@@ -479,9 +567,13 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange_SuccessfulStorageRecording
 		// Create a test user
 		userID := dataManager.NextUserID()
 		storageLimit := int64(5000)
+		windowDuration := int64(86400)
+		windowType := string(models.WindowTypeCalendarDay)
 
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			storageLimit: &storageLimit,
+			storageLimit:  &storageLimit,
+			windowDuration: &windowDuration,
+			windowType:     &windowType,
 		})
 		config := &models.UserQuotaConfig{}
 		err := ctx.DB().Where("user_id = ?", userID).First(config).Error
@@ -490,10 +582,17 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange_SuccessfulStorageRecording
 		// Set up remaining mock expectations
 		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-		mockQuotaService.EXPECT().GetTodayUsage(mock.Anything, uint(userID)).Return(&pluginCore.Usage{
-			UserID:      userID,
-			BytesStored: 0,
-		}, nil)
+
+		// Mock usage for the window
+		window := pluginCore.LimitWindow{
+			Type:      pluginCore.WindowType(config.WindowType.String()),
+			Duration:  config.WindowDuration,
+			StartHour: config.WindowStartHour,
+			Timezone:  config.WindowTimezone,
+		}
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeStorageAdd, window).Return(uint64(0), time.Now(), time.Now(), nil)
+
+		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 		mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uint(300), int64(1500), "127.0.0.1").Return(nil)
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
 		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(&pluginCore.Usage{

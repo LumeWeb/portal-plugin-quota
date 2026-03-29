@@ -94,11 +94,9 @@ func TestUsageManager_RecordUpload_ValidInput_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -141,11 +139,9 @@ func TestUsageManager_GetUserQuotaConfig_ExistingConfig_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -185,11 +181,9 @@ func TestUsageManager_GetCurrentUsage_NoUsageRecords_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -214,11 +208,9 @@ func TestUsageManager_GetCurrentUsage_WithUsageRecords_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -248,11 +240,9 @@ func TestUsageManager_GetUsageHistory_RecentUsageHistory_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -290,11 +280,9 @@ func TestUsageManager_GetUsageHistory_AllUsageHistory_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -333,11 +321,9 @@ func TestUsageManager_GetDetailedUsage_WithinTimeRange_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -382,11 +368,9 @@ func TestUsageManager_RecordUserUsageDetail_RecordDetail_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -423,11 +407,9 @@ func TestUsageManager_UpdateDailyUsage_CreateNewRecord_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -457,11 +439,9 @@ func TestUsageManager_UpdateDailyUsage_UpdateExistingRecord_Success(t *testing.T
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -493,11 +473,9 @@ func TestUsageManager_UpdateDailyUsage_DifferentUsageTypes_Success(t *testing.T)
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -535,11 +513,9 @@ func TestUsageManager_RecordDownload_ValidInput_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -598,11 +574,9 @@ func TestUsageManager_RecordDownload_AnonymousWithSharedUsage_Success(t *testing
 
 		// Create test users
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, limits)
 		dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, limits)
@@ -695,11 +669,9 @@ func TestUsageManager_RecordDownload_AnonymousDuplicatePins_Deduplicates(t *test
 		mockPinService.EXPECT().GetPinsByUploadID(mock.Anything, uploadID).Return(pins, nil)
 
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID1, pluginModels.EnforcementPolicyHardLimits, limits)
 		dataManager.CreateUser(userID2, pluginModels.EnforcementPolicyHardLimits, limits)
@@ -778,11 +750,9 @@ func TestUsageManager_RecordStorageChange_ValidInput_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -829,11 +799,9 @@ func TestUsageManager_RecordStorageChange_Remove_Success(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -944,11 +912,9 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -999,11 +965,9 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -1048,11 +1012,9 @@ func TestUsageManager_ConcurrentAccess_MultipleOperations_Success(t *testing.T) 
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 
@@ -1145,11 +1107,9 @@ func TestUsageManager_RecordStorageChange_MinInt64(t *testing.T) {
 
 		// Create test user
 		limits := &testdata.TestUserLimits{
-			StorageLimit:       nil,
-			UploadDailyLimit:   nil,
-			DownloadDailyLimit: nil,
-			UploadTotalLimit:   nil,
-			DownloadTotalLimit: nil,
+			StorageLimitBytes:  nil,
+			UploadLimitBytes:   nil,
+			DownloadLimitBytes: nil,
 		}
 		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
 

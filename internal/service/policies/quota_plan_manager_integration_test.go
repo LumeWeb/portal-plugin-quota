@@ -16,11 +16,9 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByID_ValidID(t *testing.T) {
 		// Create a test quota plan with unique name
 		planName := "Test Plan " + t.Name()
 		plan := createTestQuotaPlan(t, ctx, planName, true, &testPlanLimits{
-			storageLimit:       1000,
-			uploadDailyLimit:   500,
-			downloadDailyLimit: 750,
-			uploadTotalLimit:   5000,
-			downloadTotalLimit: 10000,
+			storageLimit:    1000,
+			uploadLimit:     500,
+			downloadLimit:   750,
 		})
 
 		manager := NewQuotaPlanManager(ctx, ctx.DB(), ctx.Logger())
@@ -29,11 +27,9 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByID_ValidID(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, plan.Name, result.Name)
-		assert.Equal(t, plan.StorageLimit, result.StorageLimit)
-		assert.Equal(t, plan.UploadDailyLimit, result.UploadDailyLimit)
-		assert.Equal(t, plan.DownloadDailyLimit, result.DownloadDailyLimit)
-		assert.Equal(t, plan.UploadTotalLimit, result.UploadTotalLimit)
-		assert.Equal(t, plan.DownloadTotalLimit, result.DownloadTotalLimit)
+		assert.Equal(t, plan.StorageLimitBytes, result.StorageLimitBytes)
+		assert.Equal(t, plan.UploadLimitBytes, result.UploadLimitBytes)
+		assert.Equal(t, plan.DownloadLimitBytes, result.DownloadLimitBytes)
 	}, pluginTesting.TestOptions())
 }
 
@@ -52,11 +48,9 @@ func TestQuotaPlanManagerDefault_GetDefaultQuotaPlan_Exists(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Create a default quota plan
 		plan := createTestQuotaPlan(t, ctx, "Default Plan", true, &testPlanLimits{
-			storageLimit:       2000,
-			uploadDailyLimit:   1000,
-			downloadDailyLimit: 1500,
-			uploadTotalLimit:   10000,
-			downloadTotalLimit: 20000,
+			storageLimit:  2000,
+			uploadLimit:   1000,
+			downloadLimit: 1500,
 		})
 
 		// Explicitly set this plan as default
@@ -70,11 +64,9 @@ func TestQuotaPlanManagerDefault_GetDefaultQuotaPlan_Exists(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, "Default Plan", result.Name)
-		assert.Equal(t, int64(2000), result.StorageLimit)
-		assert.Equal(t, int64(1000), result.UploadDailyLimit)
-		assert.Equal(t, int64(1500), result.DownloadDailyLimit)
-		assert.Equal(t, int64(10000), result.UploadTotalLimit)
-		assert.Equal(t, int64(20000), result.DownloadTotalLimit)
+		assert.Equal(t, uint64(2000), result.StorageLimitBytes)
+		assert.Equal(t, uint64(1000), result.UploadLimitBytes)
+		assert.Equal(t, uint64(1500), result.DownloadLimitBytes)
 		assert.True(t, result.IsDefault)
 		assert.True(t, *result.IsActive)
 	}, pluginTesting.TestOptions())
@@ -95,11 +87,9 @@ func TestQuotaPlanManagerDefault_GetDefaultQuotaPlan_Inactive(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Create a default quota plan but set it as inactive
 		plan := createTestQuotaPlan(t, ctx, "Inactive Default Plan", false, &testPlanLimits{
-			storageLimit:       3000,
-			uploadDailyLimit:   1500,
-			downloadDailyLimit: 2000,
-			uploadTotalLimit:   15000,
-			downloadTotalLimit: 30000,
+			storageLimit:  3000,
+			uploadLimit:   1500,
+			downloadLimit: 2000,
 		})
 
 		// Explicitly set this plan as default and inactive
@@ -124,11 +114,9 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByName_ValidName(t *testing.T) {
 		// Create a test quota plan with unique name
 		planName := "Enterprise Plan " + t.Name()
 		plan := createTestQuotaPlan(t, ctx, planName, true, &testPlanLimits{
-			storageLimit:       1000,
-			uploadDailyLimit:   500,
-			downloadDailyLimit: 750,
-			uploadTotalLimit:   5000,
-			downloadTotalLimit: 10000,
+			storageLimit:  1000,
+			uploadLimit:   500,
+			downloadLimit: 750,
 		})
 
 		manager := NewQuotaPlanManager(ctx, ctx.DB(), ctx.Logger())
@@ -138,11 +126,9 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByName_ValidName(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, planName, result.Name)
 		assert.Equal(t, plan.ID, result.ID)
-		assert.Equal(t, plan.StorageLimit, result.StorageLimit)
-		assert.Equal(t, plan.UploadDailyLimit, result.UploadDailyLimit)
-		assert.Equal(t, plan.DownloadDailyLimit, result.DownloadDailyLimit)
-		assert.Equal(t, plan.UploadTotalLimit, result.UploadTotalLimit)
-		assert.Equal(t, plan.DownloadTotalLimit, result.DownloadTotalLimit)
+		assert.Equal(t, plan.StorageLimitBytes, result.StorageLimitBytes)
+		assert.Equal(t, plan.UploadLimitBytes, result.UploadLimitBytes)
+		assert.Equal(t, plan.DownloadLimitBytes, result.DownloadLimitBytes)
 	}, pluginTesting.TestOptions())
 }
 
@@ -162,11 +148,9 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByName_CaseSensitive(t *testing.T) 
 		// Create a plan with specific casing
 		planName := "Enterprise Plan"
 		createTestQuotaPlan(t, ctx, planName, true, &testPlanLimits{
-			storageLimit:       1000,
-			uploadDailyLimit:   500,
-			downloadDailyLimit: 750,
-			uploadTotalLimit:   5000,
-			downloadTotalLimit: 10000,
+			storageLimit:  1000,
+			uploadLimit:   500,
+			downloadLimit: 750,
 		})
 
 		manager := NewQuotaPlanManager(ctx, ctx.DB(), ctx.Logger())
@@ -189,19 +173,15 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByName_MultiplePlans(t *testing.T) 
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		// Create multiple plans with different names (only first is default)
 		plan1 := createTestQuotaPlan(t, ctx, "Plan One", true, &testPlanLimits{
-			storageLimit:       1000,
-			uploadDailyLimit:   500,
-			downloadDailyLimit: 750,
-			uploadTotalLimit:   5000,
-			downloadTotalLimit: 10000,
+			storageLimit:  1000,
+			uploadLimit:   500,
+			downloadLimit: 750,
 		})
 
 		plan2 := createTestQuotaPlan(t, ctx, "Plan Two", false, &testPlanLimits{
-			storageLimit:       2000,
-			uploadDailyLimit:   1000,
-			downloadDailyLimit: 1500,
-			uploadTotalLimit:   10000,
-			downloadTotalLimit: 20000,
+			storageLimit:  2000,
+			uploadLimit:   1000,
+			downloadLimit: 1500,
 		})
 
 		manager := NewQuotaPlanManager(ctx, ctx.DB(), ctx.Logger())
@@ -225,3 +205,13 @@ func TestQuotaPlanManagerDefault_GetQuotaPlanByName_MultiplePlans(t *testing.T) 
 	}, pluginTesting.TestOptions())
 }
 
+func TestQuotaPlanManagerDefault_GetQuotaPlanByName_NonExistentName2(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		manager := NewQuotaPlanManager(ctx, ctx.DB(), ctx.Logger())
+
+		result, err := manager.GetQuotaPlanByName(ctx, "Non Existent Plan Name 2")
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, models.ErrQuotaPlanNotFound)
+	}, pluginTesting.TestOptions())
+}

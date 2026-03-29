@@ -40,8 +40,12 @@ func TestConfiguration_Updates(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.NextUserID()
 		initialUploadLimit := int64(1000)
+		dur := int64(86400)
+		wt := "DAY"
 		createTestUser(t, ctx, userID, models.EnforcementPolicyHardLimits, &testUserLimits{
-			uploadDailyLimit: &initialUploadLimit,
+			uploadLimit:    &initialUploadLimit,
+			windowDuration: &dur,
+			windowType:     &wt,
 		})
 
 		quotaService := core.GetService[*pluginCore.MockQuotaService](ctx, pluginCore.QUOTA_SERVICE)
@@ -59,12 +63,12 @@ func TestConfiguration_Updates(t *testing.T) {
 		// Get initial config
 		retrievedConfig, err := quotaService.GetUsageManager().GetUserQuotaConfig(ctx, userID)
 		require.NoError(t, err)
-		assert.Equal(t, initialUploadLimit, *retrievedConfig.UploadDailyLimit)
+		assert.Equal(t, uint64(initialUploadLimit), retrievedConfig.UploadLimitBytes)
 		assert.Equal(t, models.EnforcementPolicyHardLimits, retrievedConfig.EnforcementPolicy)
 
 		// Test updating upload limit
 		newUploadLimit := int64(2000)
-		config.UploadDailyLimit = &newUploadLimit
+		config.UploadLimitBytes = uint64(newUploadLimit)
 		err = ctx.DB().Save(&config).Error
 		require.NoError(t, err)
 
@@ -73,7 +77,7 @@ func TestConfiguration_Updates(t *testing.T) {
 
 		updatedConfig, err := quotaService.GetUsageManager().GetUserQuotaConfig(ctx, userID)
 		require.NoError(t, err)
-		assert.Equal(t, newUploadLimit, *updatedConfig.UploadDailyLimit)
+		assert.Equal(t, uint64(newUploadLimit), updatedConfig.UploadLimitBytes)
 
 		// Test updating enforcement policy
 		config.EnforcementPolicy = models.EnforcementPolicyUnlimited
@@ -99,11 +103,9 @@ func TestConfiguration_QuotaPlanIntegration_WithPlan(t *testing.T) {
 
 		// Create a quota plan
 		plan := createTestQuotaPlan(t, ctx, "Test Plan", false, &testPlanLimits{
-			storageLimit:       5000,
-			uploadDailyLimit:   1000,
-			downloadDailyLimit: 2000,
-			uploadTotalLimit:   10000,
-			downloadTotalLimit: 20000,
+			storageLimit:  5000,
+			uploadLimit:   1000,
+			downloadLimit: 2000,
 		})
 
 		// Assign plan to user
@@ -126,11 +128,16 @@ func TestConfiguration_QuotaPlanIntegration_WithPlan(t *testing.T) {
 		quotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		require.NoError(t, err)
-		assert.Equal(t, uint64(plan.StorageLimit), *limits.StorageLimit)
-		assert.Equal(t, uint64(plan.UploadDailyLimit), *limits.UploadDailyLimit)
-		assert.Equal(t, uint64(plan.DownloadDailyLimit), *limits.DownloadDailyLimit)
-		assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)
-		assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit)
+		// Check that limits are resolved from plan
+		assert.True(t, limits.HasStorageLimitConfig)
+		assert.True(t, limits.HasUploadLimitConfig)
+		assert.True(t, limits.HasDownloadLimitConfig)
+		assert.NotNil(t, limits.StorageLimitConfig)
+		assert.NotNil(t, limits.UploadLimitConfig)
+		assert.NotNil(t, limits.DownloadLimitConfig)
+		assert.Equal(t, uint64(plan.StorageLimitBytes), limits.StorageLimitConfig.Bytes)
+		assert.Equal(t, uint64(plan.UploadLimitBytes), limits.UploadLimitConfig.Bytes)
+		assert.Equal(t, uint64(plan.DownloadLimitBytes), limits.DownloadLimitConfig.Bytes)
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -144,11 +151,9 @@ func TestConfiguration_QuotaPlanIntegration_CustomOverridesPlan(t *testing.T) {
 
 		// Create a quota plan
 		plan := createTestQuotaPlan(t, ctx, "Override Plan", false, &testPlanLimits{
-			storageLimit:       5000,
-			uploadDailyLimit:   1000,
-			downloadDailyLimit: 2000,
-			uploadTotalLimit:   10000,
-			downloadTotalLimit: 20000,
+			storageLimit:  5000,
+			uploadLimit:   1000,
+			downloadLimit: 2000,
 		})
 
 		// Create user with plan and custom override
@@ -169,11 +174,11 @@ func TestConfiguration_QuotaPlanIntegration_CustomOverridesPlan(t *testing.T) {
 		quotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		require.NoError(t, err)
-		assert.Equal(t, uint64(customStorageLimit), *limits.StorageLimit)            // Custom value
-		assert.Equal(t, uint64(plan.UploadDailyLimit), *limits.UploadDailyLimit)     // Plan value
-		assert.Equal(t, uint64(plan.DownloadDailyLimit), *limits.DownloadDailyLimit) // Plan value
-		assert.Equal(t, uint64(plan.UploadTotalLimit), *limits.UploadTotalLimit)     // Plan value
-		assert.Equal(t, uint64(plan.DownloadTotalLimit), *limits.DownloadTotalLimit) // Plan value
+		// Custom storage override should take priority
+		assert.Equal(t, uint64(customStorageLimit), limits.StorageLimitConfig.Bytes) // Custom value
+		// Plan limits should apply for upload and download
+		assert.Equal(t, uint64(plan.UploadLimitBytes), limits.UploadLimitConfig.Bytes)     // Plan value
+		assert.Equal(t, uint64(plan.DownloadLimitBytes), limits.DownloadLimitConfig.Bytes) // Plan value
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())
@@ -201,19 +206,17 @@ func TestConfiguration_MissingValues_NilLimits(t *testing.T) {
 		config, err := quotaService.GetUsageManager().GetUserQuotaConfig(ctx, userID)
 		require.NoError(t, err)
 
-		// All limits should be nil initially
-		assert.Nil(t, config.StorageLimit)
-		assert.Nil(t, config.UploadDailyLimit)
-		assert.Nil(t, config.DownloadDailyLimit)
-		assert.Nil(t, config.UploadTotalLimit)
-		assert.Nil(t, config.DownloadTotalLimit)
+		// All limits should be zero initially (no limits configured)
+		assert.Equal(t, uint64(0), config.StorageLimitBytes)
+		assert.Equal(t, uint64(0), config.UploadLimitBytes)
+		assert.Equal(t, uint64(0), config.DownloadLimitBytes)
 		assert.Nil(t, config.StorageThreshold)
 		assert.Nil(t, config.UploadThreshold)
 		assert.Nil(t, config.DownloadThreshold)
 		assert.Nil(t, config.QuotaPlanID)
 
 		// getEffectiveLimits should return an error when no limits are configured for hard limits policy
-		quotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Once()
+		quotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		assert.Error(t, err)
 		assert.Nil(t, limits)

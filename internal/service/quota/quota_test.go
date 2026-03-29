@@ -79,15 +79,14 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_NameChanged_Validation(t *testing.T
 
 		// Arrange - Create a quota plan first
 		createPlan := &pluginModels.QuotaPlan{
-			Name:               "Original Plan Name",
-			Description:        "Original description",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Original Plan Name",
+			Description:         "Original description",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 
 		err := quotaService.CreateQuotaPlan(ctx, createPlan)
@@ -119,22 +118,21 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 
 		// Arrange - Create a quota plan first
 		createPlan := &pluginModels.QuotaPlan{
-			Name:               "Original Plan Name",
-			Description:        "Original description",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Original Plan Name",
+			Description:         "Original description",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 
 		err := quotaService.CreateQuotaPlan(ctx, createPlan)
 		require.NoError(t, err)
 		require.NotZero(t, createPlan.ID)
 
-		// Arrange - Fetch the existing plan (this is what the handler does)
+		// Arrange - Fetch the existing plan (this is what the handler code does)
 		existingPlan, err := quotaService.GetQuotaPlan(ctx, createPlan.ID)
 		require.NoError(t, err)
 		require.NotNil(t, existingPlan)
@@ -142,11 +140,11 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 		// Act - Update the existing plan's fields (this is what the handler code does)
 		// Simulating the E2E test request body with updated limits
 		existingPlan.Description = "Updated description"
-		existingPlan.StorageLimit = 21474836480
-		existingPlan.UploadDailyLimit = 209715200
-		existingPlan.DownloadDailyLimit = 1048576000
-		existingPlan.UploadTotalLimit = 21474836480
-		existingPlan.DownloadTotalLimit = 10737418240
+		existingPlan.StorageLimitBytes = 21474836480
+		existingPlan.UploadLimitBytes = 10000000
+		existingPlan.DownloadLimitBytes = 50000000
+		windowDuration := int64(86400)
+		existingPlan.WindowDuration = &windowDuration
 		// Note: existingPlan.Name is NOT updated, so it retains "Original Plan Name"
 
 		// Act - Perform the update with the SAME plan object that was fetched
@@ -168,33 +166,32 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate(t *testing.T) {
 			"Name should remain unchanged")
 		assert.Equal(t, "Updated description", resultingPlan.Description,
 			"Description should be updated")
-		assert.Equal(t, int64(21474836480), resultingPlan.StorageLimit,
+		assert.Equal(t, int64(21474836480), int64(resultingPlan.StorageLimitBytes),
 			"Storage limit should be updated")
-		assert.Equal(t, int64(209715200), resultingPlan.UploadDailyLimit,
-			"Upload daily limit should be updated")
-		assert.Equal(t, int64(1048576000), resultingPlan.DownloadDailyLimit,
-			"Download daily limit should be updated")
+		assert.Equal(t, int64(10000000), int64(resultingPlan.UploadLimitBytes),
+			"Upload limit should be updated")
+		assert.Equal(t, int64(50000000), int64(resultingPlan.DownloadLimitBytes),
+			"Download limit should be updated")
 	}, testOptions())
 }
 
-// TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits tests that during
-// partial updates (when Name is unchanged), validation still enforces data integrity
-// by rejecting invalid limit values such as negative numbers.
+// TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits tests that
+// update operations work correctly after the validation simplification.
+// Note: Explicit limit validation was removed as part of window-based refactor.
 func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits(t *testing.T) {
 	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
 
 		// Arrange - Create a quota plan first
 		createPlan := &pluginModels.QuotaPlan{
-			Name:               "Original Plan Name",
-			Description:        "Original description",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Original Plan Name",
+			Description:         "Original description",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 
 		err := quotaService.CreateQuotaPlan(ctx, createPlan)
@@ -206,20 +203,19 @@ func TestQuotaServiceDefault_UpdateQuotaPlan_PartialUpdate_InvalidLimits(t *test
 		require.NoError(t, err)
 		require.NotNil(t, existingPlan)
 
-		// Act - Try to update with invalid negative limit during partial update
-		// Name is unchanged, but we still need to validate limits using change detection
-		existingPlan.StorageLimit = -100 // Invalid: less than -1
+		// Act - Update with a new valid limit value
+		existingPlan.StorageLimitBytes = 21474836480 // New valid limit (20GB)
 		err = quotaService.UpdateQuotaPlan(ctx, createPlan.ID, existingPlan)
 
-		// Assert - Update should fail with invalid limit error
-		assert.Error(t, err, "Update should fail with invalid negative limit")
-		assert.Contains(t, err.Error(), "storage_limit",
-			"Error should reference the invalid field")
-		// Fetch again and verify the old limit is still in place (no corruption)
+		// Assert - Update should succeed
+		assert.NoError(t, err, "Update should succeed with valid limit")
+		
+		// Fetch again and verify the new limit was applied
 		var resultingPlan pluginModels.QuotaPlan
-		_ = ctx.DB().Where("id = ?", createPlan.ID).First(&resultingPlan)
-		assert.Equal(t, int64(10737418240), resultingPlan.StorageLimit,
-			"Storage limit should remain unchanged after failed validation")
+		err = ctx.DB().Where("id = ?", createPlan.ID).First(&resultingPlan).Error
+		require.NoError(t, err)
+		assert.Equal(t, int64(21474836480), int64(resultingPlan.StorageLimitBytes),
+			"Storage limit should be updated to the new value")
 	}, testOptions())
 }
 
@@ -548,9 +544,10 @@ func TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName(t *testing.T) {
 		plan1 := &pluginModels.QuotaPlan{
 			Name:               "Enterprise Plan",
 			Description:        "First enterprise plan",
-			StorageLimit:       1000,
-			UploadDailyLimit:   500,
-			DownloadDailyLimit: 750,
+			StorageLimitBytes:  1000,
+			UploadLimitBytes:   500,
+			DownloadLimitBytes: 750,
+			WindowType:         pluginModels.WindowTypeCalendarDay,
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan1)
 		require.NoError(t, err)
@@ -560,9 +557,10 @@ func TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName(t *testing.T) {
 		plan2 := &pluginModels.QuotaPlan{
 			Name:               "Enterprise Plan", // Duplicate name
 			Description:        "Second enterprise plan",
-			StorageLimit:       2000,
-			UploadDailyLimit:   1000,
-			DownloadDailyLimit: 1500,
+			StorageLimitBytes:  2000,
+			UploadLimitBytes:   1000,
+			DownloadLimitBytes: 1500,
+			WindowType:         pluginModels.WindowTypeCalendarDay,
 		}
 		err = quotaService.CreateQuotaPlan(ctx, plan2)
 
@@ -582,7 +580,7 @@ func TestQuotaServiceDefault_CreateQuotaPlan_DuplicateName(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, plan1.ID, savedPlan.ID)
 		assert.Equal(t, "First enterprise plan", savedPlan.Description)
-		assert.Equal(t, int64(1000), savedPlan.StorageLimit)
+		assert.Equal(t, int64(1000), int64(savedPlan.StorageLimitBytes))
 	}, testOptions())
 }
 
@@ -873,15 +871,14 @@ func TestSetDefaultQuotaPlan_SetsDefaultAndRetrieves(t *testing.T) {
 
 		// Arrange - Create a quota plan
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Default Test Plan",
-			Description:        "Test plan for default bug",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Default Test Plan",
+			Description:         "Test plan for default bug",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan)
 		require.NoError(t, err)
@@ -915,30 +912,28 @@ func TestSetDefaultQuotaPlan_SwitchDefaultPlan(t *testing.T) {
 
 		// Arrange - Create two quota plans
 		plan1 := &pluginModels.QuotaPlan{
-			Name:               "First Plan",
-			Description:        "First default plan",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "First Plan",
+			Description:         "First default plan",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan1)
 		require.NoError(t, err)
 		plan1ID := plan1.ID
 
 		plan2 := &pluginModels.QuotaPlan{
-			Name:               "Second Plan",
-			Description:        "Second default plan",
-			StorageLimit:       5368709120,
-			UploadDailyLimit:   52428800,
-			DownloadDailyLimit: 262144000,
-			UploadTotalLimit:   5368709120,
-			DownloadTotalLimit: 2684354560,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Second Plan",
+			Description:         "Second default plan",
+			StorageLimitBytes:   5368709120,
+			UploadLimitBytes:    52428800,
+			DownloadLimitBytes:  262144000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 		err = quotaService.CreateQuotaPlan(ctx, plan2)
 		require.NoError(t, err)
@@ -987,15 +982,14 @@ func TestUpdateQuotaPlan_CannotChangeDefault(t *testing.T) {
 
 		// Arrange - Create a non-default plan
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan",
-			Description:        "Original plan",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Test Plan",
+			Description:         "Original plan",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan)
 		require.NoError(t, err)
@@ -1003,15 +997,14 @@ func TestUpdateQuotaPlan_CannotChangeDefault(t *testing.T) {
 
 		// Act & Assert - Try to set IsDefault=true via UpdateQuotaPlan
 		updatePlan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan",
-			Description:        "Updated Plan",
-			StorageLimit:       5368709120,
-			UploadDailyLimit:   52428800,
-			DownloadDailyLimit: 262144000,
-			UploadTotalLimit:   5368709120,
-			DownloadTotalLimit: 2684354560,
-			IsDefault:          true, // Try to set to default
-			IsActive:           new(true),
+			Name:                "Test Plan",
+			Description:         "Updated Plan",
+			StorageLimitBytes:   5368709120,
+			UploadLimitBytes:    52428800,
+			DownloadLimitBytes:  262144000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           true, // Try to set to default
+			IsActive:            new(true),
 		}
 		err = quotaService.UpdateQuotaPlan(ctx, planID, updatePlan)
 		assert.Error(t, err, "UpdateQuotaPlan should return error when trying to change IsDefault to true")
@@ -1029,15 +1022,14 @@ func TestUpdateQuotaPlan_CannotChangeDefault(t *testing.T) {
 
 		// Act & Assert - Try to unset IsDefault via UpdateQuotaPlan
 		unsetPlan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan",
-			Description:        "Unset Default",
-			StorageLimit:       5368709120,
-			UploadDailyLimit:   52428800,
-			DownloadDailyLimit: 262144000,
-			UploadTotalLimit:   5368709120,
-			DownloadTotalLimit: 2684354560,
-			IsDefault:          false, // Try to unset default
-			IsActive:           new(true),
+			Name:                "Test Plan",
+			Description:         "Unset Default",
+			StorageLimitBytes:   5368709120,
+			UploadLimitBytes:    52428800,
+			DownloadLimitBytes:  262144000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false, // Try to unset default
+			IsActive:            new(true),
 		}
 		err = quotaService.UpdateQuotaPlan(ctx, planID, unsetPlan)
 		assert.Error(t, err, "UpdateQuotaPlan should return error when trying to unset IsDefault")
@@ -1061,15 +1053,14 @@ func TestCreateQuotaPlan_CannotCreateAsDefault(t *testing.T) {
 
 		// Act & Assert - Try to create a plan with IsDefault=true
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Default Plan",
-			Description:        "Attempt to create as default",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          true, // This should be rejected
-			IsActive:           new(true),
+			Name:                "Test Default Plan",
+			Description:         "Attempt to create as default",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           true, // This should be rejected
+			IsActive:            new(true),
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan)
 		assert.Error(t, err, "CreateQuotaPlan should return error when trying to create with IsDefault=true")
@@ -1088,15 +1079,14 @@ func TestSetDefaultQuotaPlan_AfterSoftDelete(t *testing.T) {
 
 		// Arrange - Create first plan and set as default
 		plan1 := &pluginModels.QuotaPlan{
-			Name:               "First Plan",
-			Description:        "First plan",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "First Plan",
+			Description:         "First plan",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 		err := quotaService.CreateQuotaPlan(ctx, plan1)
 		require.NoError(t, err)
@@ -1123,15 +1113,14 @@ func TestSetDefaultQuotaPlan_AfterSoftDelete(t *testing.T) {
 
 		// Arrange - Create second plan and try to set as default
 		plan2 := &pluginModels.QuotaPlan{
-			Name:               "Second Plan",
-			Description:        "Second plan",
-			StorageLimit:       5368709120,
-			UploadDailyLimit:   52428800,
-			DownloadDailyLimit: 262144000,
-			UploadTotalLimit:   5368709120,
-			DownloadTotalLimit: 2684354560,
-			IsDefault:          false,
-			IsActive:           new(true),
+			Name:                "Second Plan",
+			Description:         "Second plan",
+			StorageLimitBytes:   5368709120,
+			UploadLimitBytes:    52428800,
+			DownloadLimitBytes:  262144000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(true),
 		}
 		err = quotaService.CreateQuotaPlan(ctx, plan2)
 		require.NoError(t, err)
@@ -1204,15 +1193,14 @@ func TestDeleteQuotaPlan_WithAssignedUsers_PreventsDeletion(t *testing.T) {
 
 		// Arrange - Create a quota plan
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan For Deletion",
-			Description:        "Plan to test deletion prevention",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan For Deletion",
+			Description:         "Plan to test deletion prevention",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan.IsActive = true
 
@@ -1247,15 +1235,14 @@ func TestDeleteQuotaPlan_WithoutAssignedUsers_Succeeds(t *testing.T) {
 
 		// Arrange - Create a quota plan
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan For Deletion Success",
-			Description:        "Plan to test successful deletion",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan For Deletion Success",
+			Description:         "Plan to test successful deletion",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan.IsActive = true
 
@@ -1284,15 +1271,14 @@ func TestDeleteQuotaPlan_AfterRemovingUsers_Succeeds(t *testing.T) {
 
 		// Arrange - Create a quota plan
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan Remove Then Delete",
-			Description:        "Plan to test removal then deletion",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan Remove Then Delete",
+			Description:         "Plan to test removal then deletion",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan.IsActive = true
 
@@ -1329,15 +1315,14 @@ func TestListUserQuotaConfigs_ReturnsConfigs(t *testing.T) {
 
 		// Arrange - Create a plan and assign users
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan For List",
-			Description:        "Plan for testing list configs",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan For List",
+			Description:         "Plan for testing list configs",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan.IsActive = true
 
@@ -1370,28 +1355,26 @@ func TestListUserQuotaConfigs_WithPlanFilter_FiltersByPlan(t *testing.T) {
 
 		// Arrange - Create two plans
 		plan1 := &pluginModels.QuotaPlan{
-			Name:               "Test Plan 1",
-			Description:        "First plan",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan 1",
+			Description:         "First plan",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan1.IsActive = true
 
 		plan2 := &pluginModels.QuotaPlan{
-			Name:               "Test Plan 2",
-			Description:        "Second plan",
-			StorageLimit:       5368709120,
-			UploadDailyLimit:   52428800,
-			DownloadDailyLimit: 262144000,
-			UploadTotalLimit:   5368709120,
-			DownloadTotalLimit: 2684354560,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan 2",
+			Description:         "Second plan",
+			StorageLimitBytes:   5368709120,
+			UploadLimitBytes:    52428800,
+			DownloadLimitBytes:  262144000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan2.IsActive = true
 
@@ -1446,11 +1429,11 @@ func TestUpdateUserQuotaConfig_UpdatesFields(t *testing.T) {
 		require.NoError(t, err)
 
 		// Prepare update
-		newStorageLimit := int64(999999999)
+		newStorageLimit := uint64(999999999)
 		newPolicy := pluginModels.EnforcementPolicyThreshold
 		update := &pluginCore.UserQuotaConfigUpdate{
-			StorageLimit:      &newStorageLimit,
-			EnforcementPolicy: &newPolicy,
+			StorageLimitBytes:  &newStorageLimit,
+			EnforcementPolicy:  &newPolicy,
 		}
 
 		// Act - Update the config
@@ -1459,7 +1442,7 @@ func TestUpdateUserQuotaConfig_UpdatesFields(t *testing.T) {
 		// Assert
 		require.NoError(t, err)
 		require.NotNil(t, updatedConfig)
-		assert.Equal(t, newStorageLimit, *updatedConfig.StorageLimit)
+		assert.Equal(t, newStorageLimit, updatedConfig.StorageLimitBytes)
 		assert.Equal(t, newPolicy, updatedConfig.EnforcementPolicy)
 	}, testOptions())
 }
@@ -1498,15 +1481,14 @@ func TestResetUserQuotaPlan_SetsPlanToNull(t *testing.T) {
 
 		// Arrange - Create a plan and assign user
 		plan := &pluginModels.QuotaPlan{
-			Name:               "Test Plan For Reset",
-			Description:        "Plan for testing reset",
-			StorageLimit:       10737418240,
-			UploadDailyLimit:   104857600,
-			DownloadDailyLimit: 524288000,
-			UploadTotalLimit:   10737418240,
-			DownloadTotalLimit: 5368709120,
-			IsDefault:          false,
-			IsActive:           new(bool),
+			Name:                "Test Plan For Reset",
+			Description:         "Plan for testing reset",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
 		}
 		*plan.IsActive = true
 

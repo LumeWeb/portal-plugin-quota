@@ -73,8 +73,7 @@ type QuotaService interface {
 	// Grant Manager getter
 	GetGrantManager() GrantManager
 
-	// Usage Aggregator getter
-	GetUsageAggregator() UsageAggregator
+
 
 	// Quota Plan Manager getter
 	GetQuotaPlanManager() QuotaPlanManager

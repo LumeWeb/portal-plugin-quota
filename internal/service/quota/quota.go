@@ -9,6 +9,7 @@ import (
 
 	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
+	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
@@ -29,6 +30,7 @@ type QuotaServiceDefault struct {
 	configManager   pluginCore.ConfigManager
 	planManager     pluginCore.QuotaPlanManager
 	limitResolver   pluginCore.LimitResolver
+	lockManager     quotaLock.LockManager
 	uploadService   core.UploadService
 }
 
@@ -45,6 +47,7 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 			// Initialize managers
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
+			service.lockManager = quotaLock.NewLockManager(ctx)
 
 			// Initialize limit resolver
 			service.limitResolver = policies.NewLimitResolver(ctx, service)
@@ -152,6 +155,16 @@ func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint,
 	if s.configManager == nil {
 		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config manager not initialized")
 	}
+	if s.lockManager == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("lock manager not initialized")
+	}
+
+	// Acquire lock for this user to prevent race conditions
+	lock, err := s.lockManager.AcquireLock(ctx, userID)
+	if err != nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to acquire quota lock: %w", err)
+	}
+	defer lock.Release()
 
 	return core.MetricTrackResult(
 		OperationDuration.WithLabelValues(LabelOperationCheck),
@@ -190,6 +203,16 @@ func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uin
 	if s.configManager == nil {
 		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config manager not initialized")
 	}
+	if s.lockManager == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("lock manager not initialized")
+	}
+
+	// Acquire lock for this user to prevent race conditions
+	lock, err := s.lockManager.AcquireLock(ctx, userID)
+	if err != nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to acquire quota lock: %w", err)
+	}
+	defer lock.Release()
 
 	return core.MetricTrackResult(
 		OperationDuration.WithLabelValues(LabelOperationCheck),
@@ -228,6 +251,16 @@ func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint
 	if s.configManager == nil {
 		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config manager not initialized")
 	}
+	if s.lockManager == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("lock manager not initialized")
+	}
+
+	// Acquire lock for this user to prevent race conditions
+	lock, err := s.lockManager.AcquireLock(ctx, userID)
+	if err != nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to acquire quota lock: %w", err)
+	}
+	defer lock.Release()
 
 	return core.MetricTrackResult(
 		OperationDuration.WithLabelValues(LabelOperationCheck),

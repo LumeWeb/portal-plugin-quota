@@ -375,7 +375,7 @@ type UserQuotaConfigUpdateRequest struct {
 
 func (r *UserQuotaConfigUpdateRequest) Schema() *z.StructSchema {
 	return z.Struct(z.Shape{
-		"EnforcementPolicy":  config.ZogStringLike[models.EnforcementPolicy]().Optional(),
+		"EnforcementPolicy":  z.Ptr(config.ZogStringLike[models.EnforcementPolicy]()),
 		"QuotaPlanID":        z.Ptr(z.UintLike[uint64]()),
 		"WindowType":         z.Ptr(z.String()),
 		"WindowDuration":     z.Ptr(z.Int64()),

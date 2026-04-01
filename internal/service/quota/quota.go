@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
+	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
@@ -29,6 +31,7 @@ type QuotaServiceDefault struct {
 	configManager   pluginCore.ConfigManager
 	planManager     pluginCore.QuotaPlanManager
 	limitResolver   pluginCore.LimitResolver
+	lockManager     quotaLock.LockManager
 	uploadService   core.UploadService
 }
 
@@ -45,6 +48,7 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 			// Initialize managers
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
+			service.lockManager = quotaLock.NewLockManager(ctx)
 
 			// Initialize limit resolver
 			service.limitResolver = policies.NewLimitResolver(ctx, service)
@@ -145,17 +149,30 @@ func (s *QuotaServiceDefault) RecordStorageChange(ctx context.Context, userID, u
 }
 
 // Quota Checking
-func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
-	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckUploadQuota")
-	defer span.End()
+
+// checkQuotaWithLock is a helper function that wraps quota checking with lock acquisition
+// and metric tracking to reduce code duplication across quota check methods.
+func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uint, requestedBytes uint64,
+	checkFunc func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error),
+	metric *prometheus.CounterVec) (pluginCore.QuotaCheckResult, error) {
 
 	if s.configManager == nil {
 		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config manager not initialized")
 	}
+	if s.lockManager == nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("lock manager not initialized")
+	}
+
+	// Acquire lock for this user to prevent race conditions
+	lock, err := s.lockManager.AcquireLock(ctx, userID)
+	if err != nil {
+		return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to acquire quota lock: %w", err)
+	}
+	defer lock.Release()
 
 	return core.MetricTrackResult(
 		OperationDuration.WithLabelValues(LabelOperationCheck),
-		UploadChecked.WithLabelValues(LabelStatusError),
+		metric.WithLabelValues(LabelStatusError),
 		func() (pluginCore.QuotaCheckResult, error) {
 			config, err := s.configManager.GetUserQuotaConfig(ctx, userID)
 			if err != nil {
@@ -167,19 +184,31 @@ func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint,
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get policy enforcer: %w", err)
 			}
 
-			result, err := enforcer.CheckUploadQuota(ctx, config, requestedBytes)
+			result, err := checkFunc(ctx, enforcer, config, requestedBytes)
 			if err != nil {
 				return result, err
 			}
 
 			if !result.Allowed {
-				UploadChecked.WithLabelValues(LabelStatusDenied).Inc()
+				metric.WithLabelValues(LabelStatusDenied).Inc()
 			} else {
-				UploadChecked.WithLabelValues(LabelStatusAllowed).Inc()
+				metric.WithLabelValues(LabelStatusAllowed).Inc()
 			}
 
 			return result, nil
 		},
+	)
+}
+
+func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckUploadQuota")
+	defer span.End()
+
+	return s.checkQuotaWithLock(ctx, userID, requestedBytes,
+		func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error) {
+			return enforcer.CheckUploadQuota(ctx, config, bytes)
+		},
+		UploadChecked,
 	)
 }
 
@@ -187,37 +216,11 @@ func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uin
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckDownloadQuota")
 	defer span.End()
 
-	if s.configManager == nil {
-		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config manager not initialized")
-	}
-
-	return core.MetricTrackResult(
-		OperationDuration.WithLabelValues(LabelOperationCheck),
-		DownloadChecked.WithLabelValues(LabelStatusError),
-		func() (pluginCore.QuotaCheckResult, error) {
-			config, err := s.configManager.GetUserQuotaConfig(ctx, userID)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get user quota config: %w", err)
-			}
-
-			enforcer, err := s.configManager.GetPolicyEnforcer(ctx, userID)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get policy enforcer: %w", err)
-			}
-
-			result, err := enforcer.CheckDownloadQuota(ctx, config, requestedBytes)
-			if err != nil {
-				return result, err
-			}
-
-			if !result.Allowed {
-				DownloadChecked.WithLabelValues(LabelStatusDenied).Inc()
-			} else {
-				DownloadChecked.WithLabelValues(LabelStatusAllowed).Inc()
-			}
-
-			return result, nil
+	return s.checkQuotaWithLock(ctx, userID, requestedBytes,
+		func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error) {
+			return enforcer.CheckDownloadQuota(ctx, config, bytes)
 		},
+		DownloadChecked,
 	)
 }
 
@@ -225,37 +228,11 @@ func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckStorageQuota")
 	defer span.End()
 
-	if s.configManager == nil {
-		return pluginCore.QuotaCheckResult{}, fmt.Errorf("config manager not initialized")
-	}
-
-	return core.MetricTrackResult(
-		OperationDuration.WithLabelValues(LabelOperationCheck),
-		StorageChecked.WithLabelValues(LabelStatusError),
-		func() (pluginCore.QuotaCheckResult, error) {
-			config, err := s.configManager.GetUserQuotaConfig(ctx, userID)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get user quota config: %w", err)
-			}
-
-			enforcer, err := s.configManager.GetPolicyEnforcer(ctx, userID)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get policy enforcer: %w", err)
-			}
-
-			result, err := enforcer.CheckStorageQuota(ctx, config, requestedBytes)
-			if err != nil {
-				return result, err
-			}
-
-			if !result.Allowed {
-				StorageChecked.WithLabelValues(LabelStatusDenied).Inc()
-			} else {
-				StorageChecked.WithLabelValues(LabelStatusAllowed).Inc()
-			}
-
-			return result, nil
+	return s.checkQuotaWithLock(ctx, userID, requestedBytes,
+		func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error) {
+			return enforcer.CheckStorageQuota(ctx, config, bytes)
 		},
+		StorageChecked,
 	)
 }
 

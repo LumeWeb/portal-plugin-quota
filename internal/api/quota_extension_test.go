@@ -233,7 +233,7 @@ func TestHandleQuotaStatus_HardLimitsPolicy(t *testing.T) {
 		mockUsageManager := quotaCore.NewMockUsageManager(t)
 		quotaSvc.EXPECT().GetUsageManager().Return(mockUsageManager)
 		
-		// Mock window-based usage queries for upload and download limits
+		// Mock window-based usage queries for upload, download, and storage limits
 		now := time.Now()
 		windowStart := now.Add(-30 * 24 * time.Hour)
 		
@@ -242,6 +242,9 @@ func TestHandleQuotaStatus_HardLimitsPolicy(t *testing.T) {
 		
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), quotaCore.UsageTypeDownload, mock.AnythingOfType("core.LimitWindow")).
 			Return(uint64(units.MiB*150), windowStart, now, nil).Once()
+
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd, mock.AnythingOfType("core.LimitWindow")).
+			Return(uint64(units.MiB*200), windowStart, now, nil).Once()
 
 		rec := helper.ExecuteRequest(http.MethodGet, "/api/account/quota", nil)
 
@@ -302,7 +305,7 @@ func TestHandleQuotaStatus_ThresholdPolicy(t *testing.T) {
 		mockUsageManager := quotaCore.NewMockUsageManager(t)
 		quotaSvc.EXPECT().GetUsageManager().Return(mockUsageManager)
 		
-		// Mock window-based usage queries for upload and download limits
+		// Mock window-based usage queries for upload, download, and storage limits
 		now := time.Now()
 		windowStart := now.Add(-30 * 24 * time.Hour)
 		
@@ -311,6 +314,9 @@ func TestHandleQuotaStatus_ThresholdPolicy(t *testing.T) {
 		
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), quotaCore.UsageTypeDownload, mock.AnythingOfType("core.LimitWindow")).
 			Return(uint64(units.MiB*450), windowStart, now, nil).Once()
+
+		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd, mock.AnythingOfType("core.LimitWindow")).
+			Return(uint64(units.MiB*100), windowStart, now, nil).Once()
 
 		rec := helper.ExecuteRequest(http.MethodGet, "/api/account/quota", nil)
 

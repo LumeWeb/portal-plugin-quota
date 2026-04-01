@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.lumeweb.com/portal/core"
@@ -29,7 +30,7 @@ type LockManagerDefault struct {
 // It wraps sync.Mutex and tracks the number of waiters.
 type userLock struct {
 	mu      sync.Mutex
-	waiters int32
+	waiters int64
 }
 
 // NewLockManager creates a new LockManager instance.
@@ -76,7 +77,7 @@ func (lm *LockManagerDefault) acquireLock(ctx context.Context, ul *userLock) (*d
 func (lm *LockManagerDefault) acquireWithSetup(ctx context.Context, userID uint, timeoutCtx *context.Context) (*defaultLock, error) {
 	// Get or create the user lock
 	ul := lm.getUserLock(userID)
-	ul.waiters++
+	atomic.AddInt64(&ul.waiters, 1)
 
 	// Choose the context for acquisition
 	acquireCtx := ctx
@@ -88,8 +89,7 @@ func (lm *LockManagerDefault) acquireWithSetup(ctx context.Context, userID uint,
 	if err != nil {
 		// Decrement waiters and cleanup on failure
 		lm.mu.Lock()
-		ul.waiters--
-		if ul.waiters <= 0 {
+		if atomic.AddInt64(&ul.waiters, -1) <= 0 {
 			delete(lm.locks, userID)
 		}
 		lm.mu.Unlock()
@@ -161,7 +161,7 @@ func (lm *LockManagerDefault) TryAcquireLock(ctx context.Context, userID uint) (
 
 	// Get or create the user lock
 	ul := lm.getUserLock(userID)
-	ul.waiters++
+	atomic.AddInt64(&ul.waiters, 1)
 
 	// Try to lock without blocking
 	if ul.mu.TryLock() {
@@ -175,9 +175,8 @@ func (lm *LockManagerDefault) TryAcquireLock(ctx context.Context, userID uint) (
 	// Decrement waiters since we didn't acquire the lock
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
-	ul.waiters--
 	// Clean up if no waiters remain
-	if ul.waiters <= 0 {
+	if atomic.AddInt64(&ul.waiters, -1) <= 0 {
 		delete(lm.locks, userID)
 	}
 
@@ -188,24 +187,16 @@ func (lm *LockManagerDefault) TryAcquireLock(ctx context.Context, userID uint) (
 // getUserLock gets or creates a lock for the specified user ID.
 // This is safe for concurrent access.
 func (lm *LockManagerDefault) getUserLock(userID uint) *userLock {
-	lm.mu.RLock()
-	ul, exists := lm.locks[userID]
-	lm.mu.RUnlock()
-
-	if exists {
-		return ul
-	}
-
-	// Create a new lock if it doesn't exist
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	// Double-check after acquiring write lock
+	// Check if lock already exists
 	if ul, exists := lm.locks[userID]; exists {
 		return ul
 	}
 
-	ul = &userLock{}
+	// Create a new lock if it doesn't exist
+	ul := &userLock{}
 	lm.locks[userID] = ul
 	return ul
 }
@@ -221,10 +212,8 @@ func (lm *LockManagerDefault) cleanupLock(userID uint) {
 		return
 	}
 
-	ul.waiters--
-
 	// Only remove if there are no waiters
-	if ul.waiters <= 0 {
+	if atomic.AddInt64(&ul.waiters, -1) <= 0 {
 		delete(lm.locks, userID)
 	}
 }
@@ -232,19 +221,18 @@ func (lm *LockManagerDefault) cleanupLock(userID uint) {
 // defaultLock implements the Lock interface with a cleanup callback.
 type defaultLock struct {
 	mu        *sync.Mutex
-	released  bool
+	released  int32
 	onRelease func()
 }
 
 // Release releases the lock.
 // Multiple calls to Release are safe - subsequent calls are no-ops.
 func (l *defaultLock) Release() {
-	if l.released {
+	if !atomic.CompareAndSwapInt32(&l.released, 0, 1) {
 		return
 	}
 
 	l.mu.Unlock()
-	l.released = true
 
 	if l.onRelease != nil {
 		l.onRelease()

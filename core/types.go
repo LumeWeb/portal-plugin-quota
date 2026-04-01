@@ -21,11 +21,32 @@ const (
 	WindowTypeLifetime     = models.WindowTypeLifetime
 )
 
+// ReservationReleaseFunc is a function that releases a quota reservation.
+type ReservationReleaseFunc func(context.Context) error
+
 // QuotaCheckResult represents the result of a quota check
 type QuotaCheckResult struct {
-	Allowed bool
-	Reason  QuotaCheckReason // "OK", "LIMIT_EXCEEDED", "ALLOWANCE_DEPLETED", "WARNING_THRESHOLD", etc.
-	Details QuotaCheckDetails
+	Allowed        bool
+	Reason         QuotaCheckReason  // "OK", "LIMIT_EXCEEDED", "ALLOWANCE_DEPLETED", "WARNING_THRESHOLD", etc.
+	Details        QuotaCheckDetails
+	ReservationID  *uint             // Reservation ID if quota was reserved (optional)
+	releaseFunc    ReservationReleaseFunc // Internal function for releasing reservation
+}
+
+// ReleaseReservation releases the quota reservation if one exists.
+// This is a convenience method for callers to clean up failed operations.
+func (q *QuotaCheckResult) ReleaseReservation(ctx context.Context) error {
+	if q.releaseFunc != nil {
+		return q.releaseFunc(ctx)
+	}
+	return nil
+}
+
+// SetReleaseFunc sets the reservation release function.
+// This is used internally by the quota service to attach a release function
+// to the check result when a reservation is created.
+func (q *QuotaCheckResult) SetReleaseFunc(fn ReservationReleaseFunc) {
+	q.releaseFunc = fn
 }
 
 // QuotaCheckDetails provides detailed information about quota status

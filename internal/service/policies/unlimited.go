@@ -19,7 +19,7 @@ type UnlimitedPolicyEnforcer struct {
 // NewUnlimitedPolicyEnforcer creates a new unlimited policy enforcer
 func NewUnlimitedPolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaService) *UnlimitedPolicyEnforcer {
 	return &UnlimitedPolicyEnforcer{
-		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager()),
+		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager(), quotaService.GetReservationManager()),
 		usageManager:       quotaService.GetUsageManager(),
 	}
 }

@@ -22,7 +22,7 @@ type AllowancePolicyEnforcer struct {
 // NewAllowancePolicyEnforcer creates a new allowance policy enforcer
 func NewAllowancePolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaService) *AllowancePolicyEnforcer {
 	return &AllowancePolicyEnforcer{
-		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager()),
+		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager(), quotaService.GetReservationManager()),
 		quotaService:       quotaService,
 		limitResolver:      NewLimitResolver(ctx, quotaService),
 	}

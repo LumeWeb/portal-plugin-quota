@@ -10,14 +10,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/samber/lo"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
-	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/policies"
 	"go.lumeweb.com/portal/core"
-	portalModels "go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/portal/db"
+	portalModels "go.lumeweb.com/portal/db/models"
 	"go.lumeweb.com/queryutil"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -25,14 +25,15 @@ import (
 
 type QuotaServiceDefault struct {
 	*core.BaseComponent
-	config          *config.QuotaConfig
-	usageManager    pluginCore.UsageManager
-	grantManager    pluginCore.GrantManager
-	configManager   pluginCore.ConfigManager
-	planManager     pluginCore.QuotaPlanManager
-	limitResolver   pluginCore.LimitResolver
-	lockManager     quotaLock.LockManager
-	uploadService   core.UploadService
+	config             *config.QuotaConfig
+	usageManager       pluginCore.UsageManager
+	grantManager       pluginCore.GrantManager
+	configManager      pluginCore.ConfigManager
+	planManager        pluginCore.QuotaPlanManager
+	limitResolver      pluginCore.LimitResolver
+	lockManager        quotaLock.LockManager
+	uploadService      core.UploadService
+	reservationManager pluginCore.ReservationManager
 }
 
 var _ pluginCore.QuotaService = (*QuotaServiceDefault)(nil)
@@ -49,6 +50,7 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
 			service.lockManager = quotaLock.NewLockManager(ctx)
+			service.reservationManager = managers.NewReservationManager(ctx)
 
 			// Initialize limit resolver
 			service.limitResolver = policies.NewLimitResolver(ctx, service)
@@ -152,7 +154,7 @@ func (s *QuotaServiceDefault) RecordStorageChange(ctx context.Context, userID, u
 
 // checkQuotaWithLock is a helper function that wraps quota checking with lock acquisition
 // and metric tracking to reduce code duplication across quota check methods.
-func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uint, requestedBytes uint64,
+func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uint, requestedBytes uint64, usageType models.UsageType, options pluginCore.CheckOptions,
 	checkFunc func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error),
 	metric *prometheus.CounterVec) (pluginCore.QuotaCheckResult, error) {
 
@@ -191,8 +193,34 @@ func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uin
 
 			if !result.Allowed {
 				metric.WithLabelValues(LabelStatusDenied).Inc()
-			} else {
-				metric.WithLabelValues(LabelStatusAllowed).Inc()
+				return result, nil
+			}
+
+			metric.WithLabelValues(LabelStatusAllowed).Inc()
+
+			// Create reservation only if option is set
+			if options.CreateReservation {
+				if s.reservationManager == nil {
+					return pluginCore.QuotaCheckResult{}, fmt.Errorf("reservation manager not initialized")
+				}
+
+				if _, err := s.reservationManager.CleanupStaleReservationsForUser(ctx, userID); err != nil {
+					s.Logger().Warn("Failed to cleanup stale reservations", zap.Error(err))
+				}
+
+				reservation, err := s.reservationManager.CreateReservation(ctx, userID, usageType, requestedBytes, options.IP)
+				if err != nil {
+					s.Logger().Error("Failed to create reservation", zap.Error(err))
+					return result, nil
+				}
+
+				reservationID := reservation.ID
+				result.ReservationID = &reservationID
+
+				// Set release function for convenience
+				result.SetReleaseFunc(func(ctx context.Context) error {
+					return s.reservationManager.ReleaseReservation(ctx, reservationID)
+				})
 			}
 
 			return result, nil
@@ -200,11 +228,12 @@ func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uin
 	)
 }
 
-func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*pluginCore.CheckOptions)) (pluginCore.QuotaCheckResult, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckUploadQuota")
 	defer span.End()
 
-	return s.checkQuotaWithLock(ctx, userID, requestedBytes,
+	options := pluginCore.ParseOptions(opts...)
+	return s.checkQuotaWithLock(ctx, userID, requestedBytes, models.UsageTypeUpload, options,
 		func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error) {
 			return enforcer.CheckUploadQuota(ctx, config, bytes)
 		},
@@ -212,11 +241,12 @@ func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint,
 	)
 }
 
-func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*pluginCore.CheckOptions)) (pluginCore.QuotaCheckResult, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckDownloadQuota")
 	defer span.End()
 
-	return s.checkQuotaWithLock(ctx, userID, requestedBytes,
+	options := pluginCore.ParseOptions(opts...)
+	return s.checkQuotaWithLock(ctx, userID, requestedBytes, models.UsageTypeDownload, options,
 		func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error) {
 			return enforcer.CheckDownloadQuota(ctx, config, bytes)
 		},
@@ -224,16 +254,44 @@ func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uin
 	)
 }
 
-func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64) (pluginCore.QuotaCheckResult, error) {
+func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*pluginCore.CheckOptions)) (pluginCore.QuotaCheckResult, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckStorageQuota")
 	defer span.End()
 
-	return s.checkQuotaWithLock(ctx, userID, requestedBytes,
+	options := pluginCore.ParseOptions(opts...)
+	return s.checkQuotaWithLock(ctx, userID, requestedBytes, models.UsageTypeStorageAdd, options,
 		func(ctx context.Context, enforcer pluginCore.PolicyEnforcer, config *models.UserQuotaConfig, bytes uint64) (pluginCore.QuotaCheckResult, error) {
 			return enforcer.CheckStorageQuota(ctx, config, bytes)
 		},
 		StorageChecked,
 	)
+}
+
+// Reservation Management
+func (s *QuotaServiceDefault) CommitReservation(ctx context.Context, reservationID uint, uploadID uint) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CommitReservation")
+	defer span.End()
+
+	if s.reservationManager == nil {
+		return fmt.Errorf("reservation manager not initialized")
+	}
+
+	return s.reservationManager.CommitReservation(ctx, reservationID, uploadID)
+}
+
+func (s *QuotaServiceDefault) ReleaseReservation(ctx context.Context, reservationID uint) error {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.ReleaseReservation")
+	defer span.End()
+
+	if s.reservationManager == nil {
+		return fmt.Errorf("reservation manager not initialized")
+	}
+
+	return s.reservationManager.ReleaseReservation(ctx, reservationID)
+}
+
+func (s *QuotaServiceDefault) GetReservationManager() pluginCore.ReservationManager {
+	return s.reservationManager
 }
 
 // Usage Analytics
@@ -1180,8 +1238,8 @@ func CheckGroupQuotaIteration(
 // 2. Iteratively calculates per-user cost using anonymous distribution logic
 // 3. Filters out users who lack sufficient quota for their share
 // 4. Re-calculates share with remaining users, repeating until:
-//    - No users remain (cannot serve) → returns false
-//    - All remaining users have sufficient quota (stabilized) → returns true
+//   - No users remain (cannot serve) → returns false
+//   - All remaining users have sufficient quota (stabilized) → returns true
 //
 // Algorithm rationale:
 // - As users are excluded due to insufficient quota, the per-user cost increases
@@ -1400,8 +1458,6 @@ func (s *QuotaServiceDefault) GetUsageManager() pluginCore.UsageManager {
 func (s *QuotaServiceDefault) GetGrantManager() pluginCore.GrantManager {
 	return s.grantManager
 }
-
-
 
 func (s *QuotaServiceDefault) GetQuotaPlanManager() pluginCore.QuotaPlanManager {
 	return s.planManager

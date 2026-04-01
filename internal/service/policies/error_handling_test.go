@@ -35,13 +35,15 @@ func TestHardLimitsPolicyEnforcer_InvalidLimitValues(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-			// Mock GetUsageForWindow - use proper window configuration
 			mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeUpload).Return(uint64(0), nil)
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
@@ -54,11 +56,7 @@ func TestHardLimitsPolicyEnforcer_InvalidLimitValues(t *testing.T) {
 				WindowDuration:    &windowDuration,
 			}
 
-			// Note: Negative int64 becomes a large uint64 value, no validation error is expected
-			// This test verifies that the system accepts the value without explicit validation
 			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
-			// No error is expected since limit validation was simplified
-			// The negative value gets cast to a uint64, which is valid
 			assert.NoError(t, err)
 			_ = result
 		})
@@ -100,17 +98,17 @@ func TestThresholdPolicyEnforcer_InvalidThresholdValues(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-			// Mock GetUsageForWindow - use proper window configuration
 			mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), pluginCore.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil).Maybe()
-			
+
 			enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
-			// Setup window configuration
 			windowDuration := int64(86400)
 			windowStartHour := 0
 			timezone := "UTC"
@@ -126,7 +124,6 @@ func TestThresholdPolicyEnforcer_InvalidThresholdValues(t *testing.T) {
 				UploadThreshold:   test.threshold,
 			}
 
-			// Note: No validation error is expected since threshold validation was simplified
 			result, err := enforcer.CheckUploadQuota(ctx, config, uint64(500))
 			assert.NoError(t, err, test.description)
 			_ = result
@@ -185,12 +182,12 @@ func TestAllowancePolicyEnforcer_ErrorHandling(t *testing.T) {
 			mockGrantManager := pluginCore.NewMockGrantManager(t)
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager).Maybe()
 
-			// Add mock expectation for RecordUsageAndConsume for RecordUpload tests
-			// We identify RecordUpload tests by checking if the test function name contains "RecordUpload"
 			if test.testFunc != nil && strings.Contains(test.name, "RecordUpload") {
 				mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, uint64(100)).Return(errors.New(test.expectedError))
 			}
@@ -212,7 +209,9 @@ func TestErrorHandling_InvalidConfiguration(t *testing.T) {
 		ctx, _ := coreTesting.NewTestContext(t)
 		mockQuotaService := pluginCore.NewMockQuotaService(t)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 		_, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, nil, models.EnforcementPolicyHardLimits)

@@ -17,10 +17,11 @@ import (
 
 // MockSetup holds common mock components for policy enforcer tests
 type MockSetup struct {
-	QuotaService     *pluginCore.MockQuotaService
-	UsageManager     *pluginCore.MockUsageManager
-	GrantManager     *pluginCore.MockGrantManager
-	QuotaPlanManager *pluginCore.MockQuotaPlanManager
+	QuotaService        *pluginCore.MockQuotaService
+	UsageManager        *pluginCore.MockUsageManager
+	GrantManager        *pluginCore.MockGrantManager
+	QuotaPlanManager    *pluginCore.MockQuotaPlanManager
+	ReservationManager  *pluginCore.MockReservationManager
 }
 
 // testUserLimits represents test user quota limits (lowercase version)
@@ -52,15 +53,18 @@ func SetupMocks(t *testing.T) *MockSetup {
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockGrantManager := pluginCore.NewMockGrantManager(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+	mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 	// Setup base mock expectations
 	mockQuotaService.On("GetUsageManager").Return(mockUsageManager).Maybe()
+	mockQuotaService.On("GetReservationManager").Return(mockReservationManager).Maybe()
 
 	return &MockSetup{
-		QuotaService:     mockQuotaService,
-		UsageManager:     mockUsageManager,
-		GrantManager:     mockGrantManager,
-		QuotaPlanManager: mockQuotaPlanManager,
+		QuotaService:       mockQuotaService,
+		UsageManager:       mockUsageManager,
+		GrantManager:       mockGrantManager,
+		QuotaPlanManager:   mockQuotaPlanManager,
+		ReservationManager: mockReservationManager,
 	}
 }
 

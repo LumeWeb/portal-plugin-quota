@@ -25,10 +25,13 @@ func TestPolicyIntegration_PolicySwitching_HardLimitsToUnlimited(t *testing.T) {
 		quotaService := pluginCore.NewMockQuotaService(t)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 
 		// Setup hard limits config
 		hardLimitsConfig := &models.UserQuotaConfig{
@@ -74,10 +77,13 @@ func TestPolicyIntegration_PolicySwitching_UnlimitedToThreshold(t *testing.T) {
 		quotaService := pluginCore.NewMockQuotaService(t)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 
 		// Test unlimited policy first
 		unlimitedConfig := &models.UserQuotaConfig{
@@ -141,8 +147,11 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		quotaService1 := pluginCore.NewMockQuotaService(t)
 		mockUsageManager1 := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager1 := pluginCore.NewMockQuotaPlanManager(t)
+		mockReservationManager1 := pluginCore.NewMockReservationManager(t)
 		quotaService1.EXPECT().GetUsageManager().Return(mockUsageManager1)
 		quotaService1.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager1).Maybe()
+		quotaService1.EXPECT().GetReservationManager().Return(mockReservationManager1).Maybe()
+		mockReservationManager1.EXPECT().SumPendingBytesForUser(mock.Anything, user1ID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 
 		// Setup mocks for all three policy types
 		mockUsageManager1.EXPECT().GetUserQuotaConfig(ctx, user1ID).Return(&models.UserQuotaConfig{
@@ -172,8 +181,10 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		quotaService2 := pluginCore.NewMockQuotaService(t)
 		mockUsageManager2 := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager2 := pluginCore.NewMockQuotaPlanManager(t)
+		mockReservationManager2 := pluginCore.NewMockReservationManager(t)
 		quotaService2.EXPECT().GetUsageManager().Return(mockUsageManager2)
 		quotaService2.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager2).Maybe()
+		quotaService2.EXPECT().GetReservationManager().Return(mockReservationManager2).Maybe()
 
 		// Mock GetDefaultQuotaPlan again for the unlimited enforcer
 		mockQuotaPlanManager2.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
@@ -196,8 +207,10 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		quotaService3 := pluginCore.NewMockQuotaService(t)
 		mockUsageManager3 := pluginCore.NewMockUsageManager(t)
 		mockQuotaPlanManager3 := pluginCore.NewMockQuotaPlanManager(t)
+		mockReservationManager3 := pluginCore.NewMockReservationManager(t)
 		quotaService3.EXPECT().GetUsageManager().Return(mockUsageManager3)
 		quotaService3.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager3).Maybe()
+		quotaService3.EXPECT().GetReservationManager().Return(mockReservationManager3).Maybe()
 		quotaService3.EXPECT().GetUsageManager().Return(mockUsageManager3).Maybe()
 
 		// Mock GetDefaultQuotaPlan again for the threshold enforcer
@@ -245,10 +258,13 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
+			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager).Maybe()
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.Anything, mock.Anything).Return(uint64(0), nil).Maybe()
 
 			return quotaService
 		}
@@ -262,6 +278,7 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 		quotaService := pluginCore.NewMockQuotaService(t)
 		quotaService.EXPECT().GetUsageManager().Return(pluginCore.NewMockUsageManager(t)).Maybe()
 		quotaService.EXPECT().GetQuotaPlanManager().Return(pluginCore.NewMockQuotaPlanManager(t)).Maybe()
+		quotaService.EXPECT().GetReservationManager().Return(pluginCore.NewMockReservationManager(t)).Maybe()
 		quotaService.EXPECT().GetGrantManager().Return(pluginCore.NewMockGrantManager(t)).Maybe()
 		allowanceEnforcer := NewAllowancePolicyEnforcer(ctx, quotaService)
 

@@ -94,16 +94,17 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), models.UsageTypeUpload).Return(uint64(0), nil)
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 			userID := dataManager.NextUserID()
-			// Set limit based on dailyLimit (using daily window type)
-			// Note: New design uses single limit with window type
 			uploadLimit := uint64(test.dailyLimit)
-			windowType := models.WindowTypeCalendarDay // Calendar-aligned day window
-			windowDuration := int64(0)                  // Calendar windows don't use duration
+			windowType := models.WindowTypeCalendarDay
+			windowDuration := int64(0)
 
 			config := &models.UserQuotaConfig{
 				UserID:            userID,
@@ -116,7 +117,6 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
-			// Build window from config parameters
 			var window pluginCore.LimitWindow
 			if windowType == models.WindowTypeLifetime {
 				window = pluginCore.LimitWindow{
@@ -130,21 +130,16 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 				}
 			}
 
-			// Setup window-based usage queries
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			now := time.Now()
-			// Calculate window bounds based on window type
 			var windowStart, windowEnd time.Time
 			if windowType == models.WindowTypeLifetime {
 				windowStart = time.Time{}
 				windowEnd = now
 			} else if windowType == models.WindowTypeCalendarDay {
-				// Calendar day starts at midnight today
 				windowStart = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-				// Window ends at midnight next day
 				windowEnd = windowStart.AddDate(0, 0, 1)
 			} else {
-				// Rolling window
 				windowStart = now.Add(-24 * time.Hour)
 				windowEnd = now
 			}
@@ -223,17 +218,18 @@ func TestThresholdPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
 			enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
 
 			userID := dataManager.NextUserID()
-			// Set limit based on dailyLimit (using daily window type)
 			uploadLimit := uint64(test.dailyLimit)
 			windowType := models.WindowTypeCalendarDay
 			windowDuration := int64(86400)
-			
+
 			config := &models.UserQuotaConfig{
 				UserID:            userID,
 				EnforcementPolicy: models.EnforcementPolicyThreshold,
@@ -243,12 +239,10 @@ func TestThresholdPolicyEnforcer_BoundaryConditions(t *testing.T) {
 				UploadThreshold:   test.threshold,
 			}
 
-			// Only set up mocks if the error doesn't happen early
 			if !test.skipGetTodayUsage {
 				mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 				mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
 
-				// Build window from config parameters
 				var window pluginCore.LimitWindow
 				if windowType == models.WindowTypeLifetime {
 					window = pluginCore.LimitWindow{
@@ -262,7 +256,6 @@ func TestThresholdPolicyEnforcer_BoundaryConditions(t *testing.T) {
 					}
 				}
 
-				// Setup window-based usage queries
 				now := time.Now()
 				windowStart := now.Add(-24 * time.Hour)
 				mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, pluginCore.UsageTypeUpload, window).Return(test.currentUsage, windowStart, now, nil)
@@ -355,25 +348,16 @@ func TestAllowancePolicyEnforcer_BoundaryConditions(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, _ := coreTesting.NewTestContext(t)
-			dataManager := testdata.NewTestDataManager(ctx)
-			mockQuotaService := pluginCore.NewMockQuotaService(t)
-			mockGrantManager := pluginCore.NewMockGrantManager(t)
-			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			setup := setupAllowanceTest(t)
 
-			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-			userID := dataManager.NextUserID()
 			config := &models.UserQuotaConfig{
-				UserID:            userID,
+				UserID:            setup.dataManager.NextUserID(),
 				EnforcementPolicy: models.EnforcementPolicyAllowance,
 			}
 
 			grants := []*models.AllowanceGrant{
 				{
-					UserID:         userID,
+					UserID:         config.UserID,
 					Type:           models.GrantTypeUpload,
 					Source:         models.GrantSourceBonus,
 					Bytes:          test.allowanceBytes,
@@ -383,10 +367,11 @@ func TestAllowancePolicyEnforcer_BoundaryConditions(t *testing.T) {
 				},
 			}
 
-			mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeUpload).Return(grants, nil)
-			mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(test.allowanceBytes - test.usedBytes)
+			setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+			setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, config.UserID, models.GrantTypeUpload).Return(grants, nil)
+			setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(test.allowanceBytes - test.usedBytes)
 
-			result, err := enforcer.CheckUploadQuota(ctx, config, test.requestBytes)
+			result, err := setup.enforcer.CheckUploadQuota(setup.ctx.GetContext(), config, test.requestBytes)
 			if test.requestBytes == 0 {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "bytes must be greater than 0")
@@ -395,8 +380,6 @@ func TestAllowancePolicyEnforcer_BoundaryConditions(t *testing.T) {
 				assert.Equal(t, test.expectedAllowed, result.Allowed)
 				assert.Equal(t, test.expectedReason, result.Reason)
 			}
-
-			dataManager.Cleanup()
 		})
 	}
 }
@@ -443,26 +426,17 @@ func TestAllowancePolicyEnforcer_RecordUpload_BoundaryConditions(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, _ := coreTesting.NewTestContext(t)
-			dataManager := testdata.NewTestDataManager(ctx)
-			mockQuotaService := pluginCore.NewMockQuotaService(t)
-			mockUsageManager := pluginCore.NewMockUsageManager(t)
-			mockGrantManager := pluginCore.NewMockGrantManager(t)
+			setup := setupAllowanceTest(t)
 
-			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager).Maybe()
-
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-			userID := dataManager.NextUserID()
-			uploadID := dataManager.NextUploadID()
+			userID := setup.dataManager.NextUserID()
+			uploadID := setup.dataManager.NextUploadID()
 
 			if !test.expectError {
-				mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.Anything, models.GrantTypeUpload, test.bytes).Return(nil)
-				mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, test.bytes, test.ip).Return(nil)
+				setup.mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.Anything, models.GrantTypeUpload, test.bytes).Return(nil)
+				setup.mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, test.bytes, test.ip).Return(nil)
 			}
 
-			err := enforcer.RecordUpload(ctx, userID, uploadID, test.bytes, test.ip)
+			err := setup.enforcer.RecordUpload(setup.ctx.GetContext(), userID, uploadID, test.bytes, test.ip)
 
 			if test.expectError {
 				assert.Error(t, err)
@@ -472,8 +446,6 @@ func TestAllowancePolicyEnforcer_RecordUpload_BoundaryConditions(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-
-			dataManager.Cleanup()
 		})
 	}
 }
@@ -538,30 +510,21 @@ func TestAllowancePolicyEnforcer_RecordStorageChange_BoundaryConditions(t *testi
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, _ := coreTesting.NewTestContext(t)
-			dataManager := testdata.NewTestDataManager(ctx)
-			mockQuotaService := pluginCore.NewMockQuotaService(t)
-			mockUsageManager := pluginCore.NewMockUsageManager(t)
-			mockGrantManager := pluginCore.NewMockGrantManager(t)
+			setup := setupAllowanceTest(t)
 
-			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-			mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager).Maybe()
-
-			enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-			userID := dataManager.NextUserID()
-			uploadID := dataManager.NextUploadID()
+			userID := setup.dataManager.NextUserID()
+			uploadID := setup.dataManager.NextUploadID()
 
 			if !test.expectError {
 				if test.bytes > 0 {
-					mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.Anything, models.GrantTypeStorage, uint64(test.bytes)).Return(nil)
+					setup.mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.Anything, models.GrantTypeStorage, uint64(test.bytes)).Return(nil)
 				} else {
-					mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.Anything, (*gorm.DB)(nil)).Return(nil)
+					setup.mockUsageManager.EXPECT().RecordUserUsageDetail(mock.Anything, mock.Anything, (*gorm.DB)(nil)).Return(nil)
 				}
-				mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uploadID, test.bytes, test.ip).Return(nil)
+				setup.mockUsageManager.EXPECT().RecordStorageChange(mock.Anything, userID, uploadID, test.bytes, test.ip).Return(nil)
 			}
 
-			err := enforcer.RecordStorageChange(ctx, userID, uploadID, test.bytes, test.ip)
+			err := setup.enforcer.RecordStorageChange(setup.ctx.GetContext(), userID, uploadID, test.bytes, test.ip)
 
 			if test.expectError {
 				assert.Error(t, err)
@@ -571,8 +534,6 @@ func TestAllowancePolicyEnforcer_RecordStorageChange_BoundaryConditions(t *testi
 			} else {
 				assert.NoError(t, err)
 			}
-
-			dataManager.Cleanup()
 		})
 	}
 }
@@ -622,8 +583,10 @@ func TestUnlimitedPolicyEnforcer_BoundaryConditions(t *testing.T) {
 			dataManager := testdata.NewTestDataManager(ctx)
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			enforcer := NewUnlimitedPolicyEnforcer(ctx, mockQuotaService)
 
 			userID := dataManager.NextUserID()
@@ -660,29 +623,33 @@ func TestHardLimitsPolicyEnforcer_ErrorHandling(t *testing.T) {
 			name: "GetUsageManager error should propagate",
 			setupMock: func(mqs *pluginCore.MockQuotaService, ctx coreTesting.TestContext) {
 				mockUsageManager := pluginCore.NewMockUsageManager(t)
+				mockReservationManager := pluginCore.NewMockReservationManager(t)
 				mqs.EXPECT().GetUsageManager().Return(mockUsageManager)
+				mqs.EXPECT().GetReservationManager().Return(mockReservationManager)
 				mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 				mqs.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 				mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 				mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), errors.New("usage fetch failed"))
 			},
-			config:       func() *models.UserQuotaConfig {
-			dur := int64(86400)
-			return &models.UserQuotaConfig{
-				UserID:            1,
-				EnforcementPolicy: models.EnforcementPolicyHardLimits,
-				UploadLimitBytes:  uint64(1000),
-				WindowType:        models.WindowTypeCalendarDay,
-				WindowDuration:    &dur,
-			}
-		}(),
+			config: func() *models.UserQuotaConfig {
+				dur := int64(86400)
+				return &models.UserQuotaConfig{
+					UserID:            1,
+					EnforcementPolicy: models.EnforcementPolicyHardLimits,
+					UploadLimitBytes:  uint64(1000),
+					WindowType:        models.WindowTypeCalendarDay,
+					WindowDuration:    &dur,
+				}
+			}(),
 			requestBytes: 100,
 			expectError:  true,
 		},
 		{
 			name: "Nil config should fail",
 			setupMock: func(mqs *pluginCore.MockQuotaService, ctx coreTesting.TestContext) {
+				mockReservationManager := pluginCore.NewMockReservationManager(t)
 				mqs.EXPECT().GetUsageManager().Return(nil)
+				mqs.EXPECT().GetReservationManager().Return(mockReservationManager)
 			},
 			config:       nil,
 			requestBytes: 100,

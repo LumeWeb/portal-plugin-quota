@@ -560,8 +560,16 @@ func (_c *MockQuotaService_CheckCIDGroupQuotaAvailability_Call) RunAndReturn(run
 }
 
 // CheckDownloadQuota provides a mock function for the type MockQuotaService
-func (_mock *MockQuotaService) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error) {
-	ret := _mock.Called(ctx, userID, requestedBytes)
+func (_mock *MockQuotaService) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error) {
+	// func(*CheckOptions)
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, userID, requestedBytes)
+	_ca = append(_ca, _va...)
+	ret := _mock.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckDownloadQuota")
@@ -569,16 +577,16 @@ func (_mock *MockQuotaService) CheckDownloadQuota(ctx context.Context, userID ui
 
 	var r0 QuotaCheckResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64) (QuotaCheckResult, error)); ok {
-		return returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64, ...func(*CheckOptions)) (QuotaCheckResult, error)); ok {
+		return returnFunc(ctx, userID, requestedBytes, opts...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64) QuotaCheckResult); ok {
-		r0 = returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64, ...func(*CheckOptions)) QuotaCheckResult); ok {
+		r0 = returnFunc(ctx, userID, requestedBytes, opts...)
 	} else {
 		r0 = ret.Get(0).(QuotaCheckResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint64) error); ok {
-		r1 = returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint64, ...func(*CheckOptions)) error); ok {
+		r1 = returnFunc(ctx, userID, requestedBytes, opts...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -594,11 +602,13 @@ type MockQuotaService_CheckDownloadQuota_Call struct {
 //   - ctx context.Context
 //   - userID uint
 //   - requestedBytes uint64
-func (_e *MockQuotaService_Expecter) CheckDownloadQuota(ctx interface{}, userID interface{}, requestedBytes interface{}) *MockQuotaService_CheckDownloadQuota_Call {
-	return &MockQuotaService_CheckDownloadQuota_Call{Call: _e.mock.On("CheckDownloadQuota", ctx, userID, requestedBytes)}
+//   - opts ...func(*CheckOptions)
+func (_e *MockQuotaService_Expecter) CheckDownloadQuota(ctx interface{}, userID interface{}, requestedBytes interface{}, opts ...interface{}) *MockQuotaService_CheckDownloadQuota_Call {
+	return &MockQuotaService_CheckDownloadQuota_Call{Call: _e.mock.On("CheckDownloadQuota",
+		append([]interface{}{ctx, userID, requestedBytes}, opts...)...)}
 }
 
-func (_c *MockQuotaService_CheckDownloadQuota_Call) Run(run func(ctx context.Context, userID uint, requestedBytes uint64)) *MockQuotaService_CheckDownloadQuota_Call {
+func (_c *MockQuotaService_CheckDownloadQuota_Call) Run(run func(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions))) *MockQuotaService_CheckDownloadQuota_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -612,10 +622,19 @@ func (_c *MockQuotaService_CheckDownloadQuota_Call) Run(run func(ctx context.Con
 		if args[2] != nil {
 			arg2 = args[2].(uint64)
 		}
+		var arg3 []func(*CheckOptions)
+		variadicArgs := make([]func(*CheckOptions), len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(func(*CheckOptions))
+			}
+		}
+		arg3 = variadicArgs
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3...,
 		)
 	})
 	return _c
@@ -626,14 +645,22 @@ func (_c *MockQuotaService_CheckDownloadQuota_Call) Return(quotaCheckResult Quot
 	return _c
 }
 
-func (_c *MockQuotaService_CheckDownloadQuota_Call) RunAndReturn(run func(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error)) *MockQuotaService_CheckDownloadQuota_Call {
+func (_c *MockQuotaService_CheckDownloadQuota_Call) RunAndReturn(run func(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error)) *MockQuotaService_CheckDownloadQuota_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CheckStorageQuota provides a mock function for the type MockQuotaService
-func (_mock *MockQuotaService) CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error) {
-	ret := _mock.Called(ctx, userID, requestedBytes)
+func (_mock *MockQuotaService) CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error) {
+	// func(*CheckOptions)
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, userID, requestedBytes)
+	_ca = append(_ca, _va...)
+	ret := _mock.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckStorageQuota")
@@ -641,16 +668,16 @@ func (_mock *MockQuotaService) CheckStorageQuota(ctx context.Context, userID uin
 
 	var r0 QuotaCheckResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64) (QuotaCheckResult, error)); ok {
-		return returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64, ...func(*CheckOptions)) (QuotaCheckResult, error)); ok {
+		return returnFunc(ctx, userID, requestedBytes, opts...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64) QuotaCheckResult); ok {
-		r0 = returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64, ...func(*CheckOptions)) QuotaCheckResult); ok {
+		r0 = returnFunc(ctx, userID, requestedBytes, opts...)
 	} else {
 		r0 = ret.Get(0).(QuotaCheckResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint64) error); ok {
-		r1 = returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint64, ...func(*CheckOptions)) error); ok {
+		r1 = returnFunc(ctx, userID, requestedBytes, opts...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -666,11 +693,13 @@ type MockQuotaService_CheckStorageQuota_Call struct {
 //   - ctx context.Context
 //   - userID uint
 //   - requestedBytes uint64
-func (_e *MockQuotaService_Expecter) CheckStorageQuota(ctx interface{}, userID interface{}, requestedBytes interface{}) *MockQuotaService_CheckStorageQuota_Call {
-	return &MockQuotaService_CheckStorageQuota_Call{Call: _e.mock.On("CheckStorageQuota", ctx, userID, requestedBytes)}
+//   - opts ...func(*CheckOptions)
+func (_e *MockQuotaService_Expecter) CheckStorageQuota(ctx interface{}, userID interface{}, requestedBytes interface{}, opts ...interface{}) *MockQuotaService_CheckStorageQuota_Call {
+	return &MockQuotaService_CheckStorageQuota_Call{Call: _e.mock.On("CheckStorageQuota",
+		append([]interface{}{ctx, userID, requestedBytes}, opts...)...)}
 }
 
-func (_c *MockQuotaService_CheckStorageQuota_Call) Run(run func(ctx context.Context, userID uint, requestedBytes uint64)) *MockQuotaService_CheckStorageQuota_Call {
+func (_c *MockQuotaService_CheckStorageQuota_Call) Run(run func(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions))) *MockQuotaService_CheckStorageQuota_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -684,10 +713,19 @@ func (_c *MockQuotaService_CheckStorageQuota_Call) Run(run func(ctx context.Cont
 		if args[2] != nil {
 			arg2 = args[2].(uint64)
 		}
+		var arg3 []func(*CheckOptions)
+		variadicArgs := make([]func(*CheckOptions), len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(func(*CheckOptions))
+			}
+		}
+		arg3 = variadicArgs
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3...,
 		)
 	})
 	return _c
@@ -698,14 +736,22 @@ func (_c *MockQuotaService_CheckStorageQuota_Call) Return(quotaCheckResult Quota
 	return _c
 }
 
-func (_c *MockQuotaService_CheckStorageQuota_Call) RunAndReturn(run func(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error)) *MockQuotaService_CheckStorageQuota_Call {
+func (_c *MockQuotaService_CheckStorageQuota_Call) RunAndReturn(run func(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error)) *MockQuotaService_CheckStorageQuota_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CheckUploadQuota provides a mock function for the type MockQuotaService
-func (_mock *MockQuotaService) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error) {
-	ret := _mock.Called(ctx, userID, requestedBytes)
+func (_mock *MockQuotaService) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error) {
+	// func(*CheckOptions)
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, userID, requestedBytes)
+	_ca = append(_ca, _va...)
+	ret := _mock.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CheckUploadQuota")
@@ -713,16 +759,16 @@ func (_mock *MockQuotaService) CheckUploadQuota(ctx context.Context, userID uint
 
 	var r0 QuotaCheckResult
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64) (QuotaCheckResult, error)); ok {
-		return returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64, ...func(*CheckOptions)) (QuotaCheckResult, error)); ok {
+		return returnFunc(ctx, userID, requestedBytes, opts...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64) QuotaCheckResult); ok {
-		r0 = returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint64, ...func(*CheckOptions)) QuotaCheckResult); ok {
+		r0 = returnFunc(ctx, userID, requestedBytes, opts...)
 	} else {
 		r0 = ret.Get(0).(QuotaCheckResult)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint64) error); ok {
-		r1 = returnFunc(ctx, userID, requestedBytes)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uint, uint64, ...func(*CheckOptions)) error); ok {
+		r1 = returnFunc(ctx, userID, requestedBytes, opts...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -738,11 +784,13 @@ type MockQuotaService_CheckUploadQuota_Call struct {
 //   - ctx context.Context
 //   - userID uint
 //   - requestedBytes uint64
-func (_e *MockQuotaService_Expecter) CheckUploadQuota(ctx interface{}, userID interface{}, requestedBytes interface{}) *MockQuotaService_CheckUploadQuota_Call {
-	return &MockQuotaService_CheckUploadQuota_Call{Call: _e.mock.On("CheckUploadQuota", ctx, userID, requestedBytes)}
+//   - opts ...func(*CheckOptions)
+func (_e *MockQuotaService_Expecter) CheckUploadQuota(ctx interface{}, userID interface{}, requestedBytes interface{}, opts ...interface{}) *MockQuotaService_CheckUploadQuota_Call {
+	return &MockQuotaService_CheckUploadQuota_Call{Call: _e.mock.On("CheckUploadQuota",
+		append([]interface{}{ctx, userID, requestedBytes}, opts...)...)}
 }
 
-func (_c *MockQuotaService_CheckUploadQuota_Call) Run(run func(ctx context.Context, userID uint, requestedBytes uint64)) *MockQuotaService_CheckUploadQuota_Call {
+func (_c *MockQuotaService_CheckUploadQuota_Call) Run(run func(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions))) *MockQuotaService_CheckUploadQuota_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -756,10 +804,19 @@ func (_c *MockQuotaService_CheckUploadQuota_Call) Run(run func(ctx context.Conte
 		if args[2] != nil {
 			arg2 = args[2].(uint64)
 		}
+		var arg3 []func(*CheckOptions)
+		variadicArgs := make([]func(*CheckOptions), len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(func(*CheckOptions))
+			}
+		}
+		arg3 = variadicArgs
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3...,
 		)
 	})
 	return _c
@@ -770,7 +827,7 @@ func (_c *MockQuotaService_CheckUploadQuota_Call) Return(quotaCheckResult QuotaC
 	return _c
 }
 
-func (_c *MockQuotaService_CheckUploadQuota_Call) RunAndReturn(run func(ctx context.Context, userID uint, requestedBytes uint64) (QuotaCheckResult, error)) *MockQuotaService_CheckUploadQuota_Call {
+func (_c *MockQuotaService_CheckUploadQuota_Call) RunAndReturn(run func(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error)) *MockQuotaService_CheckUploadQuota_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -837,6 +894,69 @@ func (_c *MockQuotaService_CleanupOldRecords_Call) Return(n int64, err error) *M
 }
 
 func (_c *MockQuotaService_CleanupOldRecords_Call) RunAndReturn(run func(ctx context.Context, retentionDays int) (int64, error)) *MockQuotaService_CleanupOldRecords_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CommitReservation provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) CommitReservation(ctx context.Context, reservationID uint, uploadID uint) error {
+	ret := _mock.Called(ctx, reservationID, uploadID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CommitReservation")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, uint) error); ok {
+		r0 = returnFunc(ctx, reservationID, uploadID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_CommitReservation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CommitReservation'
+type MockQuotaService_CommitReservation_Call struct {
+	*mock.Call
+}
+
+// CommitReservation is a helper method to define mock.On call
+//   - ctx context.Context
+//   - reservationID uint
+//   - uploadID uint
+func (_e *MockQuotaService_Expecter) CommitReservation(ctx interface{}, reservationID interface{}, uploadID interface{}) *MockQuotaService_CommitReservation_Call {
+	return &MockQuotaService_CommitReservation_Call{Call: _e.mock.On("CommitReservation", ctx, reservationID, uploadID)}
+}
+
+func (_c *MockQuotaService_CommitReservation_Call) Run(run func(ctx context.Context, reservationID uint, uploadID uint)) *MockQuotaService_CommitReservation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 uint
+		if args[2] != nil {
+			arg2 = args[2].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_CommitReservation_Call) Return(err error) *MockQuotaService_CommitReservation_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_CommitReservation_Call) RunAndReturn(run func(ctx context.Context, reservationID uint, uploadID uint) error) *MockQuotaService_CommitReservation_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1775,6 +1895,52 @@ func (_c *MockQuotaService_GetQuotaPlanManager_Call) RunAndReturn(run func() Quo
 	return _c
 }
 
+// GetReservationManager provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetReservationManager() ReservationManager {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetReservationManager")
+	}
+
+	var r0 ReservationManager
+	if returnFunc, ok := ret.Get(0).(func() ReservationManager); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(ReservationManager)
+		}
+	}
+	return r0
+}
+
+// MockQuotaService_GetReservationManager_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReservationManager'
+type MockQuotaService_GetReservationManager_Call struct {
+	*mock.Call
+}
+
+// GetReservationManager is a helper method to define mock.On call
+func (_e *MockQuotaService_Expecter) GetReservationManager() *MockQuotaService_GetReservationManager_Call {
+	return &MockQuotaService_GetReservationManager_Call{Call: _e.mock.On("GetReservationManager")}
+}
+
+func (_c *MockQuotaService_GetReservationManager_Call) Run(run func()) *MockQuotaService_GetReservationManager_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetReservationManager_Call) Return(reservationManager ReservationManager) *MockQuotaService_GetReservationManager_Call {
+	_c.Call.Return(reservationManager)
+	return _c
+}
+
+func (_c *MockQuotaService_GetReservationManager_Call) RunAndReturn(run func() ReservationManager) *MockQuotaService_GetReservationManager_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSystemStats provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetSystemStats(ctx context.Context) (*SystemStats, error) {
 	ret := _mock.Called(ctx)
@@ -2651,6 +2817,63 @@ func (_c *MockQuotaService_RecordUpload_Call) Return(err error) *MockQuotaServic
 }
 
 func (_c *MockQuotaService_RecordUpload_Call) RunAndReturn(run func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error) *MockQuotaService_RecordUpload_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ReleaseReservation provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) ReleaseReservation(ctx context.Context, reservationID uint) error {
+	ret := _mock.Called(ctx, reservationID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReleaseReservation")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint) error); ok {
+		r0 = returnFunc(ctx, reservationID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockQuotaService_ReleaseReservation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReleaseReservation'
+type MockQuotaService_ReleaseReservation_Call struct {
+	*mock.Call
+}
+
+// ReleaseReservation is a helper method to define mock.On call
+//   - ctx context.Context
+//   - reservationID uint
+func (_e *MockQuotaService_Expecter) ReleaseReservation(ctx interface{}, reservationID interface{}) *MockQuotaService_ReleaseReservation_Call {
+	return &MockQuotaService_ReleaseReservation_Call{Call: _e.mock.On("ReleaseReservation", ctx, reservationID)}
+}
+
+func (_c *MockQuotaService_ReleaseReservation_Call) Run(run func(ctx context.Context, reservationID uint)) *MockQuotaService_ReleaseReservation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_ReleaseReservation_Call) Return(err error) *MockQuotaService_ReleaseReservation_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockQuotaService_ReleaseReservation_Call) RunAndReturn(run func(ctx context.Context, reservationID uint) error) *MockQuotaService_ReleaseReservation_Call {
 	_c.Call.Return(run)
 	return _c
 }

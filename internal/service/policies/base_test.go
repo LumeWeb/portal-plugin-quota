@@ -13,7 +13,8 @@ import (
 func TestBasePolicyEnforcer_CreateQuotaCheckResult(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	usageManager := pluginCore.NewMockUsageManager(t)
-	enforcer := NewBasePolicyEnforcer(ctx, usageManager)
+	reservationManager := pluginCore.NewMockReservationManager(t)
+	enforcer := NewBasePolicyEnforcer(ctx, usageManager, reservationManager)
 
 	t.Run("Success result", func(t *testing.T) {
 		details := pluginCore.QuotaCheckDetails{
@@ -44,7 +45,8 @@ func TestBasePolicyEnforcer_CreateQuotaCheckResult(t *testing.T) {
 func TestBasePolicyEnforcer_CreateSuccessResult(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	usageManager := pluginCore.NewMockUsageManager(t)
-	enforcer := NewBasePolicyEnforcer(ctx, usageManager)
+	reservationManager := pluginCore.NewMockReservationManager(t)
+	enforcer := NewBasePolicyEnforcer(ctx, usageManager, reservationManager)
 
 	result := enforcer.createSuccessResult(models.EnforcementPolicyHardLimits)
 	assert.True(t, result.Allowed)
@@ -55,7 +57,8 @@ func TestBasePolicyEnforcer_CreateSuccessResult(t *testing.T) {
 func TestBasePolicyEnforcer_CreateFailureResult_LimitExceeded(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	usageManager := pluginCore.NewMockUsageManager(t)
-	enforcer := NewBasePolicyEnforcer(ctx, usageManager)
+	reservationManager := pluginCore.NewMockReservationManager(t)
+	enforcer := NewBasePolicyEnforcer(ctx, usageManager, reservationManager)
 
 	result := enforcer.createFailureResult(models.QuotaCheckReasonLimitExceeded, models.EnforcementPolicyHardLimits, pluginCore.QuotaCheckDetails{
 		CurrentUsage: 150,
@@ -73,7 +76,8 @@ func TestBasePolicyEnforcer_CreateFailureResult_LimitExceeded(t *testing.T) {
 func TestBasePolicyEnforcer_CreateWarningResult(t *testing.T) {
 	ctx, _ := coreTesting.NewTestContext(t)
 	usageManager := pluginCore.NewMockUsageManager(t)
-	enforcer := NewBasePolicyEnforcer(ctx, usageManager)
+	reservationManager := pluginCore.NewMockReservationManager(t)
+	enforcer := NewBasePolicyEnforcer(ctx, usageManager, reservationManager)
 
 	result := enforcer.createWarningResult(
 		models.EnforcementPolicyThreshold,

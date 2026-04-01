@@ -41,9 +41,12 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil)
 			quotaWindowDuration := int64(86400) // 1 day in seconds
 			quotaWindowStartHour := 0
 			quotaWindowTimezone := "UTC"
@@ -103,9 +106,11 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 			thresholdWindowDuration := int64(86400)
 			thresholdWindowStartHour := 0
@@ -179,10 +184,13 @@ func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
 			mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 
 			// Setup mocks that will be called multiple times
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
@@ -251,9 +259,11 @@ func TestPerformance_HistoricalData(t *testing.T) {
 		t.Run("Long time period usage history", func(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			// GetUsageManager is called twice - once by constructor and once by GetUsageHistory
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Twice()
+			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 
 			// Mock GetUsageHistory which is called once by the test
 			mockUsageManager.EXPECT().GetUsageHistory(mock.Anything, userID, 365, models.UsageTypeUpload).
@@ -282,8 +292,10 @@ func TestPerformance_TimezoneBoundaries(t *testing.T) {
 		t.Run("Date boundary transitions", func(t *testing.T) {
 			quotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 			now := time.Now()

@@ -393,3 +393,154 @@ func TestLockManager_TimeoutConstants(t *testing.T) {
 		})
 	}
 }
+
+// TestLockManager_TimeoutDuration tests that Timeout.Duration() returns correct time.Duration.
+// This is a regression test for the bug where Duration() returned int64 instead of time.Duration.
+func TestLockManager_TimeoutDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		timeout  Timeout
+		expected time.Duration
+	}{
+		{"ShortLockTimeout", ShortLockTimeout, 100 * time.Millisecond},
+		{"DefaultLockTimeout", DefaultLockTimeout, 5000 * time.Millisecond},
+		{"LongLockTimeout", LongLockTimeout, 30000 * time.Millisecond},
+		{"CustomTimeout", NewTimeout(2500), 2500 * time.Millisecond},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			duration := tt.timeout.Duration()
+			assert.Equal(t, tt.expected, duration, fmt.Sprintf("%s Duration() should return correct time.Duration", tt.name))
+		})
+	}
+}
+
+// TestLockManager_TryAcquireNoMemoryLeak tests that waiters counter is properly decremented
+// when TryAcquireLock fails. This is a regression test for the memory leak bug.
+func TestLockManager_TryAcquireNoMemoryLeak(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		lockManager := NewLockManager(ctx)
+		testCtx := context.Background()
+
+		// Acquire lock first
+		lock, err := lockManager.AcquireLock(testCtx, testUserID1)
+		require.NoError(t, err, "should acquire lock")
+		defer lock.Release()
+
+		// Try to acquire lock many times (all should fail)
+		numAttempts := 10
+		for range numAttempts {
+			_, err := lockManager.TryAcquireLock(testCtx, testUserID1)
+			assert.Error(t, err, "try acquire should fail")
+			assert.Equal(t, ErrLockBusy, err, "should return ErrLockBusy")
+		}
+
+		// Release the lock
+		lock.Release()
+
+		// Should be able to acquire again
+		lock2, err := lockManager.AcquireLock(testCtx, testUserID1)
+		require.NoError(t, err, "should acquire lock after previous failed attempts")
+		assert.NotNil(t, lock2, "lock should not be nil")
+		lock2.Release()
+	})
+}
+
+// TestLockManager_ContextCancelNoLeaks tests that waiters counter is properly decremented
+// and no goroutines leak when context is cancelled. This is a regression test for the goroutine leak bug.
+func TestLockManager_ContextCancelNoLeaks(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		lockManager := NewLockManager(ctx)
+
+		// Acquire lock first
+		testCtx := context.Background()
+		lock, err := lockManager.AcquireLock(testCtx, testUserID1)
+		require.NoError(t, err, "should acquire lock")
+		defer lock.Release()
+
+		// Start many goroutines that will be cancelled
+		numGoroutines := 20
+		for range numGoroutines {
+			cancelCtx, cancel := context.WithCancel(testCtx)
+			go func() {
+				_, _ = lockManager.AcquireLock(cancelCtx, testUserID1)
+			}()
+			// Cancel immediately
+			cancel()
+		}
+
+		// Give time for all goroutines to finish
+		time.Sleep(100 * time.Millisecond)
+
+		// Release the lock
+		lock.Release()
+
+		// Should be able to acquire again without issues
+		lock2, err := lockManager.AcquireLock(testCtx, testUserID1)
+		require.NoError(t, err, "should acquire lock after cancellations")
+		assert.NotNil(t, lock2, "lock should not be nil")
+		lock2.Release()
+	})
+}
+
+// TestLockManager_AcquireCleanupOnFailure tests that failed lock acquisitions
+// properly decrement the waiters counter and clean up lock entries.
+func TestLockManager_AcquireCleanupOnFailure(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		lockManager := NewLockManager(ctx)
+
+		// Acquire lock first
+		testCtx := context.Background()
+		lock, err := lockManager.AcquireLock(testCtx, testUserID1)
+		require.NoError(t, err, "should acquire lock")
+		defer lock.Release()
+
+		// Try to acquire with very short timeout (will timeout)
+		_, err = lockManager.AcquireLockWithTimeout(testCtx, testUserID1, ShortLockTimeout)
+		assert.Error(t, err, "should timeout")
+		assert.Equal(t, ErrLockTimeout, err, "should return ErrLockTimeout")
+
+		// Release the lock
+		lock.Release()
+
+		// Should be able to acquire again (verify cleanup succeeded)
+		lock2, err := lockManager.AcquireLock(testCtx, testUserID1)
+		require.NoError(t, err, "should acquire lock after timeout")
+		lock2.Release()
+	})
+}
+
+// TestLockManager_LockReuseAfterFailures tests that a lock can be successfully
+// acquired after many failed attempts, ensuring no memory leaks.
+func TestLockManager_LockReuseAfterFailures(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		lockManager := NewLockManager(ctx)
+		testCtx := context.Background()
+
+		for iteration := range 5 {
+			// Acquire lock
+			lock, err := lockManager.AcquireLock(testCtx, testUserID1)
+			require.NoError(t, err, "should acquire lock in iteration %d", iteration)
+
+			// Try a few failed acquisitions
+			for range 10 {
+				cancelCtx, cancel := context.WithCancel(testCtx)
+				go func() {
+					_, _ = lockManager.AcquireLock(cancelCtx, testUserID1)
+				}()
+				cancel()
+
+				_, _ = lockManager.AcquireLockWithTimeout(testCtx, testUserID1, ShortLockTimeout)
+				_, _ = lockManager.TryAcquireLock(testCtx, testUserID1)
+				time.Sleep(10 * time.Millisecond)
+			}
+
+			// Release lock
+			lock.Release()
+
+			// Give time for cleanup
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+}

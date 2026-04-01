@@ -2,6 +2,7 @@ package lock
 
 import (
 	"context"
+	"time"
 )
 
 // LockManager provides locking capabilities for quota operations to prevent
@@ -100,9 +101,9 @@ func (t Timeout) Milliseconds() int64 {
 	return t.d
 }
 
-// Duration returns the timeout as a time.Duration in milliseconds.
-func (t Timeout) Duration() int64 {
-	return t.d
+// Duration returns the timeout as a time.Duration.
+func (t Timeout) Duration() time.Duration {
+	return time.Duration(t.d) * time.Millisecond
 }
 
 // Common timeout values for lock acquisition.

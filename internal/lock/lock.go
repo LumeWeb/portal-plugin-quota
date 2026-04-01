@@ -41,6 +41,74 @@ func NewLockManager(ctx core.Context) LockManager {
 	}
 }
 
+// validateUserID validates the user ID and returns an error if invalid.
+func (lm *LockManagerDefault) validateUserID(userID uint) error {
+	if userID == 0 {
+		lm.logger.Error("Cannot acquire lock for invalid user ID", zap.Uint("user_id", userID))
+		return errors.New("invalid user ID: user ID must be greater than 0")
+	}
+	return nil
+}
+
+// acquireLock attempts to acquire a lock with polling to avoid goroutine leaks.
+// This is a helper method used by both AcquireLock and AcquireLockWithTimeout.
+func (lm *LockManagerDefault) acquireLock(ctx context.Context, ul *userLock) (*defaultLock, error) {
+	ticker := time.NewTicker(1 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			if ul.mu.TryLock() {
+				return &defaultLock{
+					mu: &ul.mu,
+				}, nil
+			}
+		}
+	}
+}
+
+// acquireWithSetup handles common lock acquisition logic: validation, user lock setup,
+// and error handling. This reduces duplication between AcquireLock and AcquireLockWithTimeout.
+// The timeoutCtx parameter is used for error conversion in AcquireLockWithTimeout.
+func (lm *LockManagerDefault) acquireWithSetup(ctx context.Context, userID uint, timeoutCtx *context.Context) (*defaultLock, error) {
+	// Get or create the user lock
+	ul := lm.getUserLock(userID)
+	ul.waiters++
+
+	// Choose the context for acquisition
+	acquireCtx := ctx
+	if timeoutCtx != nil {
+		acquireCtx = *timeoutCtx
+	}
+
+	lock, err := lm.acquireLock(acquireCtx, ul)
+	if err != nil {
+		// Decrement waiters and cleanup on failure
+		lm.mu.Lock()
+		ul.waiters--
+		if ul.waiters <= 0 {
+			delete(lm.locks, userID)
+		}
+		lm.mu.Unlock()
+
+		// Convert timeout error if applicable
+		if timeoutCtx != nil && (*timeoutCtx).Err() == context.DeadlineExceeded {
+			return nil, ErrLockTimeout
+		}
+		return nil, err
+	}
+
+	// Add cleanup callback to the lock
+	lock.onRelease = func() {
+		lm.cleanupLock(userID)
+	}
+
+	return lock, nil
+}
+
 // AcquireLock acquires a lock for the specified user ID.
 // If the lock is already held, this blocks until it becomes available
 // or the context is canceled.
@@ -48,39 +116,13 @@ func (lm *LockManagerDefault) AcquireLock(ctx context.Context, userID uint) (Loc
 	ctx, span := core.TraceMethod(ctx, "LockManagerDefault.AcquireLock")
 	defer span.End()
 
-	if userID == 0 {
-		lm.logger.Error("Cannot acquire lock for invalid user ID", zap.Uint("user_id", userID))
-		return nil, errors.New("invalid user ID: user ID must be greater than 0")
+	if err := lm.validateUserID(userID); err != nil {
+		return nil, err
 	}
 
 	lm.logger.Debug("Acquiring lock for user", zap.Uint("user_id", userID))
 
-	// Get or create the user lock
-	ul := lm.getUserLock(userID)
-	ul.waiters++
-
-	// Wait for the lock or context cancellation
-	done := make(chan struct{})
-
-	go func() {
-		ul.mu.Lock()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		ul.waiters--
-		lm.logger.Debug("Lock acquired for user", zap.Uint("user_id", userID))
-		return &defaultLock{
-			mu:    &ul.mu,
-			onRelease: func() {
-				lm.cleanupLock(userID)
-			},
-		}, nil
-	case <-ctx.Done():
-		ul.waiters--
-		return nil, ctx.Err()
-	}
+	return lm.acquireWithSetup(ctx, userID, nil)
 }
 
 // AcquireLockWithTimeout attempts to acquire a lock for the specified user ID
@@ -89,9 +131,8 @@ func (lm *LockManagerDefault) AcquireLockWithTimeout(ctx context.Context, userID
 	ctx, span := core.TraceMethod(ctx, "LockManagerDefault.AcquireLockWithTimeout")
 	defer span.End()
 
-	if userID == 0 {
-		lm.logger.Error("Cannot acquire lock for invalid user ID", zap.Uint("user_id", userID))
-		return nil, errors.New("invalid user ID: user ID must be greater than 0")
+	if err := lm.validateUserID(userID); err != nil {
+		return nil, err
 	}
 
 	lm.logger.Debug("Acquiring lock with timeout for user",
@@ -99,37 +140,10 @@ func (lm *LockManagerDefault) AcquireLockWithTimeout(ctx context.Context, userID
 		zap.Int64("timeout_ms", timeout.Milliseconds()))
 
 	// Create a timeout context
-	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout.Milliseconds())*time.Millisecond)
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout.Duration())
 	defer cancel()
 
-	// Get or create the user lock
-	ul := lm.getUserLock(userID)
-	ul.waiters++
-
-	// Wait for the lock, timeout, or context cancellation
-	done := make(chan struct{})
-	go func() {
-		ul.mu.Lock()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		ul.waiters--
-		lm.logger.Debug("Lock acquired for user", zap.Uint("user_id", userID))
-		return &defaultLock{
-			mu:    &ul.mu,
-			onRelease: func() {
-				lm.cleanupLock(userID)
-			},
-		}, nil
-	case <-timeoutCtx.Done():
-		ul.waiters--
-		return nil, ErrLockTimeout
-	case <-ctx.Done():
-		ul.waiters--
-		return nil, ctx.Err()
-	}
+	return lm.acquireWithSetup(ctx, userID, &timeoutCtx)
 }
 
 // TryAcquireLock attempts to acquire a lock for the specified user ID without blocking.
@@ -139,26 +153,32 @@ func (lm *LockManagerDefault) TryAcquireLock(ctx context.Context, userID uint) (
 	ctx, span := core.TraceMethod(ctx, "LockManagerDefault.TryAcquireLock")
 	defer span.End()
 
-	if userID == 0 {
-		lm.logger.Error("Cannot acquire lock for invalid user ID", zap.Uint("user_id", userID))
-		return nil, errors.New("invalid user ID: user ID must be greater than 0")
+	if err := lm.validateUserID(userID); err != nil {
+		return nil, err
 	}
 
 	lm.logger.Debug("Trying to acquire lock for user", zap.Uint("user_id", userID))
 
 	// Get or create the user lock
 	ul := lm.getUserLock(userID)
+	ul.waiters++
 
 	// Try to lock without blocking
 	if ul.mu.TryLock() {
-		ul.waiters++
 		lm.logger.Debug("Lock acquired for user", zap.Uint("user_id", userID))
 		return &defaultLock{
-			mu:    &ul.mu,
-			onRelease: func() {
-				lm.cleanupLock(userID)
-			},
+			mu:        &ul.mu,
+			onRelease: func() { lm.cleanupLock(userID) },
 		}, nil
+	}
+
+	// Decrement waiters since we didn't acquire the lock
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	ul.waiters--
+	// Clean up if no waiters remain
+	if ul.waiters <= 0 {
+		delete(lm.locks, userID)
 	}
 
 	lm.logger.Debug("Lock is busy for user", zap.Uint("user_id", userID))
@@ -200,6 +220,8 @@ func (lm *LockManagerDefault) cleanupLock(userID uint) {
 	if !exists {
 		return
 	}
+
+	ul.waiters--
 
 	// Only remove if there are no waiters
 	if ul.waiters <= 0 {

@@ -20,7 +20,7 @@ type ThresholdPolicyEnforcer struct {
 // NewThresholdPolicyEnforcer creates a new threshold policy enforcer
 func NewThresholdPolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaService) *ThresholdPolicyEnforcer {
 	return &ThresholdPolicyEnforcer{
-		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager()),
+		BasePolicyEnforcer: NewBasePolicyEnforcer(ctx, quotaService.GetUsageManager(), quotaService.GetReservationManager()),
 		quotaService:       quotaService,
 		limitResolver:      NewLimitResolver(ctx, quotaService),
 	}

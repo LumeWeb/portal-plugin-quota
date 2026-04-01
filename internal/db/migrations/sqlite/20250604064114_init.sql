@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS allowance_consumptions (
     deleted_at DATETIME DEFAULT NULL
 );
 
+CREATE TABLE IF NOT EXISTS quota_reservations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    bytes INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    upload_id INTEGER NULL,
+    source_ip VARCHAR(45) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME DEFAULT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_user_quotas_date ON user_quotas(date);
 CREATE INDEX IF NOT EXISTS idx_user_usage_details_user_id ON user_usage_details(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_usage_details_upload_id ON user_usage_details(upload_id);
@@ -109,6 +122,10 @@ CREATE INDEX IF NOT EXISTS idx_allowance_grants_is_active ON allowance_grants(is
 CREATE INDEX IF NOT EXISTS idx_allowance_consumptions_grant_id ON allowance_consumptions(grant_id);
 CREATE INDEX IF NOT EXISTS idx_allowance_consumptions_usage_detail_id ON allowance_consumptions(usage_detail_id);
 CREATE INDEX IF NOT EXISTS idx_allowance_consumptions_consumption_date ON allowance_consumptions(consumption_date);
+CREATE INDEX IF NOT EXISTS idx_reservations_user_id ON quota_reservations(user_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_user_status ON quota_reservations(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_reservations_deleted_at ON quota_reservations(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_reservations_upload_id ON quota_reservations(upload_id);
 CREATE INDEX IF NOT EXISTS idx_user_quota_configs_enforcement_policy ON user_quota_configs(enforcement_policy);
 CREATE INDEX IF NOT EXISTS idx_quota_plans_default_active ON quota_plans(is_default, is_active);
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_quota_plans_default_active
@@ -132,6 +149,10 @@ DROP INDEX IF EXISTS uniq_quota_plans_default_active;
 DROP INDEX IF EXISTS idx_quota_plans_default_active;
 DROP INDEX IF EXISTS idx_user_quota_configs_enforcement_policy;
 DROP INDEX IF EXISTS idx_allowance_consumptions_consumption_date;
+DROP INDEX IF EXISTS idx_reservations_upload_id;
+DROP INDEX IF EXISTS idx_reservations_deleted_at;
+DROP INDEX IF EXISTS idx_reservations_user_status;
+DROP INDEX IF EXISTS idx_reservations_user_id;
 DROP INDEX IF EXISTS idx_allowance_consumptions_usage_detail_id;
 DROP INDEX IF EXISTS idx_allowance_consumptions_grant_id;
 DROP INDEX IF EXISTS idx_allowance_grants_is_active;
@@ -147,6 +168,7 @@ DROP INDEX IF EXISTS idx_user_usage_details_upload_id;
 DROP INDEX IF EXISTS idx_user_usage_details_user_id;
 DROP INDEX IF EXISTS idx_user_quotas_date;
 DROP TABLE allowance_consumptions;
+DROP TABLE quota_reservations;
 DROP TABLE allowance_grants;
 DROP TABLE user_quota_configs;
 DROP TABLE quota_plans;

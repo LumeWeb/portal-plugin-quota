@@ -20,7 +20,9 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 		t.Run("Zero user ID in quota check", func(t *testing.T) {
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			config := &models.UserQuotaConfig{
 				UserID:            0,
@@ -38,7 +40,10 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			config := &models.UserQuotaConfig{
@@ -73,7 +78,10 @@ func TestErrorHandling_DatabaseFailures(t *testing.T) {
 
 			mockQuotaService := pluginCore.NewMockQuotaService(t)
 			mockUsageManager := pluginCore.NewMockUsageManager(t)
+			mockReservationManager := pluginCore.NewMockReservationManager(t)
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
 			mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(nil, assert.AnError)
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			_, err = enforcer.GetCurrentUsage(ctx, userID)

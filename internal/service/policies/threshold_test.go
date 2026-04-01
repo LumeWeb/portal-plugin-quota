@@ -22,6 +22,7 @@ type thresholdTestSetup struct {
 	mockQuotaService     *pluginCore.MockQuotaService
 	mockUsageManager     *pluginCore.MockUsageManager
 	mockQuotaPlanManager *pluginCore.MockQuotaPlanManager
+	mockReservationManager *pluginCore.MockReservationManager
 	enforcer             *ThresholdPolicyEnforcer
 	dataManager          *testdata.TestDataManager
 }
@@ -34,10 +35,12 @@ func setupThresholdTest(t *testing.T) *thresholdTestSetup {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+	mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 	// Setup base mock expectations
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 
 	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
@@ -51,8 +54,27 @@ func setupThresholdTest(t *testing.T) *thresholdTestSetup {
 		mockQuotaService:     mockQuotaService,
 		mockUsageManager:     mockUsageManager,
 		mockQuotaPlanManager: mockQuotaPlanManager,
+		mockReservationManager: mockReservationManager,
 		enforcer:             enforcer,
 		dataManager:          dataManager,
+	}
+}
+
+// thresholdSubTestMocks holds mocks for subtests (no shared state)
+type thresholdSubTestMocks struct {
+	mockQuotaService     *pluginCore.MockQuotaService
+	mockUsageManager     *pluginCore.MockUsageManager
+	mockQuotaPlanManager *pluginCore.MockQuotaPlanManager
+	mockReservationManager *pluginCore.MockReservationManager
+}
+
+// setupThresholdSubTest creates fresh mocks for a subtest (ensures no shared state)
+func setupThresholdSubTest(t *testing.T) *thresholdSubTestMocks {
+	return &thresholdSubTestMocks{
+		mockQuotaService:     pluginCore.NewMockQuotaService(t),
+		mockUsageManager:     pluginCore.NewMockUsageManager(t),
+		mockQuotaPlanManager: pluginCore.NewMockQuotaPlanManager(t),
+		mockReservationManager: pluginCore.NewMockReservationManager(t),
 	}
 }
 
@@ -288,19 +310,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(300), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(300), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -320,19 +339,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(750), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(750), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -353,19 +369,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(950), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(950), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -384,19 +397,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_WithinLimit_Unit_Allowed(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(300), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(300), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -427,19 +437,16 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 		require.NoError(t, err)
@@ -459,19 +466,16 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1500), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1500), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -492,19 +496,16 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1900), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1900), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -523,19 +524,16 @@ func TestThresholdPolicyEnforcer_CheckDownloadQuota_WithinLimit_Unit_Allowed(t *
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
 		require.NoError(t, err)
@@ -563,19 +561,16 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(500))
 		require.NoError(t, err)
@@ -595,19 +590,16 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2300), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2300), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -628,19 +620,16 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2900), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(2900), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(200))
 		require.NoError(t, err)
@@ -659,19 +648,16 @@ func TestThresholdPolicyEnforcer_CheckStorageQuota_WithinLimit_Unit_Allowed(t *t
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(1000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(500))
 		require.NoError(t, err)
@@ -699,19 +685,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(800), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(800), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -730,19 +713,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(799), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(799), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -761,19 +741,16 @@ func TestThresholdPolicyEnforcer_CheckUploadQuota_AtThreshold_Unit_Warning(t *te
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(100), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(100), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -804,19 +781,16 @@ func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -838,19 +812,16 @@ func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(25000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(25000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -869,16 +840,15 @@ func TestThresholdPolicyEnforcer_UploadSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks - no GetUsageManager call expected when no limit is configured
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -910,19 +880,16 @@ func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -944,19 +911,16 @@ func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(25000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(25000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -975,16 +939,15 @@ func TestThresholdPolicyEnforcer_DownloadSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks - no GetUsageManager call expected when no limit is configured
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -1016,19 +979,16 @@ func TestThresholdPolicyEnforcer_StorageSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -1047,16 +1007,15 @@ func TestThresholdPolicyEnforcer_StorageSuccessDimensionAware(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+		mocks := setupThresholdSubTest(t)
 
-		// Setup mocks - no GetUsageManager call expected when no limit is configured
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		// Setup mocks - no limit configured in config
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckStorageQuota(ctx, config, uint64(100))
 		require.NoError(t, err)
@@ -1077,12 +1036,14 @@ func TestThresholdPolicyEnforcer_OverflowPrevention(t *testing.T) {
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+	mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
+	mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 
 	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
@@ -1157,19 +1118,16 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(10000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(10000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1187,19 +1145,16 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(9999), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(9999), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1217,19 +1172,16 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1247,19 +1199,17 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500000000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(500000000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1000000))
 		require.NoError(t, err)
@@ -1277,19 +1227,17 @@ func TestThresholdPolicyEnforcer_EdgeCases(t *testing.T) {
 		}
 
 		// Create fresh mocks for this subtest
-		mockQuotaService := pluginCore.NewMockQuotaService(t)
-		mockUsageManager := pluginCore.NewMockUsageManager(t)
-		mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
-		mockUsageManager = pluginCore.NewMockUsageManager(t)
+		mocks := setupThresholdSubTest(t)
 
 		// Setup mocks
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-		mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
-		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
+		mocks.mockQuotaService.EXPECT().GetReservationManager().Return(mocks.mockReservationManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetUsageManager().Return(mocks.mockUsageManager)
+		mocks.mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mocks.mockQuotaPlanManager)
+		mocks.mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		mocks.mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(uint64(5000), time.Now(), time.Now(), nil)
 
-		enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)
+		enforcer := NewThresholdPolicyEnforcer(ctx, mocks.mockQuotaService)
 
 		result, err := enforcer.CheckUploadQuota(ctx, config, uint64(1))
 		require.NoError(t, err)
@@ -1306,12 +1254,14 @@ func TestThresholdPolicyEnforcer_ResolveEffectiveLimits_CustomLimits_Unit_Succes
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
 	mockQuotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
+	mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
+	mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
 
 	enforcer := NewThresholdPolicyEnforcer(ctx, mockQuotaService)

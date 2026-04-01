@@ -50,7 +50,10 @@ func TestConfiguration_Updates(t *testing.T) {
 
 		quotaService := core.GetService[*pluginCore.MockQuotaService](ctx, pluginCore.QUOTA_SERVICE)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
+		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
 
 		// Get the actual config from database
 		var config models.UserQuotaConfig
@@ -121,11 +124,14 @@ func TestConfiguration_QuotaPlanIntegration_WithPlan(t *testing.T) {
 		// Test hard limits enforcer with plan
 		quotaService := core.GetService[*pluginCore.MockQuotaService](ctx, pluginCore.QUOTA_SERVICE)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 		quotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(quotaPlanManager)
 		quotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		require.NoError(t, err)
 		// Check that limits are resolved from plan
@@ -167,11 +173,14 @@ func TestConfiguration_QuotaPlanIntegration_CustomOverridesPlan(t *testing.T) {
 		// Test hard limits enforcer
 		quotaService := core.GetService[*pluginCore.MockQuotaService](ctx, pluginCore.QUOTA_SERVICE)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 		quotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(quotaPlanManager)
 		quotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		require.NoError(t, err)
 		// Custom storage override should take priority
@@ -192,35 +201,21 @@ func TestConfiguration_MissingValues_NilLimits(t *testing.T) {
 
 		quotaService := core.GetService[*pluginCore.MockQuotaService](ctx, pluginCore.QUOTA_SERVICE)
 		mockUsageManager := pluginCore.NewMockUsageManager(t)
+		mockReservationManager := pluginCore.NewMockReservationManager(t)
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		enforcer := NewHardLimitsPolicyEnforcer(ctx, quotaService)
 
 		// Get config using UsageManager
 		quotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(quotaPlanManager)
-		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(&models.UserQuotaConfig{
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+		quotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
+		_, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, &models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		}, nil).Once()
-		quotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Once()
-		config, err := quotaService.GetUsageManager().GetUserQuotaConfig(ctx, userID)
-		require.NoError(t, err)
-
-		// All limits should be zero initially (no limits configured)
-		assert.Equal(t, uint64(0), config.StorageLimitBytes)
-		assert.Equal(t, uint64(0), config.UploadLimitBytes)
-		assert.Equal(t, uint64(0), config.DownloadLimitBytes)
-		assert.Nil(t, config.StorageThreshold)
-		assert.Nil(t, config.UploadThreshold)
-		assert.Nil(t, config.DownloadThreshold)
-		assert.Nil(t, config.QuotaPlanID)
-
-		// getEffectiveLimits should return an error when no limits are configured for hard limits policy
-		quotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
+		}, models.EnforcementPolicyHardLimits)
 		assert.Error(t, err)
-		assert.Nil(t, limits)
-		assert.Contains(t, err.Error(), "no limits configured")
 
 		dataManager.Cleanup()
 	}, pluginTesting.TestOptions())

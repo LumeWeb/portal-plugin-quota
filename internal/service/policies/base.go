@@ -13,19 +13,21 @@ import (
 
 // BasePolicyEnforcer provides common functionality for all policy enforcers
 type BasePolicyEnforcer struct {
-	ctx          core.Context
-	db           *gorm.DB
-	logger       *core.Logger
-	usageManager pluginCore.UsageManager
+	ctx                core.Context
+	db                 *gorm.DB
+	logger             *core.Logger
+	usageManager       pluginCore.UsageManager
+	reservationManager pluginCore.ReservationManager
 }
 
 // NewBasePolicyEnforcer creates a new base policy enforcer
-func NewBasePolicyEnforcer(ctx core.Context, usageManager pluginCore.UsageManager) *BasePolicyEnforcer {
+func NewBasePolicyEnforcer(ctx core.Context, usageManager pluginCore.UsageManager, reservationManager pluginCore.ReservationManager) *BasePolicyEnforcer {
 	return &BasePolicyEnforcer{
-		ctx:          ctx,
-		db:           ctx.DB(),
-		logger:       ctx.NamedLogger("quota.BasePolicyEnforcer"),
-		usageManager: usageManager,
+		ctx:                ctx,
+		db:                 ctx.DB(),
+		logger:             ctx.NamedLogger("quota.BasePolicyEnforcer"),
+		usageManager:       usageManager,
+		reservationManager: reservationManager,
 	}
 }
 

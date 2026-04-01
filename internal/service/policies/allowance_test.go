@@ -12,24 +12,58 @@ import (
 	coreTesting "go.lumeweb.com/portal/core/testing"
 )
 
-// TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed tests the CheckUploadQuota method with sufficient allowance
-func TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
+// allowanceTestSetup holds common test setup components for allowance policy tests
+type allowanceTestSetup struct {
+	ctx                    coreTesting.TestContext
+	mockQuotaService       *pluginCore.MockQuotaService
+	mockUsageManager       *pluginCore.MockUsageManager
+	mockReservationManager *pluginCore.MockReservationManager
+	mockGrantManager       *pluginCore.MockGrantManager
+	enforcer               *AllowancePolicyEnforcer
+	dataManager            *testdata.TestDataManager
+}
+
+// setupAllowanceTest creates a new test setup with mocked dependencies for allowance policy tests
+func setupAllowanceTest(t *testing.T) *allowanceTestSetup {
 	ctx, _ := coreTesting.NewTestContext(t)
 	dataManager := testdata.NewTestDataManager(ctx)
+
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
-
+	mockReservationManager := pluginCore.NewMockReservationManager(t)
 	mockGrantManager := pluginCore.NewMockGrantManager(t)
+
+	// Setup base mock expectations
+	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
+
 	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
 
-	userID := dataManager.NextUserID()
+	t.Cleanup(func() {
+		dataManager.Cleanup()
+	})
+
+	return &allowanceTestSetup{
+		ctx:                    ctx,
+		mockQuotaService:       mockQuotaService,
+		mockUsageManager:       mockUsageManager,
+		mockReservationManager: mockReservationManager,
+		mockGrantManager:       mockGrantManager,
+		enforcer:               enforcer,
+		dataManager:            dataManager,
+	}
+}
+
+// TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed tests the CheckUploadQuota method with sufficient allowance
+func TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
+	setup := setupAllowanceTest(t)
+
+	userID := setup.dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyAllowance,
 	}
 
-	// Set up mock expectations
 	grants := []*models.AllowanceGrant{
 		{
 			UserID:         userID,
@@ -42,37 +76,27 @@ func TestAllowancePolicyEnforcer_CheckUploadQuota_SufficientAllowance_Integratio
 		},
 	}
 
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-	mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeUpload).Return(grants, nil)
-	mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1000))
+	setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+	setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeUpload).Return(grants, nil)
+	setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1000))
 
-	result, err := enforcer.CheckUploadQuota(ctx.GetContext(), config, 500)
+	result, err := setup.enforcer.CheckUploadQuota(setup.ctx.GetContext(), config, 500)
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_CheckUploadQuota_InsufficientAllowance_Integration_Blocked tests the CheckUploadQuota method with insufficient allowance
 func TestAllowancePolicyEnforcer_CheckUploadQuota_InsufficientAllowance_Integration_Blocked(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
+	userID := setup.dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyAllowance,
 	}
 
-	// Set up mock expectations
 	grants := []*models.AllowanceGrant{
 		{
 			UserID:         userID,
@@ -85,39 +109,29 @@ func TestAllowancePolicyEnforcer_CheckUploadQuota_InsufficientAllowance_Integrat
 		},
 	}
 
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-	mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeUpload).Return(grants, nil)
-	mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
+	setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+	setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeUpload).Return(grants, nil)
+	setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
 
-	result, err := enforcer.CheckUploadQuota(ctx.GetContext(), config, 500)
+	result, err := setup.enforcer.CheckUploadQuota(setup.ctx.GetContext(), config, 500)
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
 	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
 	assert.Equal(t, uint64(100), *result.Details.Allowance)
 	assert.Equal(t, uint64(0), *result.Details.AllowanceUsed)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_CheckDownloadQuota_SufficientAllowance_Integration_Allowed tests the CheckDownloadQuota method with sufficient allowance
 func TestAllowancePolicyEnforcer_CheckDownloadQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
+	userID := setup.dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyAllowance,
 	}
 
-	// Set up mock expectations
 	grants := []*models.AllowanceGrant{
 		{
 			UserID:         userID,
@@ -130,37 +144,27 @@ func TestAllowancePolicyEnforcer_CheckDownloadQuota_SufficientAllowance_Integrat
 		},
 	}
 
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-	mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeDownload).Return(grants, nil)
-	mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1500))
+	setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+	setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeDownload).Return(grants, nil)
+	setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(1500))
 
-	result, err := enforcer.CheckDownloadQuota(ctx.GetContext(), config, 1000)
+	result, err := setup.enforcer.CheckDownloadQuota(setup.ctx.GetContext(), config, 1000)
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_CheckDownloadQuota_InsufficientAllowance_Integration_Blocked tests the CheckDownloadQuota method with insufficient allowance
 func TestAllowancePolicyEnforcer_CheckDownloadQuota_InsufficientAllowance_Integration_Blocked(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
+	userID := setup.dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyAllowance,
 	}
 
-	// Set up mock expectations
 	grants := []*models.AllowanceGrant{
 		{
 			UserID:         userID,
@@ -173,39 +177,29 @@ func TestAllowancePolicyEnforcer_CheckDownloadQuota_InsufficientAllowance_Integr
 		},
 	}
 
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-	mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeDownload).Return(grants, nil)
-	mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(50))
+	setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+	setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeDownload).Return(grants, nil)
+	setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(50))
 
-	result, err := enforcer.CheckDownloadQuota(ctx.GetContext(), config, 100)
+	result, err := setup.enforcer.CheckDownloadQuota(setup.ctx.GetContext(), config, 100)
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
 	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
 	assert.Equal(t, uint64(50), *result.Details.Allowance)
 	assert.Equal(t, uint64(50), *result.Details.AllowanceUsed)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_CheckStorageQuota_SufficientAllowance_Integration_Allowed tests the CheckStorageQuota method with sufficient allowance
 func TestAllowancePolicyEnforcer_CheckStorageQuota_SufficientAllowance_Integration_Allowed(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
+	userID := setup.dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyAllowance,
 	}
 
-	// Set up mock expectations
 	grants := []*models.AllowanceGrant{
 		{
 			UserID:         userID,
@@ -218,37 +212,27 @@ func TestAllowancePolicyEnforcer_CheckStorageQuota_SufficientAllowance_Integrati
 		},
 	}
 
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-	mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeStorage).Return(grants, nil)
-	mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(8000))
+	setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+	setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeStorage).Return(grants, nil)
+	setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(8000))
 
-	result, err := enforcer.CheckStorageQuota(ctx.GetContext(), config, 5000)
+	result, err := setup.enforcer.CheckStorageQuota(setup.ctx.GetContext(), config, 5000)
 	require.NoError(t, err)
 	assert.True(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonOK, result.Reason)
 	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_CheckStorageQuota_InsufficientAllowance_Integration_Blocked tests the CheckStorageQuota method with insufficient allowance
 func TestAllowancePolicyEnforcer_CheckStorageQuota_InsufficientAllowance_Integration_Blocked(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	mockGrantManager := pluginCore.NewMockGrantManager(t)
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
+	userID := setup.dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
 		UserID:            userID,
 		EnforcementPolicy: models.EnforcementPolicyAllowance,
 	}
 
-	// Set up mock expectations
 	grants := []*models.AllowanceGrant{
 		{
 			UserID:         userID,
@@ -261,113 +245,79 @@ func TestAllowancePolicyEnforcer_CheckStorageQuota_InsufficientAllowance_Integra
 		},
 	}
 
-	mockQuotaService.EXPECT().GetGrantManager().Return(mockGrantManager)
-	mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeStorage).Return(grants, nil)
-	mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
+	setup.mockQuotaService.EXPECT().GetGrantManager().Return(setup.mockGrantManager)
+	setup.mockGrantManager.EXPECT().GetActiveGrantsByType(mock.Anything, userID, models.GrantTypeStorage).Return(grants, nil)
+	setup.mockGrantManager.EXPECT().CalculateAvailableBytes(grants).Return(uint64(100))
 
-	result, err := enforcer.CheckStorageQuota(ctx.GetContext(), config, 200)
+	result, err := setup.enforcer.CheckStorageQuota(setup.ctx.GetContext(), config, 200)
 	require.NoError(t, err)
 	assert.False(t, result.Allowed)
 	assert.Equal(t, models.QuotaCheckReasonAllowanceDepleted, result.Reason)
 	assert.Equal(t, models.EnforcementPolicyAllowance, result.Details.Policy)
 	assert.Equal(t, uint64(100), *result.Details.Allowance)
 	assert.Equal(t, uint64(900), *result.Details.AllowanceUsed)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_RecordUpload_Success tests the RecordUpload method
 func TestAllowancePolicyEnforcer_RecordUpload_Success(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
-	uploadID := dataManager.NextUploadID()
+	userID := setup.dataManager.NextUserID()
+	uploadID := setup.dataManager.NextUploadID()
 	bytes := uint64(1000)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, bytes).Return(nil)
-	mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, bytes).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordUpload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-	err := enforcer.RecordUpload(ctx.GetContext(), userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordUpload(setup.ctx.GetContext(), userID, uploadID, bytes, ip)
 	require.NoError(t, err)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_RecordUpload_InsufficientAllowance tests the RecordUpload method with insufficient allowance
 func TestAllowancePolicyEnforcer_RecordUpload_InsufficientAllowance(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
-	uploadID := dataManager.NextUploadID()
+	userID := setup.dataManager.NextUserID()
+	uploadID := setup.dataManager.NextUploadID()
 	bytes := uint64(1000)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, bytes).Return(models.ErrInsufficientAllowance)
+	setup.mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeUpload, bytes).Return(models.ErrInsufficientAllowance)
 
-	err := enforcer.RecordUpload(ctx.GetContext(), userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordUpload(setup.ctx.GetContext(), userID, uploadID, bytes, ip)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient allowance")
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_RecordDownload_Success tests the RecordDownload method
 func TestAllowancePolicyEnforcer_RecordDownload_Success(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
-	uploadID := dataManager.NextUploadID()
+	userID := setup.dataManager.NextUserID()
+	uploadID := setup.dataManager.NextUploadID()
 	bytes := uint64(500)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeDownload, bytes).Return(nil)
-	mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeDownload, bytes).Return(nil)
+	setup.mockUsageManager.EXPECT().RecordDownload(mock.Anything, userID, uploadID, bytes, ip).Return(nil)
 
-	err := enforcer.RecordDownload(ctx.GetContext(), userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordDownload(setup.ctx.GetContext(), userID, uploadID, bytes, ip)
 	require.NoError(t, err)
-
-	dataManager.Cleanup()
 }
 
 // TestAllowancePolicyEnforcer_RecordDownload_InsufficientAllowance tests the RecordDownload method with insufficient allowance
 func TestAllowancePolicyEnforcer_RecordDownload_InsufficientAllowance(t *testing.T) {
-	ctx, _ := coreTesting.NewTestContext(t)
-	dataManager := testdata.NewTestDataManager(ctx)
-	mockQuotaService := pluginCore.NewMockQuotaService(t)
-	mockUsageManager := pluginCore.NewMockUsageManager(t)
-	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	setup := setupAllowanceTest(t)
 
-	enforcer := NewAllowancePolicyEnforcer(ctx, mockQuotaService)
-
-	userID := dataManager.NextUserID()
-	uploadID := dataManager.NextUploadID()
+	userID := setup.dataManager.NextUserID()
+	uploadID := setup.dataManager.NextUploadID()
 	bytes := uint64(500)
 	ip := "192.168.1.1"
 
-	mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeDownload, bytes).Return(models.ErrInsufficientAllowance)
+	setup.mockUsageManager.EXPECT().RecordUsageAndConsume(mock.Anything, mock.AnythingOfType("*models.UserUsageDetail"), models.GrantTypeDownload, bytes).Return(models.ErrInsufficientAllowance)
 
-	err := enforcer.RecordDownload(ctx.GetContext(), userID, uploadID, bytes, ip)
+	err := setup.enforcer.RecordDownload(setup.ctx.GetContext(), userID, uploadID, bytes, ip)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient allowance")
-
-	dataManager.Cleanup()
 }

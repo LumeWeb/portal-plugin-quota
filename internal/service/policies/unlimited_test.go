@@ -30,9 +30,11 @@ func setupUnlimitedTest(t *testing.T) *unlimitedTestSetup {
 
 	mockQuotaService := pluginCore.NewMockQuotaService(t)
 	mockUsageManager := pluginCore.NewMockUsageManager(t)
+	mockReservationManager := pluginCore.NewMockReservationManager(t)
 
 	// Setup mock expectations
 	mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
+	mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 
 	enforcer := NewUnlimitedPolicyEnforcer(ctx, mockQuotaService)
 

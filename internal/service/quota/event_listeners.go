@@ -70,11 +70,10 @@ func (s *QuotaServiceDefault) getUploadSize(ctx context.Context, pin *portalMode
 }
 
 // handleUploadCompleted handles the upload completed event
-func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint) error {
+func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint, reservationID *uint, successful bool) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleUploadCompleted")
 	defer span.End()
 
-	// Anonymous uploads are not tracked for quota
 	if userID == nil {
 		s.Logger().Debug("Skipping anonymous upload for quota tracking",
 			zap.Uint("uploadID", uploadID),
@@ -82,6 +81,30 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 		return nil
 	}
 
+	// If reservation exists, handle it
+	if reservationID != nil {
+		if successful {
+			s.Logger().Debug("Committing reservation for completed upload",
+				zap.Uint("userID", *userID),
+				zap.Uint("uploadID", uploadID),
+				zap.Uint("reservationID", *reservationID),
+				zap.Uint64("bytes", bytes),
+				zap.Bool("successful", successful))
+
+			if err := s.CommitReservation(ctx, *reservationID, uploadID); err != nil {
+				s.Logger().Error("Failed to commit reservation for upload",
+					zap.Uint("userID", *userID),
+					zap.Uint("uploadID", uploadID),
+					zap.Uint("reservationID", *reservationID),
+					zap.Error(err))
+				return fmt.Errorf("failed to commit reservation for upload: %w", err)
+			}
+		}
+		// If a reservation exists but upload failed, the caller is responsible for releasing it
+		return nil
+	}
+
+	// Fall back to recording usage directly (only when no reservation exists)
 	s.Logger().Debug("Recording upload usage from event",
 		zap.Uint("userID", *userID),
 		zap.Uint("uploadID", uploadID),
@@ -91,7 +114,7 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 }
 
 // handleDownloadCompleted handles the download completed event
-func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint) error {
+func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint, reservationID *uint, successful bool) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleDownloadCompleted")
 	defer span.End()
 
@@ -102,6 +125,29 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploa
 		effectiveUserID = *userID
 	}
 
+	// If reservation exists, handle it
+	if reservationID != nil {
+		if successful {
+			s.Logger().Debug("Committing reservation for completed download",
+				zap.Uint("userID", effectiveUserID),
+				zap.Uint("uploadID", uploadID),
+				zap.Uint("reservationID", *reservationID),
+				zap.Uint64("bytes", bytes),
+				zap.Bool("successful", successful))
+
+			if err := s.CommitReservation(ctx, *reservationID, uploadID); err != nil {
+				s.Logger().Error("Failed to commit reservation for download",
+					zap.Uint("userID", effectiveUserID),
+					zap.Uint("uploadID", uploadID),
+					zap.Uint("reservationID", *reservationID),
+					zap.Error(err))
+			}
+		}
+		// If a reservation exists but download failed, the caller is responsible for releasing it
+		return nil
+	}
+
+	// Fall back to recording usage directly (only when no reservation exists)
 	return s.RecordDownload(ctx, effectiveUserID, uploadID, bytes, ip)
 }
 

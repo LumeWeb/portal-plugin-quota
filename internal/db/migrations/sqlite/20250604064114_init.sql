@@ -150,7 +150,7 @@ DROP INDEX IF EXISTS idx_quota_plans_default_active;
 DROP INDEX IF EXISTS idx_user_quota_configs_enforcement_policy;
 DROP INDEX IF EXISTS idx_allowance_consumptions_consumption_date;
 DROP INDEX IF EXISTS idx_reservations_upload_id;
-DROP INDEX IF EXISTS idx_reservations_expired_at;
+DROP INDEX IF EXISTS idx_reservations_deleted_at;
 DROP INDEX IF EXISTS idx_reservations_user_status;
 DROP INDEX IF EXISTS idx_reservations_user_id;
 DROP INDEX IF EXISTS idx_allowance_consumptions_usage_detail_id;

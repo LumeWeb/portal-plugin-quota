@@ -211,7 +211,7 @@ func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uin
 				reservation, err := s.reservationManager.CreateReservation(ctx, userID, usageType, requestedBytes, options.IP)
 				if err != nil {
 					s.Logger().Error("Failed to create reservation", zap.Error(err))
-					return result, nil
+					return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to create quota reservation: %w", err)
 				}
 
 				reservationID := reservation.ID

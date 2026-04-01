@@ -97,6 +97,7 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 					zap.Uint("uploadID", uploadID),
 					zap.Uint("reservationID", *reservationID),
 					zap.Error(err))
+				return fmt.Errorf("failed to commit reservation for upload: %w", err)
 			}
 		}
 		// If a reservation exists but upload failed, the caller is responsible for releasing it

@@ -19,6 +19,7 @@ func TestQuotaService_CheckUploadQuota_WithReservation_Success(t *testing.T) {
 		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
 
 		dataManager := testdata.NewTestDataManager(ctx)
+		defer dataManager.Cleanup()
 		userID := dataManager.GenerateUserID()
 		bytes := uint64(1000)
 		ip := "192.168.1.1"
@@ -78,6 +79,7 @@ func TestQuotaService_CheckUploadQuota_IncludesPendingReservations(t *testing.T)
 		// Get quota service from context
 		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
 		dataManager := testdata.NewTestDataManager(ctx)
+		defer dataManager.Cleanup()
 		userID := dataManager.GenerateUserID()
 		uploadLimit := int64(2000)
 		storageLimit := int64(0)
@@ -129,10 +131,19 @@ func TestQuotaService_CheckUploadQuota_IncludesPendingReservations(t *testing.T)
 		require.NoError(t, err)
 		require.True(t, result2.Allowed)
 
-		// Try to check for 1200 bytes - should fail
-		// This test relies on the real policy enforcer including pending reservations
-		// So we let it go through without mocking the policy enforcer for this third check
-		dataManager.Cleanup()
+		// Verify both reservations exist in the database
+		reservations, err := service.reservationManager.GetPendingReservationsForUser(ctx, userID)
+		require.NoError(t, err)
+		require.Len(t, reservations, 2)
+
+		// Verify total pending bytes
+		totalPending := uint64(0)
+		for _, res := range reservations {
+			if res.IsPending() {
+				totalPending += res.Bytes
+			}
+		}
+		require.Equal(t, uint64(1000), totalPending)
 	}, testOptions())
 }
 
@@ -141,6 +152,7 @@ func TestQuotaService_CommitReservation_Success(t *testing.T) {
 		// Get quota service from context
 		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
 		dataManager := testdata.NewTestDataManager(ctx)
+		defer dataManager.Cleanup()
 		userID := dataManager.GenerateUserID()
 		uploadID := dataManager.GenerateUploadID()
 		bytes := uint64(1000)
@@ -210,6 +222,7 @@ func TestQuotaService_ReleaseReservation_Success(t *testing.T) {
 		// Get quota service from context
 		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
 		dataManager := testdata.NewTestDataManager(ctx)
+		defer dataManager.Cleanup()
 		userID := dataManager.GenerateUserID()
 		bytes := uint64(1000)
 		ip := "192.168.1.1"
@@ -267,6 +280,7 @@ func TestQuotaService_ReservationTimeout(t *testing.T) {
 		// Get quota service from context
 		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
 		dataManager := testdata.NewTestDataManager(ctx)
+		defer dataManager.Cleanup()
 		userID := dataManager.GenerateUserID()
 		bytes := uint64(1000)
 		ip := "192.168.1.1"

@@ -37,6 +37,69 @@ func (_m *MockReservationManager) EXPECT() *MockReservationManager_Expecter {
 	return &MockReservationManager_Expecter{mock: &_m.Mock}
 }
 
+// CountPendingReservationsForUser provides a mock function for the type MockReservationManager
+func (_mock *MockReservationManager) CountPendingReservationsForUser(ctx context.Context, userID uint, usageType UsageType) int {
+	ret := _mock.Called(ctx, userID, usageType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountPendingReservationsForUser")
+	}
+
+	var r0 int
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uint, UsageType) int); ok {
+		r0 = returnFunc(ctx, userID, usageType)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	return r0
+}
+
+// MockReservationManager_CountPendingReservationsForUser_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountPendingReservationsForUser'
+type MockReservationManager_CountPendingReservationsForUser_Call struct {
+	*mock.Call
+}
+
+// CountPendingReservationsForUser is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uint
+//   - usageType UsageType
+func (_e *MockReservationManager_Expecter) CountPendingReservationsForUser(ctx interface{}, userID interface{}, usageType interface{}) *MockReservationManager_CountPendingReservationsForUser_Call {
+	return &MockReservationManager_CountPendingReservationsForUser_Call{Call: _e.mock.On("CountPendingReservationsForUser", ctx, userID, usageType)}
+}
+
+func (_c *MockReservationManager_CountPendingReservationsForUser_Call) Run(run func(ctx context.Context, userID uint, usageType UsageType)) *MockReservationManager_CountPendingReservationsForUser_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		var arg2 UsageType
+		if args[2] != nil {
+			arg2 = args[2].(UsageType)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockReservationManager_CountPendingReservationsForUser_Call) Return(n int) *MockReservationManager_CountPendingReservationsForUser_Call {
+	_c.Call.Return(n)
+	return _c
+}
+
+func (_c *MockReservationManager_CountPendingReservationsForUser_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType) int) *MockReservationManager_CountPendingReservationsForUser_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetReservation provides a mock function for the type MockReservationManager
 func (_mock *MockReservationManager) GetReservation(uuid string) Reservation {
 	ret := _mock.Called(uuid)

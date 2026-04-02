@@ -37,6 +37,10 @@ type ReservationManager interface {
 	// SumPendingBytesForUser returns the total bytes currently reserved for a user
 	// and usage type. This is used during quota checks to prevent over-allocation.
 	SumPendingBytesForUser(ctx context.Context, userID uint, usageType UsageType) int64
+
+	// CountPendingReservationsForUser returns the number of active reservations
+	// for a user and usage type. This is used for debugging and monitoring.
+	CountPendingReservationsForUser(ctx context.Context, userID uint, usageType UsageType) int
 }
 
 // Reservation represents a held quota reservation that must be released.

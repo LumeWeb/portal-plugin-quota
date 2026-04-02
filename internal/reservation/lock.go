@@ -130,6 +130,23 @@ func (rm *ReservationManagerDefault) SumPendingBytesForUser(ctx context.Context,
 	return total
 }
 
+// CountPendingReservationsForUser returns the number of active reservations
+// for a user and usage type. This is used for debugging and monitoring.
+func (rm *ReservationManagerDefault) CountPendingReservationsForUser(ctx context.Context, userID uint, usageType pluginCore.UsageType) int {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	var count int
+	if userRes, ok := rm.userReservations[userID]; ok {
+		for uuid := range userRes {
+			if res, ok := rm.reservations[uuid]; ok && res.usageType == usageType && atomic.LoadInt32(&res.released) == 0 {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // defaultReservation implements the pluginCore.Reservation interface.
 type defaultReservation struct {
 	res     *userReservation

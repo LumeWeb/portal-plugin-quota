@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
@@ -223,14 +224,7 @@ func (w *LimitWindow) Validate() error {
 		WindowTypeLifetime,
 	}
 	
-	isValid := false
-	for _, validType := range validTypes {
-		if w.Type == validType {
-			isValid = true
-			break
-		}
-	}
-	if !isValid {
+	if !slices.Contains(validTypes, w.Type) {
 		return fmt.Errorf("invalid window type: %s", w.Type)
 	}
 

@@ -500,3 +500,150 @@ func TestReservationManagerDefault_AllUsageTypes(t *testing.T) {
 		}
 	})
 }
+
+func TestReservationManagerDefault_CountPendingReservationsForUser(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns zero for user with no reservations", func(t *testing.T) {
+		manager := setupTestManager(t)
+		count := manager.CountPendingReservationsForUser(ctx, 999, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("counts single reservation", func(t *testing.T) {
+		manager := setupTestManager(t)
+		_, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		require.NoError(t, err)
+
+		count := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("counts multiple reservations of same type", func(t *testing.T) {
+		manager := setupTestManager(t)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 3000)
+
+		count := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 3, count)
+	})
+
+	t.Run("filters by usage type", func(t *testing.T) {
+		manager := setupTestManager(t)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeDownload, 500)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeDownload, 1500)
+
+		uploadCount := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 2, uploadCount)
+
+		downloadCount := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeDownload)
+		assert.Equal(t, 2, downloadCount)
+	})
+
+	t.Run("excludes released reservations", func(t *testing.T) {
+		manager := setupTestManager(t)
+		res1, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		require.NoError(t, err)
+		_, err = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		require.NoError(t, err)
+		_, err = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 3000)
+		require.NoError(t, err)
+
+		// Count should be 3
+		count := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 3, count)
+
+		// Release one reservation
+		res1.Release()
+
+		// Count should drop to 2
+		count = manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 2, count, "Released reservation should be excluded from count")
+	})
+
+	t.Run("separates reservations by user", func(t *testing.T) {
+		manager := setupTestManager(t)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		_, _ = manager.Reserve(ctx, 2, pluginCore.UsageTypeUpload, 500)
+
+		user1Count := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 2, user1Count)
+
+		user2Count := manager.CountPendingReservationsForUser(ctx, 2, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 1, user2Count)
+	})
+
+	t.Run("handles mixed usage types across users", func(t *testing.T) {
+		manager := setupTestManager(t)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeDownload, 2000)
+		_, _ = manager.Reserve(ctx, 2, pluginCore.UsageTypeUpload, 500)
+		_, _ = manager.Reserve(ctx, 2, pluginCore.UsageTypeDownload, 1500)
+
+		user1UploadCount := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 1, user1UploadCount)
+
+		user1DownloadCount := manager.CountPendingReservationsForUser(ctx, 1, pluginCore.UsageTypeDownload)
+		assert.Equal(t, 1, user1DownloadCount)
+
+		user2UploadCount := manager.CountPendingReservationsForUser(ctx, 2, pluginCore.UsageTypeUpload)
+		assert.Equal(t, 1, user2UploadCount)
+
+		user2DownloadCount := manager.CountPendingReservationsForUser(ctx, 2, pluginCore.UsageTypeDownload)
+		assert.Equal(t, 1, user2DownloadCount)
+	})
+
+	t.Run("counts concurrent requests for debugging", func(t *testing.T) {
+		manager := setupTestManager(t)
+		userID := uint(1)
+		usageType := pluginCore.UsageTypeUpload
+
+		// Simulate multiple concurrent upload requests
+		var wg sync.WaitGroup
+		reservations := make([]pluginCore.Reservation, 5)
+		results := make(chan struct {
+			idx int
+			res pluginCore.Reservation
+			err error
+		}, 5)
+
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				res, err := manager.Reserve(ctx, userID, usageType, 1000)
+				results <- struct {
+					idx int
+					res pluginCore.Reservation
+					err error
+				}{idx, res, err}
+			}(i)
+		}
+
+		wg.Wait()
+		close(results)
+
+		// Collect results and verify no errors in main goroutine
+		for r := range results {
+			assert.NoError(t, r.err)
+			reservations[r.idx] = r.res
+		}
+
+		// Count concurrent requests
+		count := manager.CountPendingReservationsForUser(ctx, userID, usageType)
+		assert.Equal(t, 5, count, "Should count all concurrent requests")
+
+		// Release all reservations
+		for _, res := range reservations {
+			res.Release()
+		}
+
+		// Count should be zero after all releases
+		count = manager.CountPendingReservationsForUser(ctx, userID, usageType)
+		assert.Equal(t, 0, count, "Count should be zero after all reservations released")
+	})
+}

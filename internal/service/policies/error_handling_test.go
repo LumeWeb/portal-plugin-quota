@@ -43,7 +43,7 @@ func TestHardLimitsPolicyEnforcer_InvalidLimitValues(t *testing.T) {
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 
 			mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeUpload, mock.Anything).Return(uint64(0), time.Now(), time.Now(), nil)
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeUpload).Return(uint64(0), nil)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeUpload).Return(int64(0))
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 

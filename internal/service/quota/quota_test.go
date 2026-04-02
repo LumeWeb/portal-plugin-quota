@@ -467,7 +467,6 @@ func TestQuotaServiceDefault_CheckUploadQuota_CreateReservationError(t *testing.
 
 		userID := uint(testUserID)
 		requestedBytes := uint64(testBytesMedium)
-		ip := "192.168.1.1"
 
 		userConfig := &pluginModels.UserQuotaConfig{
 			UserID:            userID,
@@ -484,19 +483,18 @@ func TestQuotaServiceDefault_CheckUploadQuota_CreateReservationError(t *testing.
 		mockConfigManager.EXPECT().GetPolicyEnforcer(mock.Anything, userID).Return(mockPolicyEnforcer, nil).Once()
 		mockPolicyEnforcer.EXPECT().CheckUploadQuota(mock.Anything, userConfig, requestedBytes).Return(expectedResult, nil).Once()
 
-		// CreateReservation should fail
-		reservationErr := errors.New("database error: failed to create reservation")
-		mockReservationManager.EXPECT().CleanupStaleReservationsForUser(mock.Anything, userID).Return(int64(0), nil).Maybe()
-		mockReservationManager.EXPECT().CreateReservation(mock.Anything, userID, mock.Anything, requestedBytes, ip).Return(nil, reservationErr)
+		// Reserve should fail
+		reservationErr := errors.New("failed to create reservation")
+		mockReservationManager.EXPECT().Reserve(mock.Anything, userID, pluginCore.UsageTypeUpload, int64(requestedBytes)).Return(nil, reservationErr)
 
 		// Act: Check upload quota with reservation creation enabled
-		result, err := quotaService.CheckUploadQuota(ctx, userID, requestedBytes, pluginCore.WithCreateReservation(ip))
+		result, err := quotaService.CheckUploadQuota(ctx, userID, requestedBytes, pluginCore.WithCreateReservation())
 
 		// Assert: Should get an error, not a success result
 		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to create quota reservation")
-		require.ErrorContains(t, err, "database error: failed to create reservation")
-		assert.Empty(t, result.ReservationID)
+		require.ErrorContains(t, err, "failed to create reservation")
+		assert.Nil(t, result.Reservation)
 	}, testOptions())
 }
 

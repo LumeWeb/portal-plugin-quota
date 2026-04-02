@@ -13,6 +13,7 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
+	quotaReservation "go.lumeweb.com/portal-plugin-quota/internal/reservation"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/policies"
 	"go.lumeweb.com/portal/core"
@@ -50,7 +51,7 @@ func NewQuotaService() (core.Service, []core.ContextBuilderOption, error) {
 			service.usageManager = managers.NewUsageManager(ctx)
 			service.grantManager = managers.NewGrantManager(ctx)
 			service.lockManager = quotaLock.NewLockManager(ctx)
-			service.reservationManager = managers.NewReservationManager(ctx)
+			service.reservationManager = quotaReservation.NewReservationManager(ctx)
 
 			// Initialize limit resolver
 			service.limitResolver = policies.NewLimitResolver(ctx, service)
@@ -204,23 +205,13 @@ func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uin
 					return pluginCore.QuotaCheckResult{}, fmt.Errorf("reservation manager not initialized")
 				}
 
-				if _, err := s.reservationManager.CleanupStaleReservationsForUser(ctx, userID); err != nil {
-					s.Logger().Warn("Failed to cleanup stale reservations", zap.Error(err))
-				}
-
-				reservation, err := s.reservationManager.CreateReservation(ctx, userID, usageType, requestedBytes, options.IP)
+				reservation, err := s.reservationManager.Reserve(ctx, userID, usageType, int64(requestedBytes))
 				if err != nil {
 					s.Logger().Error("Failed to create reservation", zap.Error(err))
 					return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to create quota reservation: %w", err)
 				}
 
-				reservationID := reservation.ID
-				result.ReservationID = &reservationID
-
-				// Set release function for convenience
-				result.SetReleaseFunc(func(ctx context.Context) error {
-					return s.reservationManager.ReleaseReservation(ctx, reservationID)
-				})
+				result.Reservation = reservation
 			}
 
 			return result, nil
@@ -228,7 +219,7 @@ func (s *QuotaServiceDefault) checkQuotaWithLock(ctx context.Context, userID uin
 	)
 }
 
-func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*pluginCore.CheckOptions)) (pluginCore.QuotaCheckResult, error) {
+func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...pluginCore.CheckOption) (pluginCore.QuotaCheckResult, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckUploadQuota")
 	defer span.End()
 
@@ -241,7 +232,7 @@ func (s *QuotaServiceDefault) CheckUploadQuota(ctx context.Context, userID uint,
 	)
 }
 
-func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*pluginCore.CheckOptions)) (pluginCore.QuotaCheckResult, error) {
+func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...pluginCore.CheckOption) (pluginCore.QuotaCheckResult, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckDownloadQuota")
 	defer span.End()
 
@@ -254,7 +245,7 @@ func (s *QuotaServiceDefault) CheckDownloadQuota(ctx context.Context, userID uin
 	)
 }
 
-func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*pluginCore.CheckOptions)) (pluginCore.QuotaCheckResult, error) {
+func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...pluginCore.CheckOption) (pluginCore.QuotaCheckResult, error) {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CheckStorageQuota")
 	defer span.End()
 
@@ -265,33 +256,6 @@ func (s *QuotaServiceDefault) CheckStorageQuota(ctx context.Context, userID uint
 		},
 		StorageChecked,
 	)
-}
-
-// Reservation Management
-func (s *QuotaServiceDefault) CommitReservation(ctx context.Context, reservationID uint, uploadID uint) error {
-	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.CommitReservation")
-	defer span.End()
-
-	if s.reservationManager == nil {
-		return fmt.Errorf("reservation manager not initialized")
-	}
-
-	return s.reservationManager.CommitReservation(ctx, reservationID, uploadID)
-}
-
-func (s *QuotaServiceDefault) ReleaseReservation(ctx context.Context, reservationID uint) error {
-	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.ReleaseReservation")
-	defer span.End()
-
-	if s.reservationManager == nil {
-		return fmt.Errorf("reservation manager not initialized")
-	}
-
-	return s.reservationManager.ReleaseReservation(ctx, reservationID)
-}
-
-func (s *QuotaServiceDefault) GetReservationManager() pluginCore.ReservationManager {
-	return s.reservationManager
 }
 
 // Usage Analytics
@@ -1457,6 +1421,10 @@ func (s *QuotaServiceDefault) GetUsageManager() pluginCore.UsageManager {
 
 func (s *QuotaServiceDefault) GetGrantManager() pluginCore.GrantManager {
 	return s.grantManager
+}
+
+func (s *QuotaServiceDefault) GetReservationManager() pluginCore.ReservationManager {
+	return s.reservationManager
 }
 
 func (s *QuotaServiceDefault) GetQuotaPlanManager() pluginCore.QuotaPlanManager {

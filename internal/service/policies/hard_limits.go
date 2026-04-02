@@ -66,11 +66,11 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(ctx context.Context, config 
 			}
 
 			// Query pending reservations
-			pendingBytes, err := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeUpload)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get pending reservation bytes: %w", err)
+			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeUpload)
+			if pendingBytes < 0 {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid pending bytes: %d", pendingBytes)
 			}
-			currentUsage += pendingBytes
+			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
 
@@ -133,11 +133,11 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(ctx context.Context, confi
 			}
 
 			// Query pending reservations
-			pendingBytes, err := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeDownload)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get pending reservation bytes: %w", err)
+			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeDownload)
+			if pendingBytes < 0 {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid pending bytes: %d", pendingBytes)
 			}
-			currentUsage += pendingBytes
+			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
 
@@ -200,11 +200,11 @@ func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(ctx context.Context, config
 			}
 
 			// Query pending reservations
-			pendingBytes, err := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeStorageAdd)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get pending reservation bytes: %w", err)
+			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeStorageAdd)
+			if pendingBytes < 0 {
+				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid pending bytes: %d", pendingBytes)
 			}
-			currentUsage += pendingBytes
+			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
 

@@ -43,7 +43,7 @@ func TestErrorHandling_ZeroValues(t *testing.T) {
 			mockReservationManager := pluginCore.NewMockReservationManager(t)
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			config := &models.UserQuotaConfig{
@@ -81,7 +81,7 @@ func TestErrorHandling_DatabaseFailures(t *testing.T) {
 			mockReservationManager := pluginCore.NewMockReservationManager(t)
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 			mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, userID).Return(nil, assert.AnError)
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 			_, err = enforcer.GetCurrentUsage(ctx, userID)

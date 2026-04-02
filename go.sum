@@ -760,6 +760,8 @@ go.lumeweb.com/portal v0.4.2-0.20260328050739-f0469901db8b h1:KkTjFo3Q4r62st5C6g
 go.lumeweb.com/portal v0.4.2-0.20260328050739-f0469901db8b/go.mod h1:VSYsLPjhYPTYdxET3Hf7S9fm+3M2QCtK6m40vF7GmD8=
 go.lumeweb.com/portal v0.4.2-0.20260401220009-7f44c5f2cb6c h1:abpGcC9gsjZXi7roMgyDq7B5mK4H1XeRE/IBWxtk9Is=
 go.lumeweb.com/portal v0.4.2-0.20260401220009-7f44c5f2cb6c/go.mod h1:6dDVzFP5lzIjdeH7hitHYUEItPYRvzG40mTPG0jAJGw=
+go.lumeweb.com/portal v0.4.2-0.20260402135955-b389504986f5 h1:TD9Oag7pGmpHKh/xolN0PC+xM9r76LXhDJjhHOJ/Q7M=
+go.lumeweb.com/portal v0.4.2-0.20260402135955-b389504986f5/go.mod h1:6dDVzFP5lzIjdeH7hitHYUEItPYRvzG40mTPG0jAJGw=
 go.lumeweb.com/portal-middleware v0.3.7 h1:kq4SZq4T/uhauqHehw2JaTbNJpPpE8/EQAC3R737H7c=
 go.lumeweb.com/portal-middleware v0.3.7/go.mod h1:Yn9ZsFy5n3x2jUJ085M9B/aoZ+ANQV5QD/MAE0BpJXo=
 go.lumeweb.com/portal-plugin-core v0.0.0-20260109024150-b4ac33cb7c47 h1:72BfSDglrZppP8b7mn0Gxyt3a6MNHsPCc6QJjJjFh8Q=

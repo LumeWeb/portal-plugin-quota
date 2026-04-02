@@ -121,26 +121,10 @@ CREATE TABLE IF NOT EXISTS allowance_consumptions (
     INDEX idx_consumption_date (consumption_date)
 );
 
-CREATE TABLE IF NOT EXISTS quota_reservations (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT UNSIGNED NOT NULL,
-    type VARCHAR(20) NOT NULL,
-    bytes BIGINT UNSIGNED NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    upload_id BIGINT UNSIGNED NULL,
-    source_ip VARCHAR(45) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP NULL DEFAULT NULL,
-    INDEX idx_user_id (user_id),
-    INDEX idx_user_status (user_id, status),
-    INDEX idx_deleted_at (deleted_at),
-    INDEX idx_upload_id (upload_id)
-);
+
 
 -- +goose Down
 DROP TABLE allowance_consumptions;
-DROP TABLE quota_reservations;
 DROP TABLE allowance_grants;
 DROP TABLE user_quota_configs;
 DROP TABLE quota_plans;

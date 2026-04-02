@@ -70,7 +70,7 @@ func (s *QuotaServiceDefault) getUploadSize(ctx context.Context, pin *portalMode
 }
 
 // handleUploadCompleted handles the upload completed event
-func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint, reservationID *uint, successful bool) error {
+func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint, reservationUUID *string, successful bool) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleUploadCompleted")
 	defer span.End()
 
@@ -82,25 +82,18 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 	}
 
 	// If reservation exists, handle it
-	if reservationID != nil {
-		if successful {
-			s.Logger().Debug("Committing reservation for completed upload",
+	if reservationUUID != nil {
+		reservation := s.reservationManager.GetReservation(*reservationUUID)
+		if reservation != nil {
+			s.Logger().Debug("Releasing reservation for upload",
 				zap.Uint("userID", *userID),
-				zap.Uint("uploadID", uploadID),
-				zap.Uint("reservationID", *reservationID),
+				zap.String("reservation_uuid", *reservationUUID),
 				zap.Uint64("bytes", bytes),
 				zap.Bool("successful", successful))
 
-			if err := s.CommitReservation(ctx, *reservationID, uploadID); err != nil {
-				s.Logger().Error("Failed to commit reservation for upload",
-					zap.Uint("userID", *userID),
-					zap.Uint("uploadID", uploadID),
-					zap.Uint("reservationID", *reservationID),
-					zap.Error(err))
-				return fmt.Errorf("failed to commit reservation for upload: %w", err)
-			}
+			// Release reservation (called regardless of success/failure)
+			reservation.Release()
 		}
-		// If a reservation exists but upload failed, the caller is responsible for releasing it
 		return nil
 	}
 
@@ -114,7 +107,7 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 }
 
 // handleDownloadCompleted handles the download completed event
-func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint, reservationID *uint, successful bool) error {
+func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploadID uint, bytes uint64, ip string, userID *uint, reservationUUID *string, successful bool) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleDownloadCompleted")
 	defer span.End()
 
@@ -126,24 +119,28 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploa
 	}
 
 	// If reservation exists, handle it
-	if reservationID != nil {
-		if successful {
-			s.Logger().Debug("Committing reservation for completed download",
-				zap.Uint("userID", effectiveUserID),
-				zap.Uint("uploadID", uploadID),
-				zap.Uint("reservationID", *reservationID),
+	if reservationUUID != nil {
+		reservation := s.reservationManager.GetReservation(*reservationUUID)
+		if reservation != nil {
+			s.Logger().Debug("Releasing reservation for download",
+				zap.Uint("effectiveUserID", effectiveUserID),
+				zap.String("reservation_uuid", *reservationUUID),
 				zap.Uint64("bytes", bytes),
 				zap.Bool("successful", successful))
 
-			if err := s.CommitReservation(ctx, *reservationID, uploadID); err != nil {
-				s.Logger().Error("Failed to commit reservation for download",
-					zap.Uint("userID", effectiveUserID),
-					zap.Uint("uploadID", uploadID),
-					zap.Uint("reservationID", *reservationID),
-					zap.Error(err))
-			}
+			// Release reservation (called regardless of success/failure)
+			reservation.Release()
 		}
-		// If a reservation exists but download failed, the caller is responsible for releasing it
+
+		// Track failed downloads in metrics
+		if !successful {
+			DownloadFailed.WithLabelValues().Inc()
+			s.Logger().Debug("Download failed - reservation released",
+				zap.Uint("effectiveUserID", effectiveUserID),
+				zap.String("reservation_uuid", *reservationUUID),
+				zap.Uint64("bytes", bytes))
+		}
+
 		return nil
 	}
 

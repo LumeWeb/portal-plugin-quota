@@ -605,18 +605,33 @@ func TestReservationManagerDefault_CountPendingReservationsForUser(t *testing.T)
 		// Simulate multiple concurrent upload requests
 		var wg sync.WaitGroup
 		reservations := make([]pluginCore.Reservation, 5)
+		results := make(chan struct {
+			idx int
+			res pluginCore.Reservation
+			err error
+		}, 5)
 
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
 				res, err := manager.Reserve(ctx, userID, usageType, 1000)
-				assert.NoError(t, err)
-				reservations[idx] = res
+				results <- struct {
+					idx int
+					res pluginCore.Reservation
+					err error
+				}{idx, res, err}
 			}(i)
 		}
 
 		wg.Wait()
+		close(results)
+
+		// Collect results and verify no errors in main goroutine
+		for r := range results {
+			assert.NoError(t, r.err)
+			reservations[r.idx] = r.res
+		}
 
 		// Count concurrent requests
 		count := manager.CountPendingReservationsForUser(ctx, userID, usageType)

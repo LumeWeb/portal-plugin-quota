@@ -89,16 +89,20 @@ func TestReservationManagerDefault_Reserve(t *testing.T) {
 
 	t.Run("creates unique UUIDs for multiple reservations", func(t *testing.T) {
 		manager := setupTestManager(t)
-		res1, _ := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
-		res2, _ := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		res1, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		require.NoError(t, err)
+		res2, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		require.NoError(t, err)
 
 		assert.NotEqual(t, res1.UUID(), res2.UUID(), "Each reservation should have a unique UUID")
 	})
 
 	t.Run("creates reservations for different users", func(t *testing.T) {
 		manager := setupTestManager(t)
-		res1, _ := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
-		res2, _ := manager.Reserve(ctx, 2, pluginCore.UsageTypeUpload, 2000)
+		res1, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		require.NoError(t, err)
+		res2, err := manager.Reserve(ctx, 2, pluginCore.UsageTypeUpload, 2000)
+		require.NoError(t, err)
 
 		assert.Equal(t, uint(1), res1.UserID())
 		assert.Equal(t, uint(2), res2.UserID())
@@ -106,8 +110,10 @@ func TestReservationManagerDefault_Reserve(t *testing.T) {
 
 	t.Run("creates reservations for different usage types", func(t *testing.T) {
 		manager := setupTestManager(t)
-		res1, _ := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
-		res2, _ := manager.Reserve(ctx, 1, pluginCore.UsageTypeDownload, 2000)
+		res1, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		require.NoError(t, err)
+		res2, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeDownload, 2000)
+		require.NoError(t, err)
 
 		assert.Equal(t, pluginCore.UsageTypeUpload, res1.UsageType())
 		assert.Equal(t, pluginCore.UsageTypeDownload, res2.UsageType())
@@ -197,9 +203,12 @@ func TestReservationManagerDefault_SumPendingBytesForUser(t *testing.T) {
 
 	t.Run("excludes released reservations", func(t *testing.T) {
 		manager := setupTestManager(t)
-		res1, _ := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
-		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
-		_, _ = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 3000)
+		res1, err := manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 1000)
+		require.NoError(t, err)
+		_, err = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 2000)
+		require.NoError(t, err)
+		_, err = manager.Reserve(ctx, 1, pluginCore.UsageTypeUpload, 3000)
+		require.NoError(t, err)
 
 		// Release one reservation
 		res1.Release()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
@@ -49,6 +50,7 @@ func (rm *ReservationManagerDefault) Reserve(ctx context.Context, userID uint, u
 		onRelease: func() {
 			rm.cleanupReservation(reservationUUID, userID)
 		},
+		createdAt: time.Now(),
 	}
 
 	// Store the reservation
@@ -120,7 +122,7 @@ func (rm *ReservationManagerDefault) SumPendingBytesForUser(ctx context.Context,
 	var total int64
 	if userRes, ok := rm.userReservations[userID]; ok {
 		for uuid := range userRes {
-			if res, ok := rm.reservations[uuid]; ok && res.usageType == usageType {
+			if res, ok := rm.reservations[uuid]; ok && res.usageType == usageType && atomic.LoadInt32(&res.released) == 0 {
 				total += res.bytes
 			}
 		}

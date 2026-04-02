@@ -290,7 +290,6 @@ func TestQuotaService_ReleaseReservation_Success(t *testing.T) {
 
 		// Release the reservation
 		result.Reservation.Release()
-		require.NoError(t, err)
 
 		// Verify pending bytes decreased after release
 		pendingAfter := service.reservationManager.SumPendingBytesForUser(ctx, userID, pluginCore.UsageTypeUpload)

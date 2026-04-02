@@ -98,7 +98,7 @@ func TestHardLimitsPolicyEnforcer_BoundaryConditions(t *testing.T) {
 
 			mockQuotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			mockQuotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), models.UsageTypeUpload).Return(uint64(0), nil)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), models.UsageTypeUpload).Return(int64(0))
 			enforcer := NewHardLimitsPolicyEnforcer(ctx, mockQuotaService)
 
 			userID := dataManager.NextUserID()

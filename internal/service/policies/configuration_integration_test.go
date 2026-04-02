@@ -53,7 +53,7 @@ func TestConfiguration_Updates(t *testing.T) {
 		mockReservationManager := pluginCore.NewMockReservationManager(t)
 		quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
 		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager).Maybe()
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 		// Get the actual config from database
 		var config models.UserQuotaConfig
@@ -131,7 +131,7 @@ func TestConfiguration_QuotaPlanIntegration_WithPlan(t *testing.T) {
 		quotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(quotaPlanManager)
 		quotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		require.NoError(t, err)
 		// Check that limits are resolved from plan
@@ -180,7 +180,7 @@ func TestConfiguration_QuotaPlanIntegration_CustomOverridesPlan(t *testing.T) {
 		quotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(quotaPlanManager)
 		quotaPlanManager.EXPECT().GetQuotaPlanByID(mock.Anything, planID).Return(plan, nil)
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 		limits, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, config, models.EnforcementPolicyHardLimits)
 		require.NoError(t, err)
 		// Custom storage override should take priority
@@ -209,7 +209,7 @@ func TestConfiguration_MissingValues_NilLimits(t *testing.T) {
 		// Get config using UsageManager
 		quotaPlanManager := pluginCore.NewMockQuotaPlanManager(t)
 		quotaService.EXPECT().GetQuotaPlanManager().Return(quotaPlanManager)
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 		quotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
 		_, err := enforcer.limitResolver.ResolveEffectiveLimits(ctx, &models.UserQuotaConfig{
 			UserID:            userID,

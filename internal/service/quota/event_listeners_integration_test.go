@@ -53,30 +53,30 @@ func TestEventListeners_handleUploadCompleted_WithReservation_Success(t *testing
 		}, nil).Once()
 
 		// Create a reservation first
-		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation(ip))
+		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result.Allowed)
-		require.NotNil(t, result.ReservationID)
+		require.NotNil(t, result.Reservation)
 
-		reservationID := *result.ReservationID
+		reservationUUID := result.Reservation.UUID()
 
-		// Verify reservation is pending
-		var reservation pluginModels.QuotaReservation
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsPending())
-		assert.Nil(t, reservation.UploadID)
+		// Verify reservation is active
+		reservation := service.GetReservationManager().GetReservation(reservationUUID)
+		require.NotNil(t, reservation)
+		assert.Equal(t, userID, reservation.UserID())
+		assert.Equal(t, bytes, uint64(reservation.Bytes()))
 
 		// Handle upload completed event with reservation
-		err = service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationID, true)
+		err = service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationUUID, true)
 		require.NoError(t, err)
 
-		// Verify reservation was committed
-		err = ctx.DB().First(&reservation, reservationID).Error
+		// Verify reservation was released
+		reservation = service.GetReservationManager().GetReservation(reservationUUID)
+		assert.Nil(t, reservation, "reservation should be released after upload completes")
+
+		// The calling code must explicitly call RecordUpload after successful upload
+		err = service.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
-		assert.True(t, reservation.IsCommitted())
-		assert.NotNil(t, reservation.UploadID)
-		assert.Equal(t, uploadID, *reservation.UploadID)
 
 		// Verify usage detail was created
 		var usageDetails []pluginModels.UserUsageDetail
@@ -130,44 +130,35 @@ func TestEventListeners_handleUploadCompleted_WithReservation_Failure(t *testing
 		}, nil).Once()
 
 		// Create a reservation first
-		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation(ip))
+		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result.Allowed)
-		require.NotNil(t, result.ReservationID)
+		require.NotNil(t, result.Reservation)
 
-		reservationID := *result.ReservationID
+		reservationUUID := result.Reservation.UUID()
 
-		// Verify reservation is pending
-		var reservation pluginModels.QuotaReservation
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsPending())
+		// Verify reservation is active
+		reservation := service.GetReservationManager().GetReservation(reservationUUID)
+		require.NotNil(t, reservation)
+		assert.Equal(t, userID, reservation.UserID())
 
 		// Handle upload completed event with failure (successful=false)
-		// The caller is expected to release the reservation themselves
-		err = service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationID, false)
+		// Reservation should be released
+		err = service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationUUID, false)
 		require.NoError(t, err)
 
-		// Verify reservation was NOT committed (still pending)
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsPending())
-		assert.Nil(t, reservation.UploadID)
+		// Verify reservation was released
+		reservation = service.GetReservationManager().GetReservation(reservationUUID)
+		assert.Nil(t, reservation, "reservation should be released after upload fails")
+
+		// Release the reservation again - should be safe (no-op)
+		result.Reservation.Release()
 
 		// Verify usage detail was NOT created
 		var usageDetails []pluginModels.UserUsageDetail
 		err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
 		require.NoError(t, err)
 		assert.Len(t, usageDetails, 0)
-
-		// Release the reservation
-		err = result.ReleaseReservation(ctx)
-		require.NoError(t, err)
-
-		// Verify reservation was rolled back
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsRolledBack())
 
 		dataManager.Cleanup()
 	}, testOptions())
@@ -200,12 +191,6 @@ func TestEventListeners_handleUploadCompleted_WithoutReservation(t *testing.T) {
 		// Handle upload completed event without reservation
 		err := service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, nil, true)
 		require.NoError(t, err)
-
-		// Verify no reservation was created
-		var count int64
-		err = ctx.DB().Model(&pluginModels.QuotaReservation{}).Where("user_id = ?", userID).Count(&count).Error
-		require.NoError(t, err)
-		assert.Equal(t, int64(0), count)
 
 		// Verify usage detail was created
 		var usageDetails []pluginModels.UserUsageDetail
@@ -259,30 +244,28 @@ func TestEventListeners_handleDownloadCompleted_WithReservation_Success(t *testi
 		}, nil).Once()
 
 		// Create a reservation first
-		result, err := service.CheckDownloadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation(ip))
+		result, err := service.CheckDownloadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result.Allowed)
-		require.NotNil(t, result.ReservationID)
+		require.NotNil(t, result.Reservation)
+		reservationUUID := result.Reservation.UUID()
 
-		reservationID := *result.ReservationID
-
-		// Verify reservation is pending
-		var reservation pluginModels.QuotaReservation
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsPending())
-		assert.Nil(t, reservation.UploadID)
+		// Verify reservation exists
+		reservation := service.GetReservationManager().GetReservation(reservationUUID)
+		require.NotNil(t, reservation)
+		assert.Equal(t, userID, reservation.UserID())
 
 		// Handle download completed event with reservation
-		err = service.handleDownloadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationID, true)
+		err = service.handleDownloadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationUUID, true)
 		require.NoError(t, err)
 
-		// Verify reservation was committed
-		err = ctx.DB().First(&reservation, reservationID).Error
+		// Verify reservation was released
+		reservation = service.GetReservationManager().GetReservation(reservationUUID)
+		assert.Nil(t, reservation, "reservation should be released after download completes")
+
+		// The calling code must explicitly call RecordDownload after successful download
+		err = service.RecordDownload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
-		assert.True(t, reservation.IsCommitted())
-		assert.NotNil(t, reservation.UploadID)
-		assert.Equal(t, uploadID, *reservation.UploadID)
 
 		// Verify usage detail was created
 		var usageDetails []pluginModels.UserUsageDetail
@@ -324,12 +307,6 @@ func TestEventListeners_handleDownloadCompleted_WithoutReservation(t *testing.T)
 		err := service.handleDownloadCompleted(ctx, uploadID, bytes, ip, &userID, nil, true)
 		require.NoError(t, err)
 
-		// Verify no reservation was created
-		var count int64
-		err = ctx.DB().Model(&pluginModels.QuotaReservation{}).Where("user_id = ?", userID).Count(&count).Error
-		require.NoError(t, err)
-		assert.Equal(t, int64(0), count)
-
 		// Verify usage detail was created
 		var usageDetails []pluginModels.UserUsageDetail
 		err = ctx.DB().Where("user_id = ? AND upload_id = ?", userID, uploadID).Find(&usageDetails).Error
@@ -352,7 +329,6 @@ func TestQuotaService_CheckUploadQuota_WithReservation_IncludesPending(t *testin
 		uploadLimit := int64(2000)
 		storageLimit := int64(0)
 		downloadLimit := int64(0)
-		ip := "192.168.1.1"
 
 		// Create user quota config with upload limit
 		limits := &testdata.TestUserLimits{
@@ -380,10 +356,10 @@ func TestQuotaService_CheckUploadQuota_WithReservation_IncludesPending(t *testin
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
 		}, nil).Once()
 
-		result1, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation(ip))
+		result1, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result1.Allowed)
-		require.NotNil(t, result1.ReservationID)
+		require.NotNil(t, result1.Reservation)
 
 		// Create second reservation (500 bytes) - should succeed
 		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil).Once()
@@ -393,10 +369,10 @@ func TestQuotaService_CheckUploadQuota_WithReservation_IncludesPending(t *testin
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
 		}, nil).Once()
 
-		result2, err := service.CheckUploadQuota(ctx, userID, 500, pluginCore.WithCreateReservation(ip))
+		result2, err := service.CheckUploadQuota(ctx, userID, 500, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result2.Allowed)
-		require.NotNil(t, result2.ReservationID)
+		require.NotNil(t, result2.Reservation)
 
 		// Try to create third reservation (1000 bytes) - should fail
 		// Total: 1000 + 500 + 1000 = 2500 > limit of 2000
@@ -407,14 +383,13 @@ func TestQuotaService_CheckUploadQuota_WithReservation_IncludesPending(t *testin
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonLimitExceeded),
 		}, nil).Once()
 
-		result3, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation(ip))
+		result3, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.False(t, result3.Allowed)
 		assert.Equal(t, pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonLimitExceeded), result3.Reason)
 
 		// Release first reservation
-		err = result1.ReleaseReservation(ctx)
-		require.NoError(t, err)
+		result1.ReleaseReservation()
 
 		// Now third reservation should succeed (only 500 pending)
 		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil).Once()
@@ -424,10 +399,10 @@ func TestQuotaService_CheckUploadQuota_WithReservation_IncludesPending(t *testin
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
 		}, nil).Once()
 
-		result4, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation(ip))
+		result4, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result4.Allowed)
-		require.NotNil(t, result4.ReservationID)
+		require.NotNil(t, result4.Reservation)
 
 		dataManager.Cleanup()
 	}, testOptions())
@@ -443,7 +418,6 @@ func TestQuotaService_CheckUploadQuota_WithoutReservation_DoesNotIncludePending(
 		uploadLimit := int64(2000)
 		storageLimit := int64(0)
 		downloadLimit := int64(0)
-		ip := "192.168.1.1"
 
 		// Create user quota config with upload limit
 		limits := &testdata.TestUserLimits{
@@ -471,10 +445,10 @@ func TestQuotaService_CheckUploadQuota_WithoutReservation_DoesNotIncludePending(
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
 		}, nil).Once()
 
-		result1, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation(ip))
+		result1, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result1.Allowed)
-		require.NotNil(t, result1.ReservationID)
+		require.NotNil(t, result1.Reservation)
 
 		// Check quota WITHOUT reservation option - should not count pending
 		// This allows the check to succeed even though there's a pending reservation
@@ -488,7 +462,7 @@ func TestQuotaService_CheckUploadQuota_WithoutReservation_DoesNotIncludePending(
 		result2, err := service.CheckUploadQuota(ctx, userID, 1500)
 		require.NoError(t, err)
 		require.True(t, result2.Allowed)
-		assert.Nil(t, result2.ReservationID)
+		assert.Nil(t, result2.Reservation)
 
 		// But checking WITH reservation option should still count pending
 		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil).Once()
@@ -498,14 +472,13 @@ func TestQuotaService_CheckUploadQuota_WithoutReservation_DoesNotIncludePending(
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonLimitExceeded),
 		}, nil).Once()
 
-		result3, err := service.CheckUploadQuota(ctx, userID, 1500, pluginCore.WithCreateReservation(ip))
+		result3, err := service.CheckUploadQuota(ctx, userID, 1500, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.False(t, result3.Allowed) // 1000 + 1500 = 2500 > 2000
 		assert.Equal(t, pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonLimitExceeded), result3.Reason)
 
 		// Clean up
-		err = result1.ReleaseReservation(ctx)
-		require.NoError(t, err)
+		result1.ReleaseReservation()
 
 		dataManager.Cleanup()
 	}, testOptions())
@@ -519,7 +492,6 @@ func TestQuotaService_ReleaseReservation_ViaManager(t *testing.T) {
 		dataManager := testdata.NewTestDataManager(ctx)
 		userID := dataManager.GenerateUserID()
 		bytes := uint64(1000)
-		ip := "192.168.1.1"
 
 		// Create user quota config
 		uploadLimit := int64(0)
@@ -550,21 +522,22 @@ func TestQuotaService_ReleaseReservation_ViaManager(t *testing.T) {
 		}, nil).Once()
 
 		// Create a reservation
-		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation(ip))
+		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
-		require.NotNil(t, result.ReservationID)
+		require.NotNil(t, result.Reservation)
 
-		reservationID := *result.ReservationID
+		reservationUUID := result.Reservation.UUID()
 
-		// Release the reservation using service.ReleaseReservation
-		err = service.ReleaseReservation(ctx, reservationID)
-		require.NoError(t, err)
+		// Verify reservation exists
+		reservation := service.GetReservationManager().GetReservation(reservationUUID)
+		require.NotNil(t, reservation)
 
-		// Verify reservation was rolled back
-		var reservation pluginModels.QuotaReservation
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsRolledBack())
+		// Release the reservation
+		reservation.Release()
+
+		// Verify reservation was released (no longer in memory)
+		reservation = service.GetReservationManager().GetReservation(reservationUUID)
+		assert.Nil(t, reservation, "reservation should be released")
 
 		dataManager.Cleanup()
 	}, testOptions())
@@ -610,27 +583,28 @@ func TestQuotaService_ReservationWorkflow_EndToEnd(t *testing.T) {
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
 		}, nil).Once()
 
-		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation(ip))
+		result, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result.Allowed)
-		require.NotNil(t, result.ReservationID)
+		require.NotNil(t, result.Reservation)
 
-		reservationID := *result.ReservationID
+		reservationUUID := result.Reservation.UUID()
 
-		// Step 2: Verify reservation is pending
-		var reservation pluginModels.QuotaReservation
-		err = ctx.DB().First(&reservation, reservationID).Error
-		require.NoError(t, err)
-		assert.True(t, reservation.IsPending())
+		// Step 2: Verify reservation exists in memory
+		reservation := service.GetReservationManager().GetReservation(reservationUUID)
+		require.NotNil(t, reservation)
 
 		// Step 3: Handle upload completed event
-		err = service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationID, true)
+		err = service.handleUploadCompleted(ctx, uploadID, bytes, ip, &userID, &reservationUUID, true)
 		require.NoError(t, err)
 
-		// Step 4: Verify reservation was committed
-		err = ctx.DB().First(&reservation, reservationID).Error
+		// Step 4: Verify reservation was released
+		reservation = service.GetReservationManager().GetReservation(reservationUUID)
+		assert.Nil(t, reservation, "reservation should be released after upload completes")
+
+		// The calling code must explicitly call RecordUpload after successful upload
+		err = service.RecordUpload(ctx, userID, uploadID, bytes, ip)
 		require.NoError(t, err)
-		assert.True(t, reservation.IsCommitted())
 
 		// Step 5: Verify usage was recorded
 		var usageDetails []pluginModels.UserUsageDetail
@@ -646,9 +620,157 @@ func TestQuotaService_ReservationWorkflow_EndToEnd(t *testing.T) {
 			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
 		}, nil).Once()
 
-		result2, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation(ip))
+		result2, err := service.CheckUploadQuota(ctx, userID, bytes, pluginCore.WithCreateReservation())
 		require.NoError(t, err)
 		require.True(t, result2.Allowed)
+
+		dataManager.Cleanup()
+	}, testOptions())
+}
+
+func TestQuotaService_ReleaseReservation_SafeNoOp(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Get quota service from context
+		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		dataManager := testdata.NewTestDataManager(ctx)
+		userID := dataManager.GenerateUserID()
+
+		// Create user quota config
+		uploadLimit := int64(0)
+		storageLimit := int64(0)
+		downloadLimit := int64(0)
+		limits := &testdata.TestUserLimits{
+			StorageLimitBytes:  &storageLimit,
+			UploadLimitBytes:   &uploadLimit,
+			DownloadLimitBytes: &downloadLimit,
+		}
+		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
+
+		// Try to get a non-existent reservation - should return nil
+		reservation := service.GetReservationManager().GetReservation("non-existent-uuid")
+		assert.Nil(t, reservation, "non-existent reservation should return nil")
+
+		dataManager.Cleanup()
+	}, testOptions())
+}
+
+func TestQuotaService_ReservationReleaseOnMultipleCalls(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Get quota service from context
+		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		dataManager := testdata.NewTestDataManager(ctx)
+		userID := dataManager.GenerateUserID()
+
+		// Create user quota config
+		uploadLimit := int64(0)
+		storageLimit := int64(0)
+		downloadLimit := int64(0)
+		limits := &testdata.TestUserLimits{
+			StorageLimitBytes:  &storageLimit,
+			UploadLimitBytes:   &uploadLimit,
+			DownloadLimitBytes: &downloadLimit,
+		}
+		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
+
+		// Mock config manager
+		mockConfigManager := pluginCore.NewMockConfigManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+		service.configManager = mockConfigManager
+
+		userConfig := &pluginModels.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+
+		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil).Once()
+		mockConfigManager.EXPECT().GetPolicyEnforcer(mock.Anything, userID).Return(mockPolicyEnforcer, nil).Once()
+		mockPolicyEnforcer.EXPECT().CheckUploadQuota(mock.Anything, mock.AnythingOfType("*models.UserQuotaConfig"), uint64(1000)).Return(pluginCore.QuotaCheckResult{
+			Allowed: true,
+			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
+		}, nil).Once()
+
+		// Create a reservation
+		result, err := service.CheckUploadQuota(ctx, userID, 1000, pluginCore.WithCreateReservation())
+		require.NoError(t, err)
+		require.NotNil(t, result.Reservation)
+
+		reservationUUID := result.Reservation.UUID()
+
+		// Release multiple times - should be safe
+		result.ReleaseReservation()
+		result.ReleaseReservation()
+		result.ReleaseReservation()
+
+		// Verify reservation is gone
+		reservation := service.GetReservationManager().GetReservation(reservationUUID)
+		assert.Nil(t, reservation)
+
+		dataManager.Cleanup()
+	}, testOptions())
+}
+
+// Additional test to verify reservation tracking across operations
+func TestQuotaService_ReservationTrackingWithPendingBytes(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		// Get quota service from context
+		service := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		dataManager := testdata.NewTestDataManager(ctx)
+		userID := dataManager.GenerateUserID()
+		uploadLimit := int64(5000)
+		storageLimit := int64(0)
+		downloadLimit := int64(0)
+
+		// Create user quota config
+		limits := &testdata.TestUserLimits{
+			StorageLimitBytes:  &storageLimit,
+			UploadLimitBytes:   &uploadLimit,
+			DownloadLimitBytes: &downloadLimit,
+		}
+		dataManager.CreateUser(userID, pluginModels.EnforcementPolicyHardLimits, limits)
+
+		// Mock config manager
+		mockConfigManager := pluginCore.NewMockConfigManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+		service.configManager = mockConfigManager
+
+		userConfig := &pluginModels.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+
+		// Create multiple reservations
+		for i := 0; i < 5; i++ {
+			mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil).Once()
+			mockConfigManager.EXPECT().GetPolicyEnforcer(mock.Anything, userID).Return(mockPolicyEnforcer, nil).Once()
+			mockPolicyEnforcer.EXPECT().CheckUploadQuota(mock.Anything, mock.AnythingOfType("*models.UserQuotaConfig"), uint64(500)).Return(pluginCore.QuotaCheckResult{
+				Allowed: true,
+				Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonOK),
+			}, nil).Once()
+
+			result, err := service.CheckUploadQuota(ctx, userID, 500, pluginCore.WithCreateReservation())
+			require.NoError(t, err)
+			require.True(t, result.Allowed)
+			require.NotNil(t, result.Reservation)
+		}
+
+		// Verify pending bytes are tracked correctly
+		pendingBytes := service.GetReservationManager().SumPendingBytesForUser(ctx, userID, pluginCore.UsageTypeUpload)
+		assert.Equal(t, int64(2500), pendingBytes, "5 reservations of 500 bytes each = 2500 pending")
+
+		// Try to exceed the limit (2500 + 3000 = 5500 > 5000)
+		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(userConfig, nil).Once()
+		mockConfigManager.EXPECT().GetPolicyEnforcer(mock.Anything, userID).Return(mockPolicyEnforcer, nil).Once()
+		mockPolicyEnforcer.EXPECT().CheckUploadQuota(mock.Anything, mock.AnythingOfType("*models.UserQuotaConfig"), uint64(3000)).Return(pluginCore.QuotaCheckResult{
+			Allowed: false,
+			Reason:  pluginCore.QuotaCheckReason(pluginModels.QuotaCheckReasonLimitExceeded),
+		}, nil).Once()
+
+		result, err := service.CheckUploadQuota(ctx, userID, 3000, pluginCore.WithCreateReservation())
+		require.NoError(t, err)
+		require.False(t, result.Allowed)
 
 		dataManager.Cleanup()
 	}, testOptions())

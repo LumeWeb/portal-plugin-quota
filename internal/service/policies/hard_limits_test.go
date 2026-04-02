@@ -35,7 +35,7 @@ func newHardLimitsTest(t *testing.T) (coreTesting.TestContext, *pluginCore.MockQ
 // TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error tests upload with nil config
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_NilConfig_Unit_Error(t *testing.T) {
 	ctx, _, um, _, rm, enforcer := newHardLimitsTest(t)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 	um.EXPECT().RecordUpload(ctx, uint(0), uint(0), uint64(0), "").Return(nil).Maybe()
 
 	result, err := enforcer.CheckUploadQuota(ctx, nil, uint64(500))
@@ -66,7 +66,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Unit_Allow
 
 	// Mock quota plan manager calls
 	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(0), nil)
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(int64(0))
 
 	// Mock usage aggregator to return window-based usage
 	now := time.Now()
@@ -106,7 +106,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Bl
 
 	// Mock default quota plan lookup to return not found
 	qpm.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(0), nil)
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(int64(0))
 
 	// Mock usage aggregator to return window-based usage
 	now := time.Now()
@@ -125,7 +125,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Unit_Bl
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *testing.T) {
 	ctx, _, _, _, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	windowDuration := int64(86400)
 	windowStartHour := 0
@@ -153,7 +153,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_InvalidBytes_Unit_Error(t *
 func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *testing.T) {
 	ctx, _, _, _, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	result, err := enforcer.CheckDownloadQuota(ctx, nil, uint64(500))
 	assert.Error(t, err)
@@ -166,7 +166,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_NilConfig_Unit_Error(t *tes
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_Unit_Success(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
@@ -209,7 +209,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanWithNilLimits_
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Success(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
@@ -253,7 +253,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_QuotaPlanLimits_Unit_Su
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Unit_Success(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	planID := uint64(1)
@@ -299,7 +299,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_CustomOverridesPlan_Uni
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Success(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
@@ -341,7 +341,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_DefaultPlan_Unit_Succes
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Unit_Error(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
@@ -370,7 +370,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_InactiveDefaultPlan_Uni
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit_Error(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	config := &models.UserQuotaConfig{
@@ -392,7 +392,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_NoLimitsConfigured_Unit
 func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	planID := uint64(999) // Non-existent plan ID
@@ -416,7 +416,7 @@ func TestHardLimitsPolicyEnforcer_ResolveEffectiveLimits_PlanNotFound_Unit_Error
 func TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error(t *testing.T) {
 	ctx, _, _, qpm, rm, enforcer := newHardLimitsTest(t)
 	dataManager := testdata.NewTestDataManager(ctx)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 
 	userID := dataManager.NextUserID()
 	planID := uint64(999) // Non-existent plan ID
@@ -440,7 +440,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_PlanNotFound_Unit_Error(t *te
 // TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success tests the GetDetailedUsage method with mocks
 func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 	ctx, _, um, _, rm, enforcer := newHardLimitsTest(t)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -481,7 +481,7 @@ func TestHardLimitsPolicyEnforcer_GetDetailedUsage_Unit_Success(t *testing.T) {
 // TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success tests the GetCurrentUsage method with mocks
 func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
 	ctx, _, um, _, rm, enforcer := newHardLimitsTest(t)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()
@@ -509,7 +509,7 @@ func TestHardLimitsPolicyEnforcer_GetCurrentUsage_Unit_Success(t *testing.T) {
 // TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success tests the GetUsageHistory method with mocks
 func TestHardLimitsPolicyEnforcer_GetUsageHistory_Unit_Success(t *testing.T) {
 	ctx, _, um, _, rm, enforcer := newHardLimitsTest(t)
-	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(uint64(0), nil).Maybe()
+	rm.EXPECT().SumPendingBytesForUser(mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("models.UsageType")).Return(int64(0)).Maybe()
 	dataManager := testdata.NewTestDataManager(ctx)
 
 	userID := dataManager.NextUserID()

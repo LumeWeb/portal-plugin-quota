@@ -31,7 +31,7 @@ func TestPolicyIntegration_PolicySwitching_HardLimitsToUnlimited(t *testing.T) {
 		quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(int64(0)).Maybe()
 
 		// Setup hard limits config
 		hardLimitsConfig := &models.UserQuotaConfig{
@@ -83,7 +83,7 @@ func TestPolicyIntegration_PolicySwitching_UnlimitedToThreshold(t *testing.T) {
 		quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 		quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 		mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(int64(0)).Maybe()
 
 		// Test unlimited policy first
 		unlimitedConfig := &models.UserQuotaConfig{
@@ -151,7 +151,7 @@ func TestPolicyIntegration_MixedPolicies(t *testing.T) {
 		quotaService1.EXPECT().GetUsageManager().Return(mockUsageManager1)
 		quotaService1.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager1).Maybe()
 		quotaService1.EXPECT().GetReservationManager().Return(mockReservationManager1).Maybe()
-		mockReservationManager1.EXPECT().SumPendingBytesForUser(mock.Anything, user1ID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+		mockReservationManager1.EXPECT().SumPendingBytesForUser(mock.Anything, user1ID, models.UsageTypeUpload).Return(int64(0)).Maybe()
 
 		// Setup mocks for all three policy types
 		mockUsageManager1.EXPECT().GetUserQuotaConfig(ctx, user1ID).Return(&models.UserQuotaConfig{
@@ -264,7 +264,7 @@ func TestPolicyIntegration_ValidationConsistency(t *testing.T) {
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager).Maybe()
 			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager).Maybe()
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.Anything, mock.Anything).Return(uint64(0), nil).Maybe()
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, mock.Anything, mock.Anything).Return(int64(0)).Maybe()
 
 			return quotaService
 		}

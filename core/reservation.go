@@ -1,36 +1,62 @@
 package core
 
-import (
-	"context"
+import "context"
 
-	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
-)
-
-// ReservationManager handles quota reservations
+// ReservationManager provides quota reservation capabilities. Reservations
+// hold quota capacity during operations and must be released when complete.
+//
+// This is an in-memory interface. Implementations track reservations in memory
+// and automatically clean them up when released.
 type ReservationManager interface {
-	// CreateReservation creates a new quota reservation
-	CreateReservation(ctx context.Context, userID uint, usageType UsageType, bytes uint64, ip string) (*models.QuotaReservation, error)
+	// Reserve creates a new quota reservation.
+	//
+	// The returned Reservation must be released by calling Release().
+	// It is recommended to use defer to ensure the reservation is always released:
+	//
+	//	reservation, err := reservationManager.Reserve(ctx, userID, usageType, bytes)
+	//	if err != nil {
+	//	    return err
+	//	}
+	//	defer reservation.Release()
+	//
+	// Parameters:
+	//   - ctx: Context for cancellation and timeout
+	//   - userID: User ID to reserve quota for
+	//   - usageType: Type of usage (UPLOAD, DOWNLOAD, STORAGE_ADD)
+	//   - bytes: Number of bytes to reserve
+	//
+	// Returns:
+	//   - Reservation: Handle that must be released when done
+	//   - error: Error if reservation fails (e.g., quota exceeded)
+	Reserve(ctx context.Context, userID uint, usageType UsageType, bytes int64) (Reservation, error)
 
-	// CommitReservation commits a reservation to a usage record
-	CommitReservation(ctx context.Context, reservationID uint, uploadID uint) error
+	// GetReservation retrieves a reservation by its UUID.
+	// Returns nil if the reservation is not found or has been released.
+	GetReservation(uuid string) Reservation
 
-	// ReleaseReservation releases a reservation
-	ReleaseReservation(ctx context.Context, reservationID uint) error
+	// SumPendingBytesForUser returns the total bytes currently reserved for a user
+	// and usage type. This is used during quota checks to prevent over-allocation.
+	SumPendingBytesForUser(ctx context.Context, userID uint, usageType UsageType) int64
+}
 
-	// GetReservationByID retrieves a reservation
-	GetReservationByID(ctx context.Context, reservationID uint) (*models.QuotaReservation, error)
+// Reservation represents a held quota reservation that must be released.
+// The Reservation handle ensures that reserved quota is properly released,
+// preventing quota leakage.
+type Reservation interface {
+	// Release releases the reservation, returning the quota to the pool.
+	// Calling Release multiple times is safe - subsequent calls are no-ops.
+	// It is recommended to use defer to ensure the reservation is always released.
+	Release()
 
-	// GetPendingReservationsForUser gets all pending reservations for a user
-	GetPendingReservationsForUser(ctx context.Context, userID uint) ([]*models.QuotaReservation, error)
+	// UUID returns the unique identifier for this reservation.
+	UUID() string
 
-	// SumPendingBytesForUser sums pending reservation bytes for a user and type
-	SumPendingBytesForUser(ctx context.Context, userID uint, usageType UsageType) (uint64, error)
+	// UserID returns the user ID for this reservation.
+	UserID() uint
 
-	// CleanupStaleReservations releases pending reservations older than configured timeout
-	// This cleans up for ALL users and should be called periodically
-	CleanupStaleReservations(ctx context.Context) (int64, error)
+	// UsageType returns the usage type for this reservation.
+	UsageType() UsageType
 
-	// CleanupStaleReservationsForUser releases pending reservations for a specific user
-	// Optimized for hot path cleanup during quota checks
-	CleanupStaleReservationsForUser(ctx context.Context, userID uint) (int64, error)
+	// Bytes returns the number of bytes reserved.
+	Bytes() int64
 }

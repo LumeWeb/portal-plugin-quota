@@ -3,19 +3,20 @@ package core
 // CheckOptions configures quota check behavior
 type CheckOptions struct {
     CreateReservation bool
-    IP               string // IP address for the reservation
 }
 
+// CheckOption is a function that modifies CheckOptions configuration
+type CheckOption func(*CheckOptions)
+
 // WithCreateReservation creates a reservation during quota check
-func WithCreateReservation(ip string) func(*CheckOptions) {
+func WithCreateReservation() CheckOption {
     return func(opts *CheckOptions) {
         opts.CreateReservation = true
-        opts.IP = ip
     }
 }
 
 // ParseOptions merges check options
-func ParseOptions(opts ...func(*CheckOptions)) CheckOptions {
+func ParseOptions(opts ...CheckOption) CheckOptions {
     checkOpts := CheckOptions{
         CreateReservation: false,
     }

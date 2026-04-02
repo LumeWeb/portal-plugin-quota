@@ -46,7 +46,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager)
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil)
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(int64(0))
 			quotaWindowDuration := int64(86400) // 1 day in seconds
 			quotaWindowStartHour := 0
 			quotaWindowTimezone := "UTC"
@@ -76,7 +76,7 @@ func TestPerformance_LargeByteValues(t *testing.T) {
 			// GetUsageManager is called once by CheckUploadQuota and potentially by getEffectiveLimits
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
 			// CheckUploadQuota calls GetAggregatedUsageByType once for upload total limit check
-			mockUsageManager.EXPECT().GetAggregatedUsageByType(ctx, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+			mockUsageManager.EXPECT().GetAggregatedUsageByType(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
 			
 			// Mock GetUsageForWindow with exact window parameters matching production code
 			windowDuration := int64(86400)
@@ -190,7 +190,7 @@ func TestPerformance_RapidSuccessiveOperations(t *testing.T) {
 			quotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 			quotaService.EXPECT().GetReservationManager().Return(mockReservationManager)
 			quotaService.EXPECT().GetUsageManager().Return(mockUsageManager).Maybe()
-			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil).Maybe()
+			mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(int64(0)).Maybe()
 
 			// Setup mocks that will be called multiple times
 			mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, gorm.ErrRecordNotFound).Maybe()

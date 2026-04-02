@@ -22,9 +22,9 @@ type QuotaService interface {
 
 	// Quota Checking (returns allowed + reason)
 	// Options can be provided to configure reservation behavior
-	CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error)
-	CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error)
-	CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...func(*CheckOptions)) (QuotaCheckResult, error)
+	CheckUploadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...CheckOption) (QuotaCheckResult, error)
+	CheckDownloadQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...CheckOption) (QuotaCheckResult, error)
+	CheckStorageQuota(ctx context.Context, userID uint, requestedBytes uint64, opts ...CheckOption) (QuotaCheckResult, error)
 
 	// Usage Analytics
 	GetCurrentUsage(ctx context.Context, userID uint) (*Usage, error)
@@ -86,13 +86,6 @@ type QuotaService interface {
 	// CID-based quota availability check
 	// Checks if there are any users with sufficient quota to handle an operation on content identified by CID
 	CheckCIDGroupQuotaAvailability(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType UsageType) (bool, error)
-
-	// Reservation Management
-	// Commit a reservation after successful operation, converting it to a usage record
-	CommitReservation(ctx context.Context, reservationID uint, uploadID uint) error
-
-	// Release a reservation if operation fails, restoring the quota
-	ReleaseReservation(ctx context.Context, reservationID uint) error
 }
 
 // QuotaPlanManager abstracts database operations related to quota plans

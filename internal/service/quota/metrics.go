@@ -7,15 +7,16 @@ import (
 )
 
 const (
-	MetricUploadChecked    = "upload_quota_checked_total"
-	MetricDownloadChecked  = "download_quota_checked_total"
-	MetricStorageChecked   = "storage_quota_checked_total"
-	MetricUploadRecorded   = "upload_recorded_total"
-	MetricDownloadRecorded = "download_recorded_total"
-	MetricStorageRecorded  = "storage_recorded_total"
-	MetricAllowanceAdded   = "allowance_added_total"
-	MetricAllowanceBalance = "allowance_balance_bytes"
-	MetricDuration         = "operation_duration_seconds"
+	MetricUploadChecked     = "upload_quota_checked_total"
+	MetricDownloadChecked   = "download_quota_checked_total"
+	MetricStorageChecked    = "storage_quota_checked_total"
+	MetricUploadRecorded    = "upload_recorded_total"
+	MetricDownloadRecorded  = "download_recorded_total"
+	MetricDownloadFailed    = "download_failed_total"
+	MetricStorageRecorded   = "storage_recorded_total"
+	MetricAllowanceAdded    = "allowance_added_total"
+	MetricAllowanceBalance  = "allowance_balance_bytes"
+	MetricDuration          = "operation_duration_seconds"
 )
 
 const (
@@ -35,6 +36,7 @@ var (
 	StorageChecked    *prometheus.CounterVec
 	UploadRecorded    *prometheus.CounterVec
 	DownloadRecorded  *prometheus.CounterVec
+	DownloadFailed    *prometheus.CounterVec
 	StorageRecorded   *prometheus.CounterVec
 	AllowanceAdded    *prometheus.CounterVec
 	AllowanceBalance  *prometheus.GaugeVec
@@ -87,6 +89,15 @@ func init() {
 		[]string{"status"},
 	)
 
+	DownloadFailed = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:      MetricDownloadFailed,
+			Subsystem: pluginCore.QUOTA_SERVICE,
+			Help:      "Total number of failed downloads",
+		},
+		[]string{},
+	)
+
 	StorageRecorded = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:      MetricStorageRecorded,
@@ -132,6 +143,7 @@ func GetCollectors() []prometheus.Collector {
 		StorageChecked,
 		UploadRecorded,
 		DownloadRecorded,
+		DownloadFailed,
 		StorageRecorded,
 		AllowanceAdded,
 		AllowanceBalance,

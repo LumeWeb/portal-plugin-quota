@@ -66,11 +66,8 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(ctx context.Context, config 
 			}
 
 			// Query pending reservations
-			pendingBytes, err := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeUpload)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get pending reservation bytes: %w", err)
-			}
-			currentUsage += pendingBytes
+			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeUpload)
+			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
 
@@ -133,11 +130,8 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(ctx context.Context, confi
 			}
 
 			// Query pending reservations
-			pendingBytes, err := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeDownload)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get pending reservation bytes: %w", err)
-			}
-			currentUsage += pendingBytes
+			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeDownload)
+			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
 
@@ -200,11 +194,8 @@ func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(ctx context.Context, config
 			}
 
 			// Query pending reservations
-			pendingBytes, err := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeStorageAdd)
-			if err != nil {
-				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get pending reservation bytes: %w", err)
-			}
-			currentUsage += pendingBytes
+			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeStorageAdd)
+			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
 

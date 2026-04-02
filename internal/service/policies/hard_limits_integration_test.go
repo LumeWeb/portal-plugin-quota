@@ -39,7 +39,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_WithinDailyLimit_Integration_
 
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), models.UsageTypeUpload).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), models.UsageTypeUpload).Return(int64(0))
 
 	// Mock usage for the window
 	window := pluginCore.LimitWindow{
@@ -90,7 +90,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingDailyLimit_Integrati
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeUpload).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeUpload).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeUpload, window).Return(uint64(800), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(300))
@@ -132,7 +132,7 @@ func TestHardLimitsPolicyEnforcer_CheckUploadQuota_ExceedingTotalLimit_Integrati
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(3), models.UsageTypeUpload).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(3), models.UsageTypeUpload).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(3), models.UsageTypeUpload, window).Return(uint64(9900), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckUploadQuota(ctx, config, uint64(200))
@@ -173,7 +173,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_WithinDailyLimit_Integratio
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), models.UsageTypeDownload).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), models.UsageTypeDownload).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeDownload, window).Return(uint64(500), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(1000))
@@ -216,7 +216,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingDailyLimit_Integra
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeDownload).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeDownload).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeDownload, window).Return(uint64(1800), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(300))
@@ -258,7 +258,7 @@ func TestHardLimitsPolicyEnforcer_CheckDownloadQuota_ExceedingTotalLimit_Integra
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(3), models.UsageTypeDownload).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(3), models.UsageTypeDownload).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(3), models.UsageTypeDownload, window).Return(uint64(9900), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckDownloadQuota(ctx, config, uint64(200))
@@ -298,7 +298,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_WithinStorageLimit_Integrati
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), models.UsageTypeStorageAdd).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), models.UsageTypeStorageAdd).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(1), models.UsageTypeStorageAdd, window).Return(uint64(500), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckStorageQuota(ctx, config, uint64(1500))
@@ -340,7 +340,7 @@ func TestHardLimitsPolicyEnforcer_CheckStorageQuota_ExceedingStorageLimit_Integr
 	}
 	mockQuotaService.EXPECT().GetQuotaPlanManager().Return(mockQuotaPlanManager)
 	mockQuotaPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(&models.QuotaPlan{}, nil)
-	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeStorageAdd).Return(uint64(0), nil)
+	mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(2), models.UsageTypeStorageAdd).Return(int64(0))
 	mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, uint(2), models.UsageTypeStorageAdd, window).Return(uint64(2800), time.Now(), time.Now(), nil)
 
 	result, err := enforcer.CheckStorageQuota(ctx, config, uint64(300))
@@ -390,7 +390,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_SuccessfulUploadRecording_Integra
 			StartHour: config.WindowStartHour,
 			Timezone:  config.WindowTimezone,
 		}
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(int64(0))
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeUpload, window).Return(uint64(0), time.Now(), time.Now(), nil)
 
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
@@ -454,7 +454,7 @@ func TestHardLimitsPolicyEnforcer_RecordUpload_ExceedsQuota_Integration_Error(t 
 			StartHour: config.WindowStartHour,
 			Timezone:  config.WindowTimezone,
 		}
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(uint64(0), nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeUpload).Return(int64(0))
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeUpload, window).Return(uint64(900), time.Now(), time.Now(), nil)
 
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
@@ -509,7 +509,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_SuccessfulDownloadRecording_Int
 			StartHour: config.WindowStartHour,
 			Timezone:  config.WindowTimezone,
 		}
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(0), nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(int64(0))
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeDownload, window).Return(uint64(0), time.Now(), time.Now(), nil)
 
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
@@ -573,7 +573,7 @@ func TestHardLimitsPolicyEnforcer_RecordDownload_ExceedsQuota_Integration_Error(
 			StartHour: config.WindowStartHour,
 			Timezone:  config.WindowTimezone,
 		}
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(uint64(0), nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeDownload).Return(int64(0))
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeDownload, window).Return(uint64(900), time.Now(), time.Now(), nil)
 
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)
@@ -628,7 +628,7 @@ func TestHardLimitsPolicyEnforcer_RecordStorageChange_SuccessfulStorageRecording
 			StartHour: config.WindowStartHour,
 			Timezone:  config.WindowTimezone,
 		}
-		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeStorageAdd).Return(uint64(0), nil)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, userID, models.UsageTypeStorageAdd).Return(int64(0))
 		mockUsageManager.EXPECT().GetUsageForWindow(mock.Anything, userID, models.UsageTypeStorageAdd, window).Return(uint64(0), time.Now(), time.Now(), nil)
 
 		mockUsageManager.EXPECT().GetUserQuotaConfig(mock.Anything, userID).Return(config, nil)

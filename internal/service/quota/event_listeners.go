@@ -9,7 +9,6 @@ import (
 	"go.lumeweb.com/portal/core"
 	portalModels "go.lumeweb.com/portal/db/models"
 	portalEvent "go.lumeweb.com/portal/event"
-	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	"go.uber.org/zap"
 )
 
@@ -150,21 +149,17 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploa
 	// If reservation exists, handle it atomically with recording
 	if reservationUUID != nil {
 		// Acquire user lock to make reservation release + usage recording atomic
-		// Note: For anonymous downloads (effectiveUserID == 0), we skip locking since
-		// there's no user-specific quota to protect
-		var lock quotaLock.Lock
-		var lockErr error
-		if effectiveUserID > 0 {
-			lock, lockErr = s.lockManager.AcquireLock(ctx, effectiveUserID)
-			if lockErr != nil {
-				s.Logger().Error("Failed to acquire user lock for download completed",
-					zap.Uint("effectiveUserID", effectiveUserID),
-					zap.String("reservation_uuid", *reservationUUID),
-					zap.Error(lockErr))
-				return lockErr
-			}
-			defer lock.Release()
+		// The lock manager returns a no-op lock for anonymous operations (effectiveUserID == 0),
+		// which avoids serialized all anonymous operations as a global mutex
+		lock, err := s.lockManager.AcquireLock(ctx, effectiveUserID)
+		if err != nil {
+			s.Logger().Error("Failed to acquire user lock for download completed",
+				zap.Uint("effectiveUserID", effectiveUserID),
+				zap.String("reservation_uuid", *reservationUUID),
+				zap.Error(err))
+			return err
 		}
+		defer lock.Release()
 
 		reservation := s.reservationManager.GetReservation(*reservationUUID)
 		if reservation != nil {

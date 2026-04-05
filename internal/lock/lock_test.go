@@ -59,15 +59,19 @@ func TestLockManager_AcquireLock_Success(t *testing.T) {
 	})
 }
 
-// TestLockManager_AcquireLock_InvalidUserID tests that invalid user IDs are rejected.
-func TestLockManager_AcquireLock_InvalidUserID(t *testing.T) {
+// TestLockManager_AcquireLock_AnonymousUserID tests that anonymous user ID (0) returns a no-op lock.
+func TestLockManager_AcquireLock_AnonymousUserID(t *testing.T) {
 	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
 		lockManager := NewLockManager(ctx)
 		testCtx := context.Background()
 
-		_, err := lockManager.AcquireLock(testCtx, testInvalidID)
-		assert.Error(t, err, "invalid user ID should return error")
-		assert.Contains(t, err.Error(), "invalid user ID", "error should mention invalid user ID")
+		// Anonymous user ID (0) should return a no-op lock without error
+		lock, err := lockManager.AcquireLock(testCtx, testInvalidID)
+		assert.NoError(t, err, "anonymous user ID should return no-op lock without error")
+		assert.NotNil(t, lock, "lock should not be nil")
+
+		// Release should be safe (no-op)
+		lock.Release()
 	})
 }
 

@@ -81,8 +81,19 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 		return nil
 	}
 
-	// If reservation exists, handle it
+	// If reservation exists, handle it atomically with recording
 	if reservationUUID != nil {
+		// Acquire user lock to make reservation release + usage recording atomic
+		lock, err := s.lockManager.AcquireLock(ctx, *userID)
+		if err != nil {
+			s.Logger().Error("Failed to acquire user lock for upload completed",
+				zap.Uint("userID", *userID),
+				zap.String("reservation_uuid", *reservationUUID),
+				zap.Error(err))
+			return err
+		}
+		defer lock.Release()
+
 		reservation := s.reservationManager.GetReservation(*reservationUUID)
 		if reservation != nil {
 			s.Logger().Debug("Releasing reservation for upload",
@@ -93,6 +104,23 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 
 			// Release reservation (called regardless of success/failure)
 			reservation.Release()
+
+			// If upload was successful, record usage atomically within the lock
+			if successful {
+				s.Logger().Debug("Recording upload usage atomically",
+					zap.Uint("userID", *userID),
+					zap.Uint("uploadID", uploadID),
+					zap.Uint64("bytes", bytes))
+
+				if err := s.RecordUpload(ctx, *userID, uploadID, bytes, ip); err != nil {
+					// Log error but don't fail - the reservation has already been released
+					s.Logger().Error("Failed to record upload usage",
+						zap.Uint("userID", *userID),
+						zap.Uint("uploadID", uploadID),
+						zap.Uint64("bytes", bytes),
+						zap.Error(err))
+				}
+			}
 		}
 		return nil
 	}
@@ -118,8 +146,21 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploa
 		effectiveUserID = *userID
 	}
 
-	// If reservation exists, handle it
+	// If reservation exists, handle it atomically with recording
 	if reservationUUID != nil {
+		// Acquire user lock to make reservation release + usage recording atomic
+		// The lock manager returns a no-op lock for anonymous operations (effectiveUserID == 0),
+		// which avoids serialized all anonymous operations as a global mutex
+		lock, err := s.lockManager.AcquireLock(ctx, effectiveUserID)
+		if err != nil {
+			s.Logger().Error("Failed to acquire user lock for download completed",
+				zap.Uint("effectiveUserID", effectiveUserID),
+				zap.String("reservation_uuid", *reservationUUID),
+				zap.Error(err))
+			return err
+		}
+		defer lock.Release()
+
 		reservation := s.reservationManager.GetReservation(*reservationUUID)
 		if reservation != nil {
 			s.Logger().Debug("Releasing reservation for download",
@@ -130,17 +171,31 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploa
 
 			// Release reservation (called regardless of success/failure)
 			reservation.Release()
-		}
 
-		// Track failed downloads in metrics
-		if !successful {
-			DownloadFailed.WithLabelValues().Inc()
-			s.Logger().Debug("Download failed - reservation released",
-				zap.Uint("effectiveUserID", effectiveUserID),
-				zap.String("reservation_uuid", *reservationUUID),
-				zap.Uint64("bytes", bytes))
-		}
+			// If download was successful, record usage atomically within the lock
+			if successful {
+				s.Logger().Debug("Recording download usage atomically",
+					zap.Uint("effectiveUserID", effectiveUserID),
+					zap.Uint("uploadID", uploadID),
+					zap.Uint64("bytes", bytes))
 
+				if err := s.RecordDownload(ctx, effectiveUserID, uploadID, bytes, ip); err != nil {
+					// Log error but don't fail - the reservation has already been released
+					s.Logger().Error("Failed to record download usage",
+						zap.Uint("effectiveUserID", effectiveUserID),
+						zap.Uint("uploadID", uploadID),
+						zap.Uint64("bytes", bytes),
+						zap.Error(err))
+				}
+			} else {
+				// Track failed downloads in metrics
+				DownloadFailed.WithLabelValues().Inc()
+				s.Logger().Debug("Download failed - reservation released",
+					zap.Uint("effectiveUserID", effectiveUserID),
+					zap.String("reservation_uuid", *reservationUUID),
+					zap.Uint64("bytes", bytes))
+			}
+		}
 		return nil
 	}
 

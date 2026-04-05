@@ -2,7 +2,6 @@ package lock
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,11 +41,10 @@ func NewLockManager(ctx core.Context) LockManager {
 	}
 }
 
-// validateUserID validates the user ID and returns an error if invalid.
+// validateUserID validates the user ID. Returns no-op for userID 0 (anonymous operations).
 func (lm *LockManagerDefault) validateUserID(userID uint) error {
 	if userID == 0 {
-		lm.logger.Error("Cannot acquire lock for invalid user ID", zap.Uint("user_id", userID))
-		return errors.New("invalid user ID: user ID must be greater than 0")
+		return nil // Anonymous operations use no-op lock
 	}
 	return nil
 }
@@ -109,15 +107,28 @@ func (lm *LockManagerDefault) acquireWithSetup(ctx context.Context, userID uint,
 	return lock, nil
 }
 
+// noOpLock is a no-operation lock implementation for anonymous operations.
+// It satisfies the Lock interface but does nothing, avoiding serialization
+// of anonymous operations while maintaining a consistent API.
+type noOpLock struct{}
+
+// Release is a no-op for the no-operation lock.
+func (n *noOpLock) Release() {
+	// No-op: anonymous operations don't need locking
+}
+
 // AcquireLock acquires a lock for the specified user ID.
 // If the lock is already held, this blocks until it becomes available
 // or the context is canceled.
+// For userID 0 (anonymous operations), returns a no-op lock to avoid
+// serializing all anonymous operations as a global mutex.
 func (lm *LockManagerDefault) AcquireLock(ctx context.Context, userID uint) (Lock, error) {
 	ctx, span := core.TraceMethod(ctx, "LockManagerDefault.AcquireLock")
 	defer span.End()
 
-	if err := lm.validateUserID(userID); err != nil {
-		return nil, err
+	// Return no-op lock for anonymous operations (userID == 0)
+	if userID == 0 {
+		return &noOpLock{}, nil
 	}
 
 	lm.logger.Debug("Acquiring lock for user", zap.Uint("user_id", userID))
@@ -127,12 +138,14 @@ func (lm *LockManagerDefault) AcquireLock(ctx context.Context, userID uint) (Loc
 
 // AcquireLockWithTimeout attempts to acquire a lock for the specified user ID
 // within the given timeout. If the timeout is exceeded, it returns ErrLockTimeout.
+// For userID 0 (anonymous operations), returns a no-op lock immediately.
 func (lm *LockManagerDefault) AcquireLockWithTimeout(ctx context.Context, userID uint, timeout Timeout) (Lock, error) {
 	ctx, span := core.TraceMethod(ctx, "LockManagerDefault.AcquireLockWithTimeout")
 	defer span.End()
 
-	if err := lm.validateUserID(userID); err != nil {
-		return nil, err
+	// Return no-op lock for anonymous operations (userID == 0)
+	if userID == 0 {
+		return &noOpLock{}, nil
 	}
 
 	lm.logger.Debug("Acquiring lock with timeout for user",
@@ -149,12 +162,14 @@ func (lm *LockManagerDefault) AcquireLockWithTimeout(ctx context.Context, userID
 // TryAcquireLock attempts to acquire a lock for the specified user ID without blocking.
 // If the lock is immediately available, it returns the Lock handle.
 // Otherwise, it returns ErrLockBusy.
+// For userID 0 (anonymous operations), returns a no-op lock immediately.
 func (lm *LockManagerDefault) TryAcquireLock(ctx context.Context, userID uint) (Lock, error) {
 	ctx, span := core.TraceMethod(ctx, "LockManagerDefault.TryAcquireLock")
 	defer span.End()
 
-	if err := lm.validateUserID(userID); err != nil {
-		return nil, err
+	// Return no-op lock for anonymous operations (userID == 0)
+	if userID == 0 {
+		return &noOpLock{}, nil
 	}
 
 	lm.logger.Debug("Trying to acquire lock for user", zap.Uint("user_id", userID))

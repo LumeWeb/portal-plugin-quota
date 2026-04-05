@@ -74,9 +74,8 @@ func TestEventListeners_handleUploadCompleted_WithReservation_Success(t *testing
 		reservation = service.GetReservationManager().GetReservation(reservationUUID)
 		assert.Nil(t, reservation, "reservation should be released after upload completes")
 
-		// The calling code must explicitly call RecordUpload after successful upload
-		err = service.RecordUpload(ctx, userID, uploadID, bytes, ip)
-		require.NoError(t, err)
+		// The event handler now records usage atomically with reservation release
+		// The calling code does NOT need to call RecordUpload again
 
 		// Verify usage detail was created
 		var usageDetails []pluginModels.UserUsageDetail
@@ -263,9 +262,8 @@ func TestEventListeners_handleDownloadCompleted_WithReservation_Success(t *testi
 		reservation = service.GetReservationManager().GetReservation(reservationUUID)
 		assert.Nil(t, reservation, "reservation should be released after download completes")
 
-		// The calling code must explicitly call RecordDownload after successful download
-		err = service.RecordDownload(ctx, userID, uploadID, bytes, ip)
-		require.NoError(t, err)
+		// The event handler now records usage atomically with reservation release
+		// The calling code does NOT need to call RecordDownload again
 
 		// Verify usage detail was created
 		var usageDetails []pluginModels.UserUsageDetail
@@ -602,9 +600,8 @@ func TestQuotaService_ReservationWorkflow_EndToEnd(t *testing.T) {
 		reservation = service.GetReservationManager().GetReservation(reservationUUID)
 		assert.Nil(t, reservation, "reservation should be released after upload completes")
 
-		// The calling code must explicitly call RecordUpload after successful upload
-		err = service.RecordUpload(ctx, userID, uploadID, bytes, ip)
-		require.NoError(t, err)
+		// The event handler now records usage atomically with reservation release
+		// The calling code does NOT need to call RecordUpload again
 
 		// Step 5: Verify usage was recorded
 		var usageDetails []pluginModels.UserUsageDetail

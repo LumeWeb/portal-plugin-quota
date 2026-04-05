@@ -18,6 +18,26 @@ type HardLimitsPolicyEnforcer struct {
 	limitResolver pluginCore.LimitResolver
 }
 
+// logActiveReservations logs active reservation information for debugging
+func (h *HardLimitsPolicyEnforcer) logActiveReservations(ctx context.Context, userID uint, usageType models.UsageType, currentUsage uint64, usageTypeName string) {
+	pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, userID, usageType)
+	if pendingBytes > 0 {
+		concurrentCount := h.reservationManager.CountPendingReservationsForUser(ctx, userID, usageType)
+		windowUsageBefore := currentUsage
+		if currentUsage >= uint64(pendingBytes) {
+			windowUsageBefore = currentUsage - uint64(pendingBytes)
+		}
+		h.logger.Debug("Active reservations for user",
+			zap.Uint("user_id", userID),
+			zap.String("usage_type", usageTypeName),
+			zap.Int64("pending_bytes", pendingBytes),
+			zap.Int("concurrent_count", concurrentCount),
+			zap.Uint64("window_usage_before", windowUsageBefore),
+			zap.Uint64("window_usage_after", currentUsage),
+		)
+	}
+}
+
 // NewHardLimitsPolicyEnforcer creates a new hard limits policy enforcer
 func NewHardLimitsPolicyEnforcer(ctx core.Context, quotaService pluginCore.QuotaService) *HardLimitsPolicyEnforcer {
 	return &HardLimitsPolicyEnforcer{
@@ -66,24 +86,12 @@ func (h *HardLimitsPolicyEnforcer) CheckUploadQuota(ctx context.Context, config 
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get usage for upload window: %w", err)
 			}
 
-			// Query pending reservations
+			// Include pending reservations and log for debugging
 			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeUpload)
 			if pendingBytes < 0 {
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid pending bytes: %d", pendingBytes)
 			}
-			
-			// Log active reservation sum for debugging
-			if pendingBytes > 0 {
-				concurrentCount := h.reservationManager.CountPendingReservationsForUser(ctx, config.UserID, models.UsageTypeUpload)
-				h.logger.Debug("Active reservations for user",
-					zap.Uint("user_id", config.UserID),
-					zap.String("usage_type", "upload"),
-					zap.Int64("pending_bytes", pendingBytes),
-					zap.Int("concurrent_count", concurrentCount),
-					zap.Uint64("window_usage_before", currentUsage-uint64(pendingBytes)),
-					zap.Uint64("window_usage_after", currentUsage),
-				)
-			}
+			h.logActiveReservations(ctx, config.UserID, models.UsageTypeUpload, currentUsage, "upload")
 			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes
@@ -146,24 +154,12 @@ func (h *HardLimitsPolicyEnforcer) CheckDownloadQuota(ctx context.Context, confi
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get usage for download window: %w", err)
 			}
 
-			// Query pending reservations
+			// Include pending reservations and log for debugging
 			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeDownload)
 			if pendingBytes < 0 {
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid pending bytes: %d", pendingBytes)
 			}
-			
-			// Log active reservation sum for debugging
-			if pendingBytes > 0 {
-				concurrentCount := h.reservationManager.CountPendingReservationsForUser(ctx, config.UserID, models.UsageTypeDownload)
-				h.logger.Debug("Active reservations for user",
-					zap.Uint("user_id", config.UserID),
-					zap.String("usage_type", "download"),
-					zap.Int64("pending_bytes", pendingBytes),
-					zap.Int("concurrent_count", concurrentCount),
-					zap.Uint64("window_usage_before", currentUsage-uint64(pendingBytes)),
-					zap.Uint64("window_usage_after", currentUsage),
-				)
-			}
+			h.logActiveReservations(ctx, config.UserID, models.UsageTypeDownload, currentUsage, "download")
 			currentUsage += uint64(pendingBytes)
 			limitValue := windowLimits.Bytes
 
@@ -225,24 +221,12 @@ func (h *HardLimitsPolicyEnforcer) CheckStorageQuota(ctx context.Context, config
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("failed to get usage for storage window: %w", err)
 			}
 
-			// Query pending reservations
+			// Include pending reservations and log for debugging
 			pendingBytes := h.reservationManager.SumPendingBytesForUser(ctx, config.UserID, models.UsageTypeStorageAdd)
 			if pendingBytes < 0 {
 				return pluginCore.QuotaCheckResult{}, fmt.Errorf("invalid pending bytes: %d", pendingBytes)
 			}
-			
-			// Log active reservation sum for debugging
-			if pendingBytes > 0 {
-				concurrentCount := h.reservationManager.CountPendingReservationsForUser(ctx, config.UserID, models.UsageTypeStorageAdd)
-				h.logger.Debug("Active reservations for user",
-					zap.Uint("user_id", config.UserID),
-					zap.String("usage_type", "storage"),
-					zap.Int64("pending_bytes", pendingBytes),
-					zap.Int("concurrent_count", concurrentCount),
-					zap.Uint64("window_usage_before", currentUsage-uint64(pendingBytes)),
-					zap.Uint64("window_usage_after", currentUsage),
-				)
-			}
+			h.logActiveReservations(ctx, config.UserID, models.UsageTypeStorageAdd, currentUsage, "storage")
 			currentUsage += uint64(pendingBytes)
 
 			limitValue := windowLimits.Bytes

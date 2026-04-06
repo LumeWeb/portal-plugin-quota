@@ -17,6 +17,68 @@ var (
 	errUploadSizeOverflow = errors.New("upload size exceeds maximum int64 value")
 )
 
+// usageRecordingFunc is a function type for recording usage within a reservation
+type usageRecordingFunc func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error
+
+// handleReservationWithUsage handles reservation release and usage recording atomically.
+// It acquires a lock, releases the reservation if it exists, and records usage if successful.
+// Returns true if a reservation was found and handled.
+func (s *QuotaServiceDefault) handleReservationWithUsage(
+	ctx context.Context,
+	userID uint,
+	reservationUUID string,
+	bytes uint64,
+	successful bool,
+	recordUsage usageRecordingFunc,
+	uploadID uint,
+	ip string,
+	operation string,
+) (bool, error) {
+	lock, err := s.lockManager.AcquireLock(ctx, userID)
+	if err != nil {
+		s.Logger().Error("Failed to acquire user lock",
+			zap.Uint("userID", userID),
+			zap.String("operation", operation),
+			zap.String("reservation_uuid", reservationUUID),
+			zap.Error(err))
+		return true, err
+	}
+	defer lock.Release()
+
+	reservation := s.reservationManager.GetReservation(reservationUUID)
+	if reservation == nil {
+		return false, nil
+	}
+
+	s.Logger().Debug("Releasing reservation",
+		zap.Uint("userID", userID),
+		zap.String("operation", operation),
+		zap.String("reservation_uuid", reservationUUID),
+		zap.Uint64("bytes", bytes),
+		zap.Bool("successful", successful))
+
+	reservation.Release()
+
+	if successful {
+		s.Logger().Debug("Recording usage atomically",
+			zap.Uint("userID", userID),
+			zap.String("operation", operation),
+			zap.Uint("uploadID", uploadID),
+			zap.Uint64("bytes", bytes))
+
+		if err := recordUsage(ctx, userID, uploadID, bytes, ip); err != nil {
+			s.Logger().Error("Failed to record usage",
+				zap.Uint("userID", userID),
+				zap.String("operation", operation),
+				zap.Uint("uploadID", uploadID),
+				zap.Uint64("bytes", bytes),
+				zap.Error(err))
+		}
+	}
+
+	return true, nil
+}
+
 // registerEventListeners registers all portal event listeners for the quota service
 func (s *QuotaServiceDefault) registerEventListeners() {
 	// Register upload completed handler
@@ -81,51 +143,21 @@ func (s *QuotaServiceDefault) handleUploadCompleted(ctx context.Context, uploadI
 		return nil
 	}
 
-	// If reservation exists, handle it atomically with recording
 	if reservationUUID != nil {
-		// Acquire user lock to make reservation release + usage recording atomic
-		lock, err := s.lockManager.AcquireLock(ctx, *userID)
-		if err != nil {
-			s.Logger().Error("Failed to acquire user lock for upload completed",
-				zap.Uint("userID", *userID),
-				zap.String("reservation_uuid", *reservationUUID),
-				zap.Error(err))
-			return err
-		}
-		defer lock.Release()
-
-		reservation := s.reservationManager.GetReservation(*reservationUUID)
-		if reservation != nil {
-			s.Logger().Debug("Releasing reservation for upload",
-				zap.Uint("userID", *userID),
-				zap.String("reservation_uuid", *reservationUUID),
-				zap.Uint64("bytes", bytes),
-				zap.Bool("successful", successful))
-
-			// Release reservation (called regardless of success/failure)
-			reservation.Release()
-
-			// If upload was successful, record usage atomically within the lock
-			if successful {
-				s.Logger().Debug("Recording upload usage atomically",
-					zap.Uint("userID", *userID),
-					zap.Uint("uploadID", uploadID),
-					zap.Uint64("bytes", bytes))
-
-				if err := s.RecordUpload(ctx, *userID, uploadID, bytes, ip); err != nil {
-					// Log error but don't fail - the reservation has already been released
-					s.Logger().Error("Failed to record upload usage",
-						zap.Uint("userID", *userID),
-						zap.Uint("uploadID", uploadID),
-						zap.Uint64("bytes", bytes),
-						zap.Error(err))
-				}
-			}
-		}
-		return nil
+		_, err := s.handleReservationWithUsage(
+			ctx,
+			*userID,
+			*reservationUUID,
+			bytes,
+			successful,
+			s.RecordUpload,
+			uploadID,
+			ip,
+			"upload",
+		)
+		return err
 	}
 
-	// Fall back to recording usage directly (only when no reservation exists)
 	s.Logger().Debug("Recording upload usage from event",
 		zap.Uint("userID", *userID),
 		zap.Uint("uploadID", uploadID),
@@ -146,70 +178,55 @@ func (s *QuotaServiceDefault) handleDownloadCompleted(ctx context.Context, uploa
 		effectiveUserID = *userID
 	}
 
-	// If reservation exists, handle it atomically with recording
 	if reservationUUID != nil {
-		// Acquire user lock to make reservation release + usage recording atomic
-		// The lock manager returns a no-op lock for anonymous operations (effectiveUserID == 0),
-		// which avoids serialized all anonymous operations as a global mutex
-		lock, err := s.lockManager.AcquireLock(ctx, effectiveUserID)
-		if err != nil {
-			s.Logger().Error("Failed to acquire user lock for download completed",
-				zap.Uint("effectiveUserID", effectiveUserID),
-				zap.String("reservation_uuid", *reservationUUID),
-				zap.Error(err))
-			return err
+		handled, err := s.handleReservationWithUsage(
+			ctx,
+			effectiveUserID,
+			*reservationUUID,
+			bytes,
+			successful,
+			s.RecordDownload,
+			uploadID,
+			ip,
+			"download",
+		)
+		if handled && err == nil && !successful {
+			// Track failed downloads in metrics
+			DownloadFailed.WithLabelValues().Inc()
 		}
-		defer lock.Release()
-
-		reservation := s.reservationManager.GetReservation(*reservationUUID)
-		if reservation != nil {
-			s.Logger().Debug("Releasing reservation for download",
-				zap.Uint("effectiveUserID", effectiveUserID),
-				zap.String("reservation_uuid", *reservationUUID),
-				zap.Uint64("bytes", bytes),
-				zap.Bool("successful", successful))
-
-			// Release reservation (called regardless of success/failure)
-			reservation.Release()
-
-			// If download was successful, record usage atomically within the lock
-			if successful {
-				s.Logger().Debug("Recording download usage atomically",
-					zap.Uint("effectiveUserID", effectiveUserID),
-					zap.Uint("uploadID", uploadID),
-					zap.Uint64("bytes", bytes))
-
-				if err := s.RecordDownload(ctx, effectiveUserID, uploadID, bytes, ip); err != nil {
-					// Log error but don't fail - the reservation has already been released
-					s.Logger().Error("Failed to record download usage",
-						zap.Uint("effectiveUserID", effectiveUserID),
-						zap.Uint("uploadID", uploadID),
-						zap.Uint64("bytes", bytes),
-						zap.Error(err))
-				}
-			} else {
-				// Track failed downloads in metrics
-				DownloadFailed.WithLabelValues().Inc()
-				s.Logger().Debug("Download failed - reservation released",
-					zap.Uint("effectiveUserID", effectiveUserID),
-					zap.String("reservation_uuid", *reservationUUID),
-					zap.Uint64("bytes", bytes))
-			}
-		}
-		return nil
+		return err
 	}
 
-	// Fall back to recording usage directly (only when no reservation exists)
 	return s.RecordDownload(ctx, effectiveUserID, uploadID, bytes, ip)
 }
 
 // handleStorageObjectPinned handles the storage object pinned event
-func (s *QuotaServiceDefault) handleStorageObjectPinned(ctx context.Context, pin *portalModels.Pin, ip string) error {
+func (s *QuotaServiceDefault) handleStorageObjectPinned(ctx context.Context, pin *portalModels.Pin, ip string, reservationUUID *string) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleStorageObjectPinned")
 	defer span.End()
 
 	size, err := s.getUploadSize(ctx, pin)
 	if err != nil && !errors.Is(err, errUploadSizeOverflow) {
+		return err
+	}
+
+	// Create adapter for RecordStorageChange to match usageRecordingFunc signature
+	recordStorageFunc := func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error {
+		return s.RecordStorageChange(ctx, userID, uploadID, int64(bytes), ip)
+	}
+
+	if reservationUUID != nil {
+		_, err := s.handleReservationWithUsage(
+			ctx,
+			pin.UserID,
+			*reservationUUID,
+			size,
+			true, // Storage pin is always successful
+			recordStorageFunc,
+			pin.UploadID,
+			ip,
+			"storage_pin",
+		)
 		return err
 	}
 

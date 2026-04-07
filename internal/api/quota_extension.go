@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -110,6 +111,12 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 		return e.handleQuotaError(ctx, "failed to get user quota config", err)
 	}
 
+	// Get reserved bytes for each type
+	reservationManager := e.quotaService.GetReservationManager()
+	uploadReserved := e.getReservedBytes(ctx.Request().Context(), reservationManager, userID, quotaCore.UsageTypeUpload)
+	downloadReserved := e.getReservedBytes(ctx.Request().Context(), reservationManager, userID, quotaCore.UsageTypeDownload)
+	storageReserved := e.getReservedBytes(ctx.Request().Context(), reservationManager, userID, quotaCore.UsageTypeStorageAdd)
+
 	var response dto.QuotaStatusResponse
 
 	// Handle based on enforcement policy
@@ -122,9 +129,9 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 		}
 
 		response = dto.QuotaStatusResponse{
-			Upload:   e.buildQuotaTypeStatus(balance.UploadUsed, balance.UploadAllowance, balance.UploadRemaining),
-			Download: e.buildQuotaTypeStatus(balance.DownloadUsed, balance.DownloadAllowance, balance.DownloadRemaining),
-			Storage:  e.buildQuotaTypeStatus(balance.StorageUsed, balance.StorageAllowance, balance.StorageRemaining),
+			Upload:   e.buildQuotaTypeStatus(balance.UploadUsed, balance.UploadAllowance, balance.UploadRemaining, uploadReserved),
+			Download: e.buildQuotaTypeStatus(balance.DownloadUsed, balance.DownloadAllowance, balance.DownloadRemaining, downloadReserved),
+			Storage:  e.buildQuotaTypeStatus(balance.StorageUsed, balance.StorageAllowance, balance.StorageRemaining, storageReserved),
 		}
 
 	case models.EnforcementPolicyUnlimited:
@@ -135,9 +142,9 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 		}
 
 		response = dto.QuotaStatusResponse{
-			Upload:   e.buildUnlimitedStatus(usage.BytesUploaded),
-			Download: e.buildUnlimitedStatus(usage.BytesDownloaded),
-			Storage:  e.buildUnlimitedStatus(usage.BytesStored),
+			Upload:   e.buildUnlimitedStatus(usage.BytesUploaded, uploadReserved),
+			Download: e.buildUnlimitedStatus(usage.BytesDownloaded, downloadReserved),
+			Storage:  e.buildUnlimitedStatus(usage.BytesStored, storageReserved),
 		}
 
 	case models.EnforcementPolicyHardLimits, models.EnforcementPolicyThreshold:
@@ -165,9 +172,9 @@ func (e *QuotaExtension) handleQuotaStatus(c echo.Context) error {
 
 		// Build response with window information
 		response = dto.QuotaStatusResponse{
-			Upload:   e.buildLimitedStatusWithWindow(uploadUsage, e.getLimitBytes(limits.UploadLimitConfig), limits.UploadThreshold, uploadWindow),
-			Download: e.buildLimitedStatusWithWindow(downloadUsage, e.getLimitBytes(limits.DownloadLimitConfig), limits.DownloadThreshold, downloadWindow),
-			Storage:  e.buildLimitedStatusWithWindow(storageUsage, e.getLimitBytes(limits.StorageLimitConfig), limits.StorageThreshold, storageWindow),
+			Upload:   e.buildLimitedStatusWithWindow(uploadUsage, e.getLimitBytes(limits.UploadLimitConfig), limits.UploadThreshold, uploadWindow, uploadReserved),
+			Download: e.buildLimitedStatusWithWindow(downloadUsage, e.getLimitBytes(limits.DownloadLimitConfig), limits.DownloadThreshold, downloadWindow, downloadReserved),
+			Storage:  e.buildLimitedStatusWithWindow(storageUsage, e.getLimitBytes(limits.StorageLimitConfig), limits.StorageThreshold, storageWindow, storageReserved),
 		}
 
 	default:
@@ -237,13 +244,14 @@ func (e *QuotaExtension) handleQuotaHistory(c echo.Context) error {
 	return httputil.EncodeResponse(ctx, response, response)
 }
 
-func (e *QuotaExtension) buildQuotaTypeStatus(used, limit, remaining uint64) dto.QuotaTypeStatus {
+func (e *QuotaExtension) buildQuotaTypeStatus(used, limit, remaining uint64, reserved *uint64) dto.QuotaTypeStatus {
 	percentage := e.calculateProgress(used, limit)
 	return dto.QuotaTypeStatus{
 		Used:       used,
 		Limit:      &limit,
 		Remaining:  &remaining,
 		Percentage: &percentage,
+		Reserved:   reserved,
 	}
 }
 
@@ -285,12 +293,13 @@ func (e *QuotaExtension) handleQuotaError(ctx httputil.RequestContext, msg strin
 }
 
 // buildUnlimitedStatus builds a quota type status for unlimited usage
-func (e *QuotaExtension) buildUnlimitedStatus(used uint64) dto.QuotaTypeStatus {
+func (e *QuotaExtension) buildUnlimitedStatus(used uint64, reserved *uint64) dto.QuotaTypeStatus {
 	return dto.QuotaTypeStatus{
 		Used:       used,
 		Limit:      nil, // nil indicates unlimited
 		Remaining:  nil,
 		Percentage: nil,
+		Reserved:   reserved,
 	}
 }
 
@@ -390,7 +399,7 @@ func (e *QuotaExtension) getUsageForLimit(ctx httputil.RequestContext, userID ui
 }
 
 // buildLimitedStatusWithWindow builds quota type status with window information
-func (e *QuotaExtension) buildLimitedStatusWithWindow(used uint64, limit, threshold *uint64, window *dto.WindowInfo) dto.QuotaTypeStatus {
+func (e *QuotaExtension) buildLimitedStatusWithWindow(used uint64, limit, threshold *uint64, window *dto.WindowInfo, reserved *uint64) dto.QuotaTypeStatus {
 	var remaining *uint64
 	var percentage *int
 
@@ -416,5 +425,17 @@ func (e *QuotaExtension) buildLimitedStatusWithWindow(used uint64, limit, thresh
 		Percentage: percentage,
 		Threshold:  threshold,
 		Window:     window,
+		Reserved:   reserved,
 	}
+}
+
+// getReservedBytes returns the reserved bytes for a user and usage type
+// Returns nil if there are no reservations
+func (e *QuotaExtension) getReservedBytes(ctx context.Context, reservationManager quotaCore.ReservationManager, userID uint, usageType quotaCore.UsageType) *uint64 {
+	reserved := reservationManager.SumPendingBytesForUser(ctx, userID, usageType)
+	if reserved <= 0 {
+		return nil
+	}
+	reservedUint64 := uint64(reserved)
+	return &reservedUint64
 }

@@ -29,6 +29,7 @@ type QuotaTypeStatus struct {
 	Percentage *int        `json:"percentage"`
 	Threshold  *uint64     `json:"threshold,omitempty"`
 	Window     *WindowInfo `json:"window,omitempty"` // Time window for this quota type
+	Reserved   *uint64     `json:"reserved,omitempty"` // Bytes currently reserved for in-progress operations
 }
 
 // QuotaHistoryRequest parameters for historical data query

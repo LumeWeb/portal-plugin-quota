@@ -35,6 +35,13 @@ func TestHandleQuotaStatus_Success(t *testing.T) {
 				EnforcementPolicy: models.EnforcementPolicyAllowance,
 			}, nil).Once()
 
+		// Mock reservation manager - no active reservations
+		mockReservationManager := quotaCore.NewMockReservationManager(t)
+		quotaSvc.EXPECT().GetReservationManager().Return(mockReservationManager).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeUpload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeDownload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd).Return(int64(0)).Once()
+
 		quotaSvc.EXPECT().GetAllowanceBalance(mock.Anything, uint(1)).
 			Return(&quotaCore.AllowanceBalance{
 				UploadUsed:       uint64(units.GiB),
@@ -170,6 +177,13 @@ func TestHandleQuotaStatus_UnlimitedPolicy(t *testing.T) {
 				EnforcementPolicy: models.EnforcementPolicyUnlimited,
 			}, nil).Once()
 
+		// Mock reservation manager - no active reservations
+		mockReservationManager := quotaCore.NewMockReservationManager(t)
+		quotaSvc.EXPECT().GetReservationManager().Return(mockReservationManager).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeUpload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeDownload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd).Return(int64(0)).Once()
+
 		mockUsageManager := quotaCore.NewMockUsageManager(t)
 		quotaSvc.EXPECT().GetUsageManager().Return(mockUsageManager)
 		mockUsageManager.EXPECT().GetCurrentUsage(mock.Anything, uint(1)).
@@ -209,6 +223,13 @@ func TestHandleQuotaStatus_HardLimitsPolicy(t *testing.T) {
 			Return(&quotaCore.UserQuotaConfig{
 				EnforcementPolicy: models.EnforcementPolicyHardLimits,
 			}, nil).Once()
+
+		// Mock reservation manager - no active reservations
+		mockReservationManager := quotaCore.NewMockReservationManager(t)
+		quotaSvc.EXPECT().GetReservationManager().Return(mockReservationManager).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeUpload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeDownload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd).Return(int64(0)).Once()
 
 		uploadLimit := uint64(units.MiB * 100)
 		downloadLimit := uint64(units.MiB * 500)
@@ -275,6 +296,13 @@ func TestHandleQuotaStatus_ThresholdPolicy(t *testing.T) {
 			Return(&quotaCore.UserQuotaConfig{
 				EnforcementPolicy: models.EnforcementPolicyThreshold,
 			}, nil).Once()
+
+		// Mock reservation manager - no active reservations
+		mockReservationManager := quotaCore.NewMockReservationManager(t)
+		quotaSvc.EXPECT().GetReservationManager().Return(mockReservationManager).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeUpload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeDownload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd).Return(int64(0)).Once()
 
 		uploadLimit := uint64(units.MiB * 100)
 		downloadLimit := uint64(units.MiB * 500)
@@ -348,6 +376,13 @@ func TestHandleQuotaStatus_AllowancePolicy(t *testing.T) {
 				EnforcementPolicy: models.EnforcementPolicyAllowance,
 			}, nil).Once()
 
+		// Mock reservation manager - no active reservations
+		mockReservationManager := quotaCore.NewMockReservationManager(t)
+		quotaSvc.EXPECT().GetReservationManager().Return(mockReservationManager).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeUpload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeDownload).Return(int64(0)).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd).Return(int64(0)).Once()
+
 		quotaSvc.EXPECT().GetAllowanceBalance(mock.Anything, uint(1)).
 			Return(&quotaCore.AllowanceBalance{
 				UploadUsed:        uint64(units.GiB * 5),
@@ -395,4 +430,67 @@ func buildQuotaHistoryURL(startDate, endDate, quotaType string) string {
 		values.Add("type", quotaType)
 	}
 	return "/api/account/quota/history?" + values.Encode()
+}
+
+// TestHandleQuotaStatus_WithReservations tests that reserved bytes are included in the response
+func TestHandleQuotaStatus_WithReservations(t *testing.T) {
+	coreTesting.RunTestCase(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		helper := NewQuotaTestHelper(t, ctx)
+		quotaSvc := helper.GetQuotaService()
+
+		helper.SetupAuth()
+
+		mockConfigManager := quotaCore.NewMockConfigManager(t)
+		quotaSvc.EXPECT().GetConfigManager().Return(mockConfigManager)
+		mockConfigManager.EXPECT().GetUserQuotaConfig(mock.Anything, uint(1)).
+			Return(&quotaCore.UserQuotaConfig{
+				EnforcementPolicy: models.EnforcementPolicyAllowance,
+			}, nil).Once()
+
+		// Mock reservation manager with active reservations
+		mockReservationManager := quotaCore.NewMockReservationManager(t)
+		quotaSvc.EXPECT().GetReservationManager().Return(mockReservationManager).Once()
+		uploadReserved := int64(units.MiB * 50)
+		downloadReserved := int64(units.MiB * 100)
+		storageReserved := int64(units.MiB * 200)
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeUpload).Return(uploadReserved).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeDownload).Return(downloadReserved).Once()
+		mockReservationManager.EXPECT().SumPendingBytesForUser(mock.Anything, uint(1), quotaCore.UsageTypeStorageAdd).Return(storageReserved).Once()
+
+		quotaSvc.EXPECT().GetAllowanceBalance(mock.Anything, uint(1)).
+			Return(&quotaCore.AllowanceBalance{
+				UploadUsed:        uint64(units.GiB * 5),
+				UploadAllowance:   uint64(units.GiB * 10),
+				UploadRemaining:    uint64(units.GiB * 5),
+				DownloadUsed:      uint64(units.GiB * 12),
+				DownloadAllowance: uint64(units.GiB * 20),
+				DownloadRemaining:  uint64(units.GiB * 8),
+				StorageUsed:       uint64(units.GiB * 3),
+				StorageAllowance:  uint64(units.GiB * 5),
+				StorageRemaining:   uint64(units.GiB * 2),
+			}, nil).Once()
+
+		rec := helper.ExecuteRequest(http.MethodGet, "/api/account/quota", nil)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response dto.QuotaStatusResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		// Verify reserved bytes are included
+		require.NotNil(t, response.Upload.Reserved, "Upload.Reserved should not be nil")
+		require.NotNil(t, response.Download.Reserved, "Download.Reserved should not be nil")
+		require.NotNil(t, response.Storage.Reserved, "Storage.Reserved should not be nil")
+
+		assert.Equal(t, uint64(units.MiB*50), *response.Upload.Reserved)
+		assert.Equal(t, uint64(units.MiB*100), *response.Download.Reserved)
+		assert.Equal(t, uint64(units.MiB*200), *response.Storage.Reserved)
+
+		// Verify used represents committed usage from AllowanceBalance
+		// AllowanceBalance returns committed usage only (operations that completed)
+		assert.Equal(t, uint64(units.GiB*5), response.Upload.Used, "Upload.Used should be committed usage from balance")
+		assert.Equal(t, uint64(units.GiB*12), response.Download.Used, "Download.Used should be committed usage from balance")
+		assert.Equal(t, uint64(units.GiB*3), response.Storage.Used, "Storage.Used should be committed usage from balance")
+	}, QuotaTestOptions)
 }

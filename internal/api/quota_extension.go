@@ -245,12 +245,9 @@ func (e *QuotaExtension) handleQuotaHistory(c echo.Context) error {
 }
 
 func (e *QuotaExtension) buildQuotaTypeStatus(used, limit, remaining uint64, reserved *uint64) dto.QuotaTypeStatus {
-	// Calculate committed used (excluding reserved bytes)
-	committedUsed := e.calculateCommittedUsed(used, reserved)
-	
 	percentage := e.calculateProgress(used, limit)
 	return dto.QuotaTypeStatus{
-		Used:       committedUsed,
+		Used:       used,
 		Limit:      &limit,
 		Remaining:  &remaining,
 		Percentage: &percentage,
@@ -297,11 +294,8 @@ func (e *QuotaExtension) handleQuotaError(ctx httputil.RequestContext, msg strin
 
 // buildUnlimitedStatus builds a quota type status for unlimited usage
 func (e *QuotaExtension) buildUnlimitedStatus(used uint64, reserved *uint64) dto.QuotaTypeStatus {
-	// Calculate committed used (excluding reserved bytes)
-	committedUsed := e.calculateCommittedUsed(used, reserved)
-	
 	return dto.QuotaTypeStatus{
-		Used:       committedUsed,
+		Used:       used,
 		Limit:      nil, // nil indicates unlimited
 		Remaining:  nil,
 		Percentage: nil,
@@ -406,9 +400,6 @@ func (e *QuotaExtension) getUsageForLimit(ctx httputil.RequestContext, userID ui
 
 // buildLimitedStatusWithWindow builds quota type status with window information
 func (e *QuotaExtension) buildLimitedStatusWithWindow(used uint64, limit, threshold *uint64, window *dto.WindowInfo, reserved *uint64) dto.QuotaTypeStatus {
-	// Calculate committed used (excluding reserved bytes)
-	committedUsed := e.calculateCommittedUsed(used, reserved)
-	
 	var remaining *uint64
 	var percentage *int
 
@@ -428,7 +419,7 @@ func (e *QuotaExtension) buildLimitedStatusWithWindow(used uint64, limit, thresh
 	}
 
 	return dto.QuotaTypeStatus{
-		Used:       committedUsed,
+		Used:       used,
 		Limit:      limit,
 		Remaining:  remaining,
 		Percentage: percentage,
@@ -447,19 +438,4 @@ func (e *QuotaExtension) getReservedBytes(ctx context.Context, reservationManage
 	}
 	reservedUint64 := uint64(reserved)
 	return &reservedUint64
-}
-
-// calculateCommittedUsed calculates the committed used bytes by subtracting reserved from total used
-// This prevents underflow and handles nil reserved values
-func (e *QuotaExtension) calculateCommittedUsed(totalUsed uint64, reserved *uint64) uint64 {
-	if reserved == nil || *reserved == 0 {
-		return totalUsed
-	}
-	
-	if totalUsed >= *reserved {
-		return totalUsed - *reserved
-	}
-	
-	// Edge case: reserved > used (shouldn't happen in practice)
-	return 0
 }

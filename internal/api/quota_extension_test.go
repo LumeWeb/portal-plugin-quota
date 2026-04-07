@@ -487,17 +487,10 @@ func TestHandleQuotaStatus_WithReservations(t *testing.T) {
 		assert.Equal(t, uint64(units.MiB*100), *response.Download.Reserved)
 		assert.Equal(t, uint64(units.MiB*200), *response.Storage.Reserved)
 
-		// Verify used now represents committed usage (total - reserved)
-		// Upload: 5 GiB - 50 MiB = 4950 MiB committed
-		uploadExpectedUsed := uint64(units.GiB*5) - uint64(units.MiB*50)
-		assert.Equal(t, uploadExpectedUsed, response.Upload.Used, "Upload.Used should be total - reserved")
-
-		// Download: 12 GiB - 100 MiB = 12100 MiB committed
-		downloadExpectedUsed := uint64(units.GiB*12) - uint64(units.MiB*100)
-		assert.Equal(t, downloadExpectedUsed, response.Download.Used, "Download.Used should be total - reserved")
-
-		// Storage: 3 GiB - 200 MiB = 3000 MiB committed
-		storageExpectedUsed := uint64(units.GiB*3) - uint64(units.MiB*200)
-		assert.Equal(t, storageExpectedUsed, response.Storage.Used, "Storage.Used should be total - reserved")
+		// Verify used represents committed usage from AllowanceBalance
+		// AllowanceBalance returns committed usage only (operations that completed)
+		assert.Equal(t, uint64(units.GiB*5), response.Upload.Used, "Upload.Used should be committed usage from balance")
+		assert.Equal(t, uint64(units.GiB*12), response.Download.Used, "Download.Used should be committed usage from balance")
+		assert.Equal(t, uint64(units.GiB*3), response.Storage.Used, "Storage.Used should be committed usage from balance")
 	}, QuotaTestOptions)
 }

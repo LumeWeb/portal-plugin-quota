@@ -25,9 +25,9 @@ const (
 // QuotaCheckResult represents the result of a quota check
 type QuotaCheckResult struct {
 	Allowed     bool
-	Reason      QuotaCheckReason   // "OK", "LIMIT_EXCEEDED", "ALLOWANCE_DEPLETED", "WARNING_THRESHOLD", etc.
+	Reason      QuotaCheckReason // "OK", "LIMIT_EXCEEDED", "ALLOWANCE_DEPLETED", "WARNING_THRESHOLD", etc.
 	Details     QuotaCheckDetails
-	Reservation Reservation         // Reservation if quota was reserved (optional)
+	Reservation Reservation      // Reservation if quota was reserved (optional)
 }
 
 // ReleaseReservation releases the quota reservation if one exists.

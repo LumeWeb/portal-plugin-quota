@@ -1,10 +1,10 @@
-package event
+package core
 
 import (
 	"context"
 	"time"
 
-	"go.lumeweb.com/portal/core"
+	portalCore "go.lumeweb.com/portal/core"
 )
 
 const EventQuotaPlanChanged = "quota.plan.changed"
@@ -27,8 +27,8 @@ func NewQuotaPlanChangedEvent(ctx context.Context, userID uint, oldPlanID, newPl
 	}
 }
 
-func OnQuotaPlanChanged(ctx core.Context, handler func(context.Context, QuotaPlanChangedEvent) error, priority ...int) {
-	core.Listen[QuotaPlanChangedEvent](ctx, EventQuotaPlanChanged, func(e *core.CoreEvent[QuotaPlanChangedEvent]) error {
+func OnQuotaPlanChanged(ctx portalCore.Context, handler func(context.Context, QuotaPlanChangedEvent) error, priority ...int) {
+	portalCore.Listen[QuotaPlanChangedEvent](ctx, EventQuotaPlanChanged, func(e *portalCore.CoreEvent[QuotaPlanChangedEvent]) error {
 		return handler(e.Data.Ctx, e.Data)
 	}, priority...)
 }

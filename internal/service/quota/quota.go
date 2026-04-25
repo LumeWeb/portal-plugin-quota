@@ -12,6 +12,7 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
+	quotaEvent "go.lumeweb.com/portal-plugin-quota/internal/event"
 	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	quotaReservation "go.lumeweb.com/portal-plugin-quota/internal/reservation"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
@@ -757,6 +758,7 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 	}
 
 	var updatedConfig models.UserQuotaConfig
+	var oldPlanID *uint64
 
 	// Ensure the user has a quota config first, then apply updates
 	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
@@ -769,6 +771,8 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 			return result
 		}
 
+		oldPlanID = config.QuotaPlanID
+
 		// Apply the updates to the found/created config
 		if result = tx.Model(&config).Updates(updates); result.Error != nil {
 			return result
@@ -778,6 +782,17 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 		return tx.Where("user_id = ?", userID).First(&updatedConfig)
 	}); err != nil {
 		return nil, fmt.Errorf("failed to update user quota config: %w", err)
+	}
+
+	if update.QuotaPlanID != nil {
+		event := quotaEvent.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, update.QuotaPlanID)
+		if err := core.Fire[quotaEvent.QuotaPlanChangedEvent](
+			s.Context(),
+			quotaEvent.EventQuotaPlanChanged,
+			event,
+		); err != nil {
+			s.Logger().Error("failed to emit quota plan changed event", zap.Error(err))
+		}
 	}
 
 	return &updatedConfig, nil
@@ -796,11 +811,26 @@ func (s *QuotaServiceDefault) ResetUserQuotaPlan(ctx context.Context, userID uin
 		return fmt.Errorf("invalid user ID")
 	}
 
+	var oldPlanID *uint64
+
 	// Update the quota config to remove the plan ID
 	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+		var existingConfig models.UserQuotaConfig
+		if result := tx.Where("user_id = ?", userID).First(&existingConfig); result.Error == nil {
+			oldPlanID = existingConfig.QuotaPlanID
+		}
 		return tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", nil)
 	}); err != nil {
 		return fmt.Errorf("failed to reset user quota plan: %w", err)
+	}
+
+	event := quotaEvent.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, nil)
+	if err := core.Fire[quotaEvent.QuotaPlanChangedEvent](
+		s.Context(),
+		quotaEvent.EventQuotaPlanChanged,
+		event,
+	); err != nil {
+		s.Logger().Error("failed to emit quota plan changed event", zap.Error(err))
 	}
 
 	return nil

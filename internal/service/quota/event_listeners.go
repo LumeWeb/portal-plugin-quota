@@ -2,10 +2,12 @@ package quota
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 
+	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal/core"
 	portalModels "go.lumeweb.com/portal/db/models"
 	portalEvent "go.lumeweb.com/portal/event"
@@ -99,23 +101,8 @@ func (s *QuotaServiceDefault) registerEventListeners() {
 // when converting to int64 for RecordStorageChange. In such cases, the size is capped at
 // math.MaxInt64 to prevent overflow and the error is logged.
 func (s *QuotaServiceDefault) getUploadSize(ctx context.Context, pin *portalModels.Pin) (uint64, error) {
-	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.getUploadSize")
-	defer span.End()
-
-	uploadService := core.GetService[core.UploadService](s.Context(), core.UPLOAD_SERVICE)
-	if uploadService == nil {
-		s.Logger().Error("Upload service not available",
-			zap.Uint("pinID", pin.ID),
-			zap.Uint("uploadID", pin.UploadID))
-		return 0, errServiceUnavailable
-	}
-
-	upload, err := uploadService.GetUploadByID(ctx, pin.UploadID)
+	upload, err := s.getUploadForPin(ctx, pin)
 	if err != nil {
-		s.Logger().Error("Failed to get upload for pin",
-			zap.Uint("pinID", pin.ID),
-			zap.Uint("uploadID", pin.UploadID),
-			zap.Error(err))
 		return 0, err
 	}
 
@@ -129,6 +116,66 @@ func (s *QuotaServiceDefault) getUploadSize(ctx context.Context, pin *portalMode
 	}
 
 	return upload.Size, nil
+}
+
+// getUploadForPin retrieves the upload for a given pin.
+func (s *QuotaServiceDefault) getUploadForPin(ctx context.Context, pin *portalModels.Pin) (*portalModels.Upload, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.getUploadForPin")
+	defer span.End()
+
+	uploadService := core.GetService[core.UploadService](s.Context(), core.UPLOAD_SERVICE)
+	if uploadService == nil {
+		s.Logger().Error("Upload service not available",
+			zap.Uint("pinID", pin.ID),
+			zap.Uint("uploadID", pin.UploadID))
+		return nil, errServiceUnavailable
+	}
+
+	upload, err := uploadService.GetUploadByID(ctx, pin.UploadID)
+	if err != nil {
+		s.Logger().Error("Failed to get upload for pin",
+			zap.Uint("pinID", pin.ID),
+			zap.Uint("uploadID", pin.UploadID),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return upload, nil
+}
+
+// getStorageSizeToRecord calculates the effective storage size to record.
+// It checks for redundancy metadata in the upload's Metadata field and scales
+// the size accordingly. If no metadata exists, it returns the original size.
+func (s *QuotaServiceDefault) getStorageSizeToRecord(upload *portalModels.Upload, defaultSize uint64) uint64 {
+	// Check if upload has metadata
+	var metadataMap map[string]interface{}
+	if err := json.Unmarshal([]byte(upload.Metadata), &metadataMap); err != nil {
+		s.Logger().Debug("Upload metadata not parseable for redundancy scaling",
+			zap.Uint("uploadID", upload.ID),
+			zap.Error(err))
+		return defaultSize
+	}
+
+	// Parse redundancy metadata
+	slabMeta, err := pluginCore.ParseRedundancyMetadata(metadataMap)
+	if err != nil {
+		s.Logger().Debug("No redundancy metadata found for upload",
+			zap.Uint("uploadID", upload.ID),
+			zap.Error(err))
+		return defaultSize
+	}
+
+	// Calculate scaled size using DataSize (original data) and redundancy factors
+	scaled := pluginCore.CalculateScaledSize(upload.Size, slabMeta.MinShards, slabMeta.TotalSectors)
+
+	s.Logger().Debug("Scaled storage size based on redundancy metadata",
+		zap.Uint("uploadID", upload.ID),
+		zap.Uint64("originalSize", upload.Size),
+		zap.Uint64("scaledSize", scaled),
+		zap.Uint64("minShards", slabMeta.MinShards),
+		zap.Uint64("totalSectors", slabMeta.TotalSectors))
+
+	return scaled
 }
 
 // handleUploadCompleted handles the upload completed event
@@ -205,10 +252,24 @@ func (s *QuotaServiceDefault) handleStorageObjectPinned(ctx context.Context, pin
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleStorageObjectPinned")
 	defer span.End()
 
-	size, err := s.getUploadSize(ctx, pin)
-	if err != nil && !errors.Is(err, errUploadSizeOverflow) {
+	upload, err := s.getUploadForPin(ctx, pin)
+	if err != nil {
 		return err
 	}
+
+	// Get the base size and apply redundancy scaling
+	size := upload.Size
+	if size > math.MaxInt64 {
+		s.Logger().Warn("Upload size exceeds maximum int64 value, capping for storage change",
+			zap.Uint("pinID", pin.ID),
+			zap.Uint("uploadID", pin.UploadID),
+			zap.Uint64("uploadSize", size),
+			zap.Int64("cappedSize", math.MaxInt64))
+		size = math.MaxInt64
+	}
+
+	// Apply redundancy scaling
+	scaledSize := s.getStorageSizeToRecord(upload, size)
 
 	// Create adapter for RecordStorageChange to match usageRecordingFunc signature
 	recordStorageFunc := func(ctx context.Context, userID uint, uploadID uint, bytes uint64, ip string) error {
@@ -220,7 +281,7 @@ func (s *QuotaServiceDefault) handleStorageObjectPinned(ctx context.Context, pin
 			ctx,
 			pin.UserID,
 			*reservationUUID,
-			size,
+			scaledSize,
 			true, // Storage pin is always successful
 			recordStorageFunc,
 			pin.UploadID,
@@ -233,9 +294,10 @@ func (s *QuotaServiceDefault) handleStorageObjectPinned(ctx context.Context, pin
 	s.Logger().Debug("Recording storage usage from pin event",
 		zap.Uint("userID", pin.UserID),
 		zap.Uint("uploadID", pin.UploadID),
-		zap.Uint64("bytes", size))
+		zap.Uint64("originalSize", size),
+		zap.Uint64("scaledSize", scaledSize))
 
-	return s.RecordStorageChange(ctx, pin.UserID, pin.UploadID, int64(size), ip)
+	return s.RecordStorageChange(ctx, pin.UserID, pin.UploadID, int64(scaledSize), ip)
 }
 
 // handleStorageObjectUnpinned handles the storage object unpinned event
@@ -243,16 +305,31 @@ func (s *QuotaServiceDefault) handleStorageObjectUnpinned(ctx context.Context, p
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.handleStorageObjectUnpinned")
 	defer span.End()
 
-	size, err := s.getUploadSize(ctx, pin)
-	if err != nil && !errors.Is(err, errUploadSizeOverflow) {
+	upload, err := s.getUploadForPin(ctx, pin)
+	if err != nil {
 		return err
 	}
+
+	// Get the base size and apply redundancy scaling
+	size := upload.Size
+	if size > math.MaxInt64 {
+		s.Logger().Warn("Upload size exceeds maximum int64 value, capping for storage change",
+			zap.Uint("pinID", pin.ID),
+			zap.Uint("uploadID", pin.UploadID),
+			zap.Uint64("uploadSize", size),
+			zap.Int64("cappedSize", math.MaxInt64))
+		size = math.MaxInt64
+	}
+
+	// Apply redundancy scaling
+	scaledSize := s.getStorageSizeToRecord(upload, size)
 
 	s.Logger().Debug("Recording storage usage from unpin event",
 		zap.Uint("userID", pin.UserID),
 		zap.Uint("uploadID", pin.UploadID),
-		zap.Uint64("bytes", size))
+		zap.Uint64("originalSize", size),
+		zap.Uint64("scaledSize", scaledSize))
 
 	// Storage removal uses negative bytes
-	return s.RecordStorageChange(ctx, pin.UserID, pin.UploadID, -int64(size), ip)
+	return s.RecordStorageChange(ctx, pin.UserID, pin.UploadID, -int64(scaledSize), ip)
 }

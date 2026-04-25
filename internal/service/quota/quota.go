@@ -12,7 +12,6 @@ import (
 	pluginCore "go.lumeweb.com/portal-plugin-quota/core"
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
-	quotaEvent "go.lumeweb.com/portal-plugin-quota/internal/event"
 	quotaLock "go.lumeweb.com/portal-plugin-quota/internal/lock"
 	quotaReservation "go.lumeweb.com/portal-plugin-quota/internal/reservation"
 	"go.lumeweb.com/portal-plugin-quota/internal/service/managers"
@@ -785,10 +784,10 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 	}
 
 	if update.QuotaPlanID != nil {
-		event := quotaEvent.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, update.QuotaPlanID)
-		if err := core.Fire[quotaEvent.QuotaPlanChangedEvent](
+		event := pluginCore.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, update.QuotaPlanID)
+		if err := core.Fire[pluginCore.QuotaPlanChangedEvent](
 			s.Context(),
-			quotaEvent.EventQuotaPlanChanged,
+			pluginCore.EventQuotaPlanChanged,
 			event,
 		); err != nil {
 			s.Logger().Error("failed to emit quota plan changed event", zap.Error(err))
@@ -824,10 +823,10 @@ func (s *QuotaServiceDefault) ResetUserQuotaPlan(ctx context.Context, userID uin
 		return fmt.Errorf("failed to reset user quota plan: %w", err)
 	}
 
-	event := quotaEvent.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, nil)
-	if err := core.Fire[quotaEvent.QuotaPlanChangedEvent](
+	event := pluginCore.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, nil)
+	if err := core.Fire[pluginCore.QuotaPlanChangedEvent](
 		s.Context(),
-		quotaEvent.EventQuotaPlanChanged,
+		pluginCore.EventQuotaPlanChanged,
 		event,
 	); err != nil {
 		s.Logger().Error("failed to emit quota plan changed event", zap.Error(err))

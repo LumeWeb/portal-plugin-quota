@@ -241,10 +241,12 @@ func (e *QuotaAdminExtension) buildMiddlewares() []echo.MiddlewareFunc {
 }
 
 func (e *QuotaAdminExtension) newRoute(method, path string, handler echo.HandlerFunc, opts ...router.SwaggerOption) router.Route {
-	return router.NewRoute(method, path, handler, 
+	routerOpts := []router.RouteOption{
 		router.WithAccess(core.ACCESS_ADMIN_ROLE),
+		router.WithMiddlewares(e.buildMiddlewares()...),
 		router.WithSwaggerOptions(opts...),
-	)
+	}
+	return router.NewRoute(method, path, handler, routerOpts...)
 }
 
 // Quota Plan Management Handlers

@@ -87,6 +87,10 @@ func (h *QuotaTestHelper) SetupAuth() {
 
 // ExecuteRequest executes an API request and records the response
 func (h *QuotaTestHelper) ExecuteRequest(method, url string, body []byte) *httptest.ResponseRecorder {
+	// Ensure authentication is set up for admin routes
+	if h.authToken == "" {
+		h.SetupAuth()
+	}
 	req := h.NewAuthorizedRequest(method, url, body)
 	rec := httptest.NewRecorder()
 	h.ctx.Router().ServeHTTP(rec, req)

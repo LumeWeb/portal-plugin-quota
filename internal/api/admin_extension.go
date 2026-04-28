@@ -76,7 +76,7 @@ func (e *QuotaAdminExtension) Configure(gRouter router.Router, accessSvc core.Ac
 // registerQuotaHandlers registers quota management routes
 func (e *QuotaAdminExtension) registerQuotaHandlers(gRouter router.Router, accessSvc core.AccessService) error {
 	routes := e.buildRoutes()
-	apiGroup := internal.ProtocolName
+	apiGroup := core.GetAPI(e.TargetAPI()).Subdomain()
 	
 	e.Logger().Info("Registering admin extension routes", 
 		zap.String("group", apiGroup),

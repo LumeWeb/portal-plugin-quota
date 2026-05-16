@@ -1579,3 +1579,117 @@ func TestResetUserQuotaPlan_NonExistentUser_NoError(t *testing.T) {
 	}, testOptions())
 }
 
+// TestUpdateUserQuotaConfig_SecondUpdateDifferentPolicy_Succeeds tests that calling
+// UpdateUserQuotaConfig twice with different enforcement policies does not cause a
+// duplicate key violation. This is a regression test for a bug where FirstOrCreate
+// included enforcement_policy in the WHERE clause, so after the first update changed
+// the policy away from HARD_LIMITS (the init default), a second call would not find
+// the existing row and attempt a duplicate INSERT.
+func TestUpdateUserQuotaConfig_SecondUpdateDifferentPolicy_Succeeds(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		userID := uint(5001)
+
+		// First update: set enforcement policy to UNLIMITED (creates the config)
+		unlimitedPolicy := pluginModels.EnforcementPolicyUnlimited
+		update1 := &pluginCore.UserQuotaConfigUpdate{
+			EnforcementPolicy: &unlimitedPolicy,
+		}
+		config1, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update1)
+		require.NoError(t, err)
+		require.NotNil(t, config1)
+		assert.Equal(t, unlimitedPolicy, config1.EnforcementPolicy)
+
+		// Second update: change enforcement policy to THRESHOLD (should find existing row)
+		thresholdPolicy := pluginModels.EnforcementPolicyThreshold
+		update2 := &pluginCore.UserQuotaConfigUpdate{
+			EnforcementPolicy: &thresholdPolicy,
+		}
+		config2, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update2)
+		require.NoError(t, err)
+		require.NotNil(t, config2)
+		assert.Equal(t, thresholdPolicy, config2.EnforcementPolicy)
+	}, testOptions())
+}
+
+// TestUpdateUserQuotaConfig_RepeatedUpdateSamePolicy_Succeeds tests that calling
+// UpdateUserQuotaConfig multiple times with the same policy does not cause a
+// duplicate key violation.
+func TestUpdateUserQuotaConfig_RepeatedUpdateSamePolicy_Succeeds(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		userID := uint(5002)
+
+		unlimitedPolicy := pluginModels.EnforcementPolicyUnlimited
+		update := &pluginCore.UserQuotaConfigUpdate{
+			EnforcementPolicy: &unlimitedPolicy,
+		}
+
+		// First call creates the config
+		config1, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update)
+		require.NoError(t, err)
+		require.NotNil(t, config1)
+
+		// Second call should find the existing config and update it
+		config2, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update)
+		require.NoError(t, err)
+		require.NotNil(t, config2)
+		assert.Equal(t, unlimitedPolicy, config2.EnforcementPolicy)
+
+		// Third call should also work
+		config3, err := quotaService.UpdateUserQuotaConfig(ctx, userID, update)
+		require.NoError(t, err)
+		require.NotNil(t, config3)
+		assert.Equal(t, unlimitedPolicy, config3.EnforcementPolicy)
+	}, testOptions())
+}
+
+// TestAssignUserToPlan_AfterPolicyChange_Succeeds tests that AssignUserToPlan
+// works when a user's config already has a different enforcement policy than
+// the init default (HARD_LIMITS). This is a regression test for the same
+// FirstOrCreate WHERE clause bug.
+func TestAssignUserToPlan_AfterPolicyChange_Succeeds(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		quotaService := core.GetService[pluginCore.QuotaService](ctx, pluginCore.QUOTA_SERVICE).(*QuotaServiceDefault)
+
+		// Arrange - Create a plan
+		plan := &pluginModels.QuotaPlan{
+			Name:                "Test Plan For Policy Change",
+			Description:         "Plan for testing policy change",
+			StorageLimitBytes:   10737418240,
+			UploadLimitBytes:    104857600,
+			DownloadLimitBytes:  524288000,
+			WindowType:          pluginModels.WindowTypeCalendarDay,
+			IsDefault:           false,
+			IsActive:            new(bool),
+		}
+		*plan.IsActive = true
+		err := quotaService.CreateQuotaPlan(ctx, plan)
+		require.NoError(t, err)
+
+		userID := uint(5003)
+
+		// Set user's policy to UNLIMITED (different from AssignUserToPlan's init default of HARD_LIMITS)
+		unlimitedPolicy := pluginModels.EnforcementPolicyUnlimited
+		update := &pluginCore.UserQuotaConfigUpdate{
+			EnforcementPolicy: &unlimitedPolicy,
+		}
+		_, err = quotaService.UpdateUserQuotaConfig(ctx, userID, update)
+		require.NoError(t, err)
+
+		// Act - Assign user to plan (should find existing config, not try to INSERT)
+		err = quotaService.AssignUserToPlan(ctx, userID, plan.ID)
+
+		// Assert
+		require.NoError(t, err)
+
+		config, err := quotaService.GetQuotaConfig(ctx, userID)
+		require.NoError(t, err)
+		assert.NotNil(t, config.QuotaPlanID)
+		assert.Equal(t, uint64(plan.ID), *config.QuotaPlanID)
+		assert.Equal(t, unlimitedPolicy, config.EnforcementPolicy)
+	}, testOptions())
+}
+

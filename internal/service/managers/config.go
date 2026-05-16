@@ -79,8 +79,10 @@ func (cm *ConfigManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*
 	// Use FirstOrCreate to atomically handle the get-or-create logic.
 	// This prevents a race condition where two concurrent requests for a new user
 	// both try to create the config, causing one to fail.
+	// Use Attrs to set defaults on create without adding them to the WHERE clause,
+	// so that an existing config with different field values is still found.
 	err := db.RetryableTransaction(ctx, cm.DB(), func(tx *gorm.DB) *gorm.DB {
-		return tx.Where(&pluginModels.UserQuotaConfig{UserID: userID}).FirstOrCreate(defaultConfig)
+		return tx.Where("user_id = ?", userID).Attrs(defaultConfig).FirstOrCreate(defaultConfig)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create default user quota config: %w", err)

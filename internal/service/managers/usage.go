@@ -83,14 +83,16 @@ func (um *UsageManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*p
 	}
 
 	// Use FirstOrCreate to prevent race conditions when multiple goroutines
-	// try to create the same user config simultaneously
-	cfg := pluginModels.UserQuotaConfig{
-		UserID:            userID,
-		EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
-	}
+	// try to create the same user config simultaneously.
+	// Use Attrs to set defaults on create without adding them to the WHERE clause,
+	// so that an existing config with a different enforcement_policy is still found.
+	var cfg pluginModels.UserQuotaConfig
 
 	if err := db.RetryableTransaction(ctx, um.DB(), func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("user_id = ?", userID).FirstOrCreate(&cfg)
+		return tx.Where("user_id = ?", userID).Attrs(&pluginModels.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}).FirstOrCreate(&cfg)
 	}); err != nil {
 		return nil, fmt.Errorf("failed to get or create user quota config: %w", err)
 	}

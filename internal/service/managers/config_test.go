@@ -530,3 +530,40 @@ func TestConfigManager_GetUserAllowanceGrants_NoGrants_Success(t *testing.T) {
 		assert.Len(t, grants, 0)
 	}, pluginTesting.TestOptions())
 }
+
+// TestConfigManager_GetUserQuotaConfig_ExistingConfigDifferentPolicy_FindsExisting tests
+// that GetUserQuotaConfig finds an existing config even when its enforcement_policy
+// differs from the default. This is a regression test for a bug where FirstOrCreate
+// included enforcement_policy in the WHERE clause, causing it to miss existing rows
+// and attempt a duplicate INSERT.
+func TestConfigManager_GetUserQuotaConfig_ExistingConfigDifferentPolicy_FindsExisting(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+
+		policyEnforcers := map[pluginModels.EnforcementPolicy]pluginCore.PolicyEnforcer{
+			pluginModels.EnforcementPolicyUnlimited: mockPolicyEnforcer,
+		}
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, policyEnforcers)
+
+		userID := uint(2)
+
+		// Create config with UNLIMITED policy (different from default HARD_LIMITS)
+		userConfig := &pluginModels.UserQuotaConfig{
+			UserID:            userID,
+			EnforcementPolicy: pluginModels.EnforcementPolicyUnlimited,
+		}
+		err := ctx.DB().Create(userConfig).Error
+		require.NoError(t, err)
+
+		// GetUserQuotaConfig should find the existing row, not try to create a new one
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
+
+		config, err := configManager.GetUserQuotaConfig(ctx, userID)
+		require.NoError(t, err)
+		assert.Equal(t, userID, config.UserID)
+		assert.Equal(t, pluginModels.EnforcementPolicyUnlimited, config.EnforcementPolicy)
+	}, pluginTesting.TestOptions())
+}

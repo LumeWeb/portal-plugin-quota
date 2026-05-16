@@ -630,17 +630,19 @@ func (s *QuotaServiceDefault) AssignUserToPlan(ctx context.Context, userID uint,
 
 	// Perform both operations atomically in a transaction
 	return db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
-		// First, ensure the user has a quota config
-		result := tx.Where("user_id = ?", userID).FirstOrCreate(&models.UserQuotaConfig{
+		// First, ensure the user has a quota config.
+		// Use Attrs to set defaults on create without adding them to the WHERE clause.
+		var config models.UserQuotaConfig
+		result := tx.Where("user_id = ?", userID).Attrs(&models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		})
+		}).FirstOrCreate(&config)
 		if result.Error != nil {
 			return result
 		}
 
 		// Update the user's quota config with the plan ID
-		return tx.Model(&models.UserQuotaConfig{}).Where("user_id = ?", userID).UpdateColumn("quota_plan_id", planID)
+		return tx.Model(&config).UpdateColumn("quota_plan_id", planID)
 	})
 
 }
@@ -760,12 +762,14 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 	var oldPlanID *uint64
 
 	// Ensure the user has a quota config first, then apply updates
+	// Use Attrs to set defaults on create without adding them to the WHERE clause,
+	// so that an existing config with a different enforcement_policy is still found.
 	if err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
 		var config models.UserQuotaConfig
-		result := tx.Where("user_id = ?", userID).FirstOrCreate(&config, &models.UserQuotaConfig{
+		result := tx.Where("user_id = ?", userID).Attrs(&models.UserQuotaConfig{
 			UserID:            userID,
 			EnforcementPolicy: models.EnforcementPolicyHardLimits,
-		})
+		}).FirstOrCreate(&config)
 		if result.Error != nil {
 			return result
 		}

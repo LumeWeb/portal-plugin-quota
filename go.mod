@@ -21,7 +21,7 @@ require (
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-plugin-core v0.0.0-20260109024150-b4ac33cb7c47
 	go.lumeweb.com/portal-plugin-dashboard v0.2.7-0.20260418132608-572560c6efd0
-	go.lumeweb.com/portal-router v0.6.13
+	go.lumeweb.com/portal-router v0.6.16
 	go.lumeweb.com/queryutil v0.3.16
 	go.uber.org/zap v1.28.0
 	gorm.io/datatypes v1.2.7
@@ -77,7 +77,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/gammazero/deque v1.2.1 // indirect
 	github.com/gammazero/workerpool v1.2.1 // indirect
-	github.com/getkin/kin-openapi v0.133.0 // indirect
+	github.com/getkin/kin-openapi v0.134.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/glebarez/sqlite v1.11.0 // indirect
@@ -151,8 +151,8 @@ require (
 	github.com/multiformats/go-varint v0.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect
-	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
+	github.com/oasdiff/yaml v0.0.0-20260313112342-a3ea61cb4d4c // indirect
+	github.com/oasdiff/yaml3 v0.0.0-20260224194419-61cd415a242b // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
@@ -191,7 +191,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.6.10 // indirect
 	go.lumeweb.com/configmanager v0.3.28 // indirect
 	go.lumeweb.com/event/v2 v2.1.0 // indirect
-	go.lumeweb.com/gswagger v0.20.10 // indirect
+	go.lumeweb.com/gswagger v0.20.12 // indirect
 	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260123053442-479cd558a2fc // indirect
 	go.lumeweb.com/web/go/portal-plugin-core v0.0.0-20251002232245-a7ec646aadd4 // indirect
 	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260123053442-479cd558a2fc // indirect

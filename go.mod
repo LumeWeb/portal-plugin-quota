@@ -11,7 +11,7 @@ require (
 	github.com/knadh/koanf/providers/confmap v1.0.0
 	github.com/knadh/koanf/providers/rawbytes v1.0.0
 	github.com/knadh/koanf/v2 v2.3.4
-	github.com/labstack/echo/v4 v4.15.1
+	github.com/labstack/echo/v4 v4.15.2
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/lo v1.53.0
@@ -127,13 +127,13 @@ require (
 	github.com/knadh/koanf/providers/structs v1.0.0 // indirect
 	github.com/kolesa-team/go-webp v1.0.5 // indirect
 	github.com/labstack/echo-contrib v0.17.4 // indirect
-	github.com/labstack/gommon v0.4.2 // indirect
+	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/looplab/fsm v1.0.3 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/markbates/going v1.0.3 // indirect
 	github.com/markbates/goth v1.82.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-sqlite3 v1.14.42 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/microsoft/go-mssqldb v1.9.8 // indirect

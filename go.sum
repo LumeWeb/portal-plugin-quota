@@ -434,8 +434,6 @@ github.com/knadh/koanf/providers/rawbytes v1.0.0 h1:MrKDh/HksJlKJmaZjgs4r8aVBb/z
 github.com/knadh/koanf/providers/rawbytes v1.0.0/go.mod h1:KxwYJf1uezTKy6PBtfE+m725NGp4GPVA7XoNTJ/PtLo=
 github.com/knadh/koanf/providers/structs v1.0.0 h1:DznjB7NQykhqCar2LvNug3MuxEQsZ5KvfgMbio+23u4=
 github.com/knadh/koanf/providers/structs v1.0.0/go.mod h1:kjo5TFtgpaZORlpoJqcbeLowM2cINodv8kX+oFAeQ1w=
-github.com/knadh/koanf/v2 v2.3.4 h1:fnynNSDlujWE+v83hAp8wKr/cdoxHLO0629SN+U8Urc=
-github.com/knadh/koanf/v2 v2.3.4/go.mod h1:gRb40VRAbd4iJMYYD5IxZ6hfuopFcXBpc9bbQpZwo28=
 github.com/knadh/koanf/v2 v2.3.5 h1:2dXJUYaKGm4SGYeoAtBviq9+02JZo/pxQ2ssOd60rJg=
 github.com/knadh/koanf/v2 v2.3.5/go.mod h1:gRb40VRAbd4iJMYYD5IxZ6hfuopFcXBpc9bbQpZwo28=
 github.com/kolesa-team/go-webp v1.0.5 h1:GZQHJBaE8dsNKZltfwqsL0qVJ7vqHXsfA+4AHrQW3pE=
@@ -717,12 +715,12 @@ go.lumeweb.com/portal-router v0.6.16 h1:/2HZfXCpVfTTWNBmVfrCCLtYVm6vpXUD5aAKjPPQ
 go.lumeweb.com/portal-router v0.6.16/go.mod h1:hl51sHDKcgw8yxJ6RraYBOI1Vnufq33FhKwfKiqCkVg=
 go.lumeweb.com/queryutil v0.3.16 h1:4ShUZdaov+jBRWTkABaa8j1QnDSUv1AtVDJd6IbPO3Y=
 go.lumeweb.com/queryutil v0.3.16/go.mod h1:nLkIuXzugX8Ln24wsAbfTafvNmaTHLJhIUKWC1693G4=
-go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260605162753-33060e73d160 h1:zpcLK70dkksuuvdi7o0NKT7Co1DdB0c6M47ufFHZwCE=
-go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260605162753-33060e73d160/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
-go.lumeweb.com/web/go/portal-plugin-core v0.0.0-20260605162753-33060e73d160 h1:YaCZyAJYKwQaaMSn77PvLuTkC3l4Rz1u748tv0X6eAI=
-go.lumeweb.com/web/go/portal-plugin-core v0.0.0-20260605162753-33060e73d160/go.mod h1:ysEOscbv7A7MysuCeAxRRIvLBcVNAttRAYIwagSFilI=
-go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260605162753-33060e73d160 h1:0pi/6/THTxWgG54Bx/2Z6Al7UK9+EoKLQo+CCEthtV4=
-go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260605162753-33060e73d160/go.mod h1:kBGprau52kN8MFDt8tN4G6D/mzOESayQIcS1tgrIuxY=
+go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260605173110-007f18ff241a h1:RpXGAhpCGaJuAwo8FI5YNyMuXHBSa6iCf+r8rweJGfo=
+go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260605173110-007f18ff241a/go.mod h1:vMRQ9Q+5VbGjXNAOgIhpFwWAo5yoZjgUbVJXXJ1y3qI=
+go.lumeweb.com/web/go/portal-plugin-core v0.0.0-20260605173110-007f18ff241a h1:iwroi7xSzdxv2eYPwmG6TOCIdGJ+qrfTfSgDWjkdu5k=
+go.lumeweb.com/web/go/portal-plugin-core v0.0.0-20260605173110-007f18ff241a/go.mod h1:ysEOscbv7A7MysuCeAxRRIvLBcVNAttRAYIwagSFilI=
+go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260605173110-007f18ff241a h1:AmXN07biWCXqRAuzIEtEZ9HgEMd59Rjl8bl6o8/Du2k=
+go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260605173110-007f18ff241a/go.mod h1:kBGprau52kN8MFDt8tN4G6D/mzOESayQIcS1tgrIuxY=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
 go.opencensus.io v0.22.2/go.mod h1:yxeiOL68Rb0Xd1ddK5vPZ/oVn4vY4Ynel7k9FzqtOIw=

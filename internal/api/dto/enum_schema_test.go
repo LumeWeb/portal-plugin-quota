@@ -26,7 +26,7 @@ func TestAllowanceGrantResponse_FieldEnums(t *testing.T) {
 	}
 
 	expectations := []enumCheck{
-		{"type", []string{"STORAGE", "UPLOAD", "DOWNLOAD"}, true},
+		{"type", []string{"storage", "upload", "download"}, true},
 		{"source", []string{"SUBSCRIPTION", "PAYG_ADDON", "BONUS", "PROMO"}, true},
 	}
 

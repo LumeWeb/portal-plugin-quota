@@ -199,7 +199,7 @@ func (r *AllowanceListRequest) ToModel() (*AllowanceListRequest, error) {
 type AllowanceGrantResponse struct {
 	ID             uint       `json:"id"`
 	UserID         uint       `json:"user_id"`
-	Type           string     `json:"type" jsonschema:"enum=STORAGE,enum=UPLOAD,enum=DOWNLOAD"`
+	Type           string     `json:"type" jsonschema:"enum=storage,enum=upload,enum=download"`
 	Source         string     `json:"source" jsonschema:"enum=SUBSCRIPTION,enum=PAYG_ADDON,enum=BONUS,enum=PROMO"`
 	Bytes          uint64     `json:"bytes"`
 	BytesUsed      uint64     `json:"bytes_used"`

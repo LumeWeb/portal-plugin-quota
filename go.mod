@@ -20,9 +20,9 @@ require (
 	go.lumeweb.com/portal v0.5.0
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-plugin-core v0.1.0
-	go.lumeweb.com/portal-plugin-dashboard v0.3.0
-	go.lumeweb.com/portal-router v0.7.0
-	go.lumeweb.com/queryutil v0.3.16
+	go.lumeweb.com/portal-plugin-dashboard v0.3.1-0.20260630230959-832ef00ede25
+	go.lumeweb.com/portal-router v0.7.2
+	go.lumeweb.com/queryutil v0.3.17
 	go.uber.org/zap v1.28.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/gorm v1.31.1

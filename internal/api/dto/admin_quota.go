@@ -141,8 +141,8 @@ type PlanListResponse struct {
 // AllowanceGrantRequest represents a request to create/update a grant
 type AllowanceGrantRequest struct {
 	UserID     uint               `json:"user_id"`
-	Type       models.GrantType `json:"type"`
-	Source     models.GrantSource  `json:"source"`
+	Type       models.GrantType   `json:"type" jsonschema:"enum=STORAGE,enum=UPLOAD,enum=DOWNLOAD"`
+	Source     models.GrantSource `json:"source" jsonschema:"enum=SUBSCRIPTION,enum=PAYG_ADDON,enum=BONUS,enum=PROMO"`
 	Storage    uint64             `json:"storage"`
 	Upload     uint64             `json:"upload"`
 	Download   uint64             `json:"download"`
@@ -177,7 +177,7 @@ func (r *AllowanceGrantRequest) ToModel() (*AllowanceGrantRequest, error) {
 // AllowanceListRequest represents query parameters for listing allowance grants
 type AllowanceListRequest struct {
 	UserID *uint            `query:"user_id" json:"user_id"`
-	Type   models.GrantType `query:"type" json:"type"`
+	Type   models.GrantType `query:"type" json:"type" jsonschema:"enum=STORAGE,enum=UPLOAD,enum=DOWNLOAD"`
 }
 
 func (r *AllowanceListRequest) Schema() *z.StructSchema {
@@ -199,8 +199,8 @@ func (r *AllowanceListRequest) ToModel() (*AllowanceListRequest, error) {
 type AllowanceGrantResponse struct {
 	ID             uint       `json:"id"`
 	UserID         uint       `json:"user_id"`
-	Type           string     `json:"type"`
-	Source         string     `json:"source"`
+	Type           string     `json:"type" jsonschema:"enum=STORAGE,enum=UPLOAD,enum=DOWNLOAD"`
+	Source         string     `json:"source" jsonschema:"enum=SUBSCRIPTION,enum=PAYG_ADDON,enum=BONUS,enum=PROMO"`
 	Bytes          uint64     `json:"bytes"`
 	BytesUsed      uint64     `json:"bytes_used"`
 	BytesRemaining uint64     `json:"bytes_remaining"`
@@ -294,7 +294,7 @@ func (r ReconcileResponse) FromModel(_ ReconcileResponse) error {
 type UserQuotaConfigResponse struct {
 	ID                 uint      `json:"id"`
 	UserID             uint      `json:"user_id"`
-	EnforcementPolicy  string    `json:"enforcement_policy"`
+	EnforcementPolicy  string    `json:"enforcement_policy" jsonschema:"enum=HARD_LIMITS,enum=UNLIMITED,enum=ALLOWANCE,enum=THRESHOLD"`
 	QuotaPlanID        *uint64   `json:"quota_plan_id,omitempty"`
 	// Window configuration
 	WindowType      *string  `json:"window_type,omitempty"`
@@ -357,7 +357,7 @@ type UserQuotaConfigListResponse struct {
 
 // UserQuotaConfigUpdateRequest represents a request to update a user's quota config
 type UserQuotaConfigUpdateRequest struct {
-	EnforcementPolicy  *models.EnforcementPolicy `json:"enforcement_policy,omitempty"`
+	EnforcementPolicy  *models.EnforcementPolicy `json:"enforcement_policy,omitempty" jsonschema:"enum=HARD_LIMITS,enum=UNLIMITED,enum=ALLOWANCE,enum=THRESHOLD"`
 	QuotaPlanID        *uint64                   `json:"quota_plan_id,omitempty"`
 	// Window configuration
 	WindowType      *string  `json:"window_type,omitempty"`

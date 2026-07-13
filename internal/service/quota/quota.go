@@ -326,12 +326,32 @@ func (s *QuotaServiceDefault) SetQuotaConfig(ctx context.Context, userID uint, c
 	// Ensure the config has the correct user ID
 	config.UserID = userID
 
+	// Capture existing plan ID for the change event
+	var oldPlanID *uint64
+	var existing models.UserQuotaConfig
+	if result := s.DB().Where("user_id = ?", userID).First(&existing); result.Error == nil {
+		oldPlanID = existing.QuotaPlanID
+	}
+
 	// Use upsert to handle both create and update cases
 	err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("user_id = ?", userID).Assign(config).FirstOrCreate(config)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set user quota config: %w", err)
+	}
+
+	// Fire QuotaPlanChanged so EnforceFundingTarget syncs FundTargetBytes
+	// to the Sia account record. Without this, ConnectQuotaCheck sees
+	// FundTargetBytes == 0 and blocks the connect UI.
+	newPlanID := config.QuotaPlanID
+	event := pluginCore.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, newPlanID)
+	if err := core.Fire[pluginCore.QuotaPlanChangedEvent](
+		s.Context(),
+		pluginCore.EventQuotaPlanChanged,
+		event,
+	); err != nil {
+		s.Logger().Error("failed to emit quota plan changed event", zap.Error(err))
 	}
 
 	return nil
@@ -397,6 +417,89 @@ func (s *QuotaServiceDefault) CreateQuotaPlan(ctx context.Context, plan *models.
 	return err
 }
 
+// syncUsersForPlan fires QuotaPlanChanged asynchronously for all users
+// assigned to the given plan, so EnforceFundingTarget can sync their
+// FundTargetBytes. Uses DetachContext so events survive request cancellation.
+const userSyncBatchSize = 500
+
+func (s *QuotaServiceDefault) syncUsersForPlan(ctx context.Context, planID uint) {
+	detachedCtx := core.DetachContext(ctx)
+	var totalSynced int
+
+	for offset := 0; ; offset += userSyncBatchSize {
+		var userIDs []uint
+		if err := s.DB().WithContext(ctx).Model(&models.UserQuotaConfig{}).
+			Where("quota_plan_id = ?", planID).
+			Limit(userSyncBatchSize).Offset(offset).
+			Pluck("user_id", &userIDs).Error; err != nil {
+			s.Logger().Error("failed to query users for plan sync",
+				zap.Uint("planID", planID), zap.Error(err))
+			return
+		}
+
+		if len(userIDs) == 0 {
+			break
+		}
+
+		for _, uid := range userIDs {
+			event := pluginCore.NewQuotaPlanChangedEvent(detachedCtx, uid, nil, nil)
+			core.FireAsync[pluginCore.QuotaPlanChangedEvent](
+				s.Context(),
+				pluginCore.EventQuotaPlanChanged,
+				event,
+			)
+		}
+		totalSynced += len(userIDs)
+
+		if len(userIDs) < userSyncBatchSize {
+			break
+		}
+	}
+
+	s.Logger().Debug("synced plan users for funding target enforcement",
+		zap.Uint("planID", planID), zap.Int("userCount", totalSynced))
+}
+
+// syncUsersWithoutPlan fires QuotaPlanChanged asynchronously for all users
+// who have no explicit plan assignment — they fall back to the default plan.
+// Called when the default plan changes.
+func (s *QuotaServiceDefault) syncUsersWithoutPlan(ctx context.Context) {
+	detachedCtx := core.DetachContext(ctx)
+	var totalSynced int
+
+	for offset := 0; ; offset += userSyncBatchSize {
+		var userIDs []uint
+		if err := s.DB().WithContext(ctx).Model(&models.UserQuotaConfig{}).
+			Where("quota_plan_id IS NULL").
+			Limit(userSyncBatchSize).Offset(offset).
+			Pluck("user_id", &userIDs).Error; err != nil {
+			s.Logger().Error("failed to query users without plan for sync", zap.Error(err))
+			return
+		}
+
+		if len(userIDs) == 0 {
+			break
+		}
+
+		for _, uid := range userIDs {
+			event := pluginCore.NewQuotaPlanChangedEvent(detachedCtx, uid, nil, nil)
+			core.FireAsync[pluginCore.QuotaPlanChangedEvent](
+				s.Context(),
+				pluginCore.EventQuotaPlanChanged,
+				event,
+			)
+		}
+		totalSynced += len(userIDs)
+
+		if len(userIDs) < userSyncBatchSize {
+			break
+		}
+	}
+
+	s.Logger().Debug("synced default-plan users for funding target enforcement",
+		zap.Int("userCount", totalSynced))
+}
+
 func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, plan *models.QuotaPlan) error {
 	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.UpdateQuotaPlan")
 	defer span.End()
@@ -416,6 +519,18 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 	if existing.IsDefault != plan.IsDefault {
 		return fmt.Errorf("cannot change default quota plan status through update - use SetDefaultQuotaPlan to change the default plan")
 	}
+
+	// Check if limit-affecting fields changed before syncing users
+	limitsChanged := existing.StorageLimitBytes != plan.StorageLimitBytes ||
+		existing.UploadLimitBytes != plan.UploadLimitBytes ||
+		existing.DownloadLimitBytes != plan.DownloadLimitBytes ||
+		existing.StorageThreshold != plan.StorageThreshold ||
+		existing.UploadThreshold != plan.UploadThreshold ||
+		existing.DownloadThreshold != plan.DownloadThreshold ||
+		existing.WindowType != plan.WindowType ||
+		existing.WindowDuration != plan.WindowDuration ||
+		existing.WindowStartHour != plan.WindowStartHour ||
+		existing.WindowTimezone != plan.WindowTimezone
 
 	err := core.MetricTrack(
 		nil,
@@ -454,6 +569,11 @@ func (s *QuotaServiceDefault) UpdateQuotaPlan(ctx context.Context, planID uint, 
 			return nil
 		},
 	)
+
+	if err == nil && limitsChanged {
+		s.syncUsersForPlan(ctx, planID)
+	}
+
 	return err
 }
 
@@ -563,7 +683,7 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID ui
 	// Perform both updates atomically in a transaction
 	// Order is critical: unset old default first, then set new one
 	// This ensures never more than one default, avoiding constraint violations
-	return db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
+	err := db.RetryableComponentTransaction(s, ctx, func(tx *gorm.DB) *gorm.DB {
 		// First, fetch and unset the current default plan (if any)
 		// Use Unscoped() to include soft-deleted records, which prevents
 		// duplicate key violations when trying to set a new default plan
@@ -587,6 +707,12 @@ func (s *QuotaServiceDefault) SetDefaultQuotaPlan(ctx context.Context, planID ui
 		newDefault.IsDefault = true
 		return tx.Save(&newDefault)
 	})
+
+	if err == nil {
+		s.syncUsersWithoutPlan(ctx)
+	}
+
+	return err
 }
 
 func (s *QuotaServiceDefault) GetDefaultQuotaPlan(ctx context.Context) (*models.QuotaPlan, error) {
@@ -787,8 +913,34 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 		return nil, fmt.Errorf("failed to update user quota config: %w", err)
 	}
 
+	// Fire QuotaPlanChanged for any change that affects effective limits,
+	// not just plan ID changes. EnforceFundingTarget (Sia plugin) listens
+	// for this event to sync FundTargetBytes to the Sia account record.
+	// Without this, ConnectQuotaCheck sees FundTargetBytes == 0 and blocks
+	// the connect UI even though the quota config was updated.
+	var newPlanID *uint64
 	if update.QuotaPlanID != nil {
-		event := pluginCore.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, update.QuotaPlanID)
+		newPlanID = update.QuotaPlanID
+	} else {
+		newPlanID = oldPlanID
+	}
+
+	// Check if any limit-affecting field was updated
+	limitsChanged := update.QuotaPlanID != nil ||
+		update.EnforcementPolicy != nil ||
+		update.StorageLimitBytes != nil ||
+		update.UploadLimitBytes != nil ||
+		update.DownloadLimitBytes != nil ||
+		update.StorageThreshold != nil ||
+		update.UploadThreshold != nil ||
+		update.DownloadThreshold != nil ||
+		update.WindowType != nil ||
+		update.WindowDuration != nil ||
+		update.WindowStartHour != nil ||
+		update.WindowTimezone != nil
+
+	if limitsChanged {
+		event := pluginCore.NewQuotaPlanChangedEvent(ctx, userID, oldPlanID, newPlanID)
 		if err := core.Fire[pluginCore.QuotaPlanChangedEvent](
 			s.Context(),
 			pluginCore.EventQuotaPlanChanged,

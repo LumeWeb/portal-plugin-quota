@@ -20,7 +20,7 @@ require (
 	go.lumeweb.com/portal v0.5.2-0.20260717144043-901049bcdd77
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-plugin-core v0.1.0
-	go.lumeweb.com/portal-plugin-dashboard v0.3.1-0.20260630230959-832ef00ede25
+	go.lumeweb.com/portal-plugin-dashboard v0.3.1-0.20260708232039-b4aebacb9791
 	go.lumeweb.com/portal-router v0.7.6
 	go.lumeweb.com/queryutil v0.3.17
 	go.uber.org/zap v1.28.0
@@ -190,9 +190,9 @@ require (
 	go.lumeweb.com/configmanager v0.3.29 // indirect
 	go.lumeweb.com/event/v2 v2.1.0 // indirect
 	go.lumeweb.com/gswagger v0.20.12 // indirect
-	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260707061228-b351ce1bbdfd // indirect
+	go.lumeweb.com/web/go/portal-dashboard v0.0.0-20260708225528-03f364bd0861 // indirect
 	go.lumeweb.com/web/go/portal-plugin-core v0.0.0-20260707061228-b351ce1bbdfd // indirect
-	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260707061228-b351ce1bbdfd // indirect
+	go.lumeweb.com/web/go/portal-plugin-dashboard v0.0.0-20260708225528-03f364bd0861 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.19.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho v0.69.0 // indirect

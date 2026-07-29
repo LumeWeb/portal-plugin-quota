@@ -497,5 +497,6 @@ type UserQuotaConfigUpdate struct {
 	StorageThreshold    *int64  `json:"storage_threshold,omitempty"`
 	UploadThreshold     *int64  `json:"upload_threshold,omitempty"`
 	DownloadThreshold   *int64  `json:"download_threshold,omitempty"`
+	ExcludedFromHealthReports *bool `json:"excluded_from_health_reports,omitempty"`
 }
 

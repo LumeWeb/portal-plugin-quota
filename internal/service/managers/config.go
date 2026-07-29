@@ -206,6 +206,77 @@ func (cm *ConfigManager) ResolveEffectiveLimitsBatchReadOnly(ctx context.Context
 
 	return result, nil
 }
+
+// GetExcludedFromHealthReports returns the set of userIDs excluded from CID pin
+// health aggregates. A user is excluded if either their UserQuotaConfig has
+// ExcludedFromHealthReports=true (per-user override) OR their assigned QuotaPlan
+// has ExcludedFromHealthReports=true (plan-level). Users without a config or plan
+// are not excluded.
+func (cm *ConfigManager) GetExcludedFromHealthReports(ctx context.Context, userIDs []uint) (map[uint]bool, error) {
+	ctx, span := core.TraceMethod(ctx, "ConfigManager.GetExcludedFromHealthReports")
+	defer span.End()
+
+	excluded := make(map[uint]bool)
+	if len(userIDs) == 0 {
+		return excluded, nil
+	}
+
+	// Fetch user configs — check per-user flag and collect plan IDs
+	var configs []*pluginModels.UserQuotaConfig
+	err := cm.DB().WithContext(ctx).
+		Where("user_id IN ?", userIDs).
+		Find(&configs).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user configs for health exclusion: %w", err)
+	}
+
+	// Collect unique non-nil plan IDs (only for users not already excluded per-user)
+	planIDs := make(map[uint64]bool)
+	userToPlan := make(map[uint]uint64)
+	for _, cfg := range configs {
+		if cfg.ExcludedFromHealthReports {
+			excluded[cfg.UserID] = true
+			continue
+		}
+		if cfg.QuotaPlanID != nil {
+			planIDs[*cfg.QuotaPlanID] = true
+			userToPlan[cfg.UserID] = *cfg.QuotaPlanID
+		}
+	}
+
+	if len(planIDs) == 0 {
+		return excluded, nil
+	}
+
+	// Batch-fetch plans with ExcludedFromHealthReports=true
+	ids := make([]uint64, 0, len(planIDs))
+	for id := range planIDs {
+		ids = append(ids, id)
+	}
+
+	var excludedPlans []pluginModels.QuotaPlan
+	err = cm.DB().WithContext(ctx).
+		Where("id IN ? AND excluded_from_health_reports = ?", ids, true).
+		Find(&excludedPlans).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch excluded plans: %w", err)
+	}
+
+	excludedPlanIDs := make(map[uint64]bool, len(excludedPlans))
+	for _, p := range excludedPlans {
+		excludedPlanIDs[uint64(p.ID)] = true
+	}
+
+	// Map remaining users to excluded status via plan
+	for userID, planID := range userToPlan {
+		if excludedPlanIDs[planID] {
+			excluded[userID] = true
+		}
+	}
+
+	return excluded, nil
+}
+
 func (cm *ConfigManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*pluginModels.UserQuotaConfig, error) {
 	ctx, span := core.TraceMethod(ctx, "ConfigManager.GetUserQuotaConfig")
 	defer span.End()

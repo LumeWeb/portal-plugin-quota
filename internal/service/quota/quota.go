@@ -879,6 +879,9 @@ func (s *QuotaServiceDefault) UpdateUserQuotaConfig(ctx context.Context, userID 
 	if update.DownloadThreshold != nil {
 		updates["download_threshold"] = update.DownloadThreshold
 	}
+	if update.ExcludedFromHealthReports != nil {
+		updates["excluded_from_health_reports"] = *update.ExcludedFromHealthReports
+	}
 
 	if len(updates) == 0 {
 		return nil, fmt.Errorf("no fields to update")
@@ -1489,6 +1492,24 @@ func (s *QuotaServiceDefault) GetCIDPinHealth(ctx context.Context, cid core.Stor
 	}
 	if len(pinningUsers) == 0 {
 		return health, nil
+	}
+
+	// Exclude users on plans flagged ExcludedFromHealthReports (e.g. admin/system accounts)
+	excludedUsers, err := s.configManager.GetExcludedFromHealthReports(ctx, pinningUsers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check health report exclusions: %w", err)
+	}
+	if len(excludedUsers) > 0 {
+		filtered := pinningUsers[:0]
+		for _, uid := range pinningUsers {
+			if !excludedUsers[uid] {
+				filtered = append(filtered, uid)
+			}
+		}
+		pinningUsers = filtered
+		if len(pinningUsers) == 0 {
+			return health, nil
+		}
 	}
 
 	usageManager := s.GetUsageManager()

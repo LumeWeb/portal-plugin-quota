@@ -44,6 +44,7 @@ type QuotaPlanRequest struct {
 	UploadThreshold     *int64  `json:"upload_threshold"`
 	DownloadThreshold   *int64  `json:"download_threshold"`
 	IsActive            *bool   `json:"is_active"`
+	ExcludedFromHealthReports *bool `json:"excluded_from_health_reports"`
 }
 
 func (r *QuotaPlanRequest) Schema() *z.StructSchema {
@@ -61,6 +62,7 @@ func (r *QuotaPlanRequest) Schema() *z.StructSchema {
 		"UploadThreshold":    z.Ptr(z.Int64().GTE(0)),
 		"DownloadThreshold":  z.Ptr(z.Int64().GTE(0)),
 		"IsActive":           z.Ptr(z.Bool()),
+		"ExcludedFromHealthReports": z.Ptr(z.Bool()),
 	})
 }
 
@@ -87,6 +89,7 @@ type QuotaPlanResponse struct {
 	DownloadThreshold   *int64  `json:"download_threshold"`
 	IsDefault          bool      `json:"is_default"`
 	IsActive           bool      `json:"is_active"`
+	ExcludedFromHealthReports bool `json:"excluded_from_health_reports"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
@@ -120,6 +123,7 @@ func (r *QuotaPlanResponse) FromModel(model *models.QuotaPlan) error {
 	
 	r.IsDefault = model.IsDefault
 	r.IsActive = model.IsActive != nil && *model.IsActive
+	r.ExcludedFromHealthReports = model.ExcludedFromHealthReports
 	r.CreatedAt = model.CreatedAt
 	r.UpdatedAt = model.UpdatedAt
 	return nil
@@ -308,6 +312,7 @@ type UserQuotaConfigResponse struct {
 	StorageThreshold    *int64  `json:"storage_threshold,omitempty"`
 	UploadThreshold     *int64  `json:"upload_threshold,omitempty"`
 	DownloadThreshold   *int64  `json:"download_threshold,omitempty"`
+	ExcludedFromHealthReports bool `json:"excluded_from_health_reports"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
@@ -337,6 +342,7 @@ func (r *UserQuotaConfigResponse) FromModel(model *models.UserQuotaConfig) error
 	r.StorageThreshold = model.StorageThreshold
 	r.UploadThreshold = model.UploadThreshold
 	r.DownloadThreshold = model.DownloadThreshold
+	r.ExcludedFromHealthReports = model.ExcludedFromHealthReports
 	r.CreatedAt = model.CreatedAt
 	r.UpdatedAt = model.UpdatedAt
 	return nil
@@ -371,6 +377,7 @@ type UserQuotaConfigUpdateRequest struct {
 	StorageThreshold    *int64  `json:"storage_threshold,omitempty"`
 	UploadThreshold     *int64  `json:"upload_threshold,omitempty"`
 	DownloadThreshold   *int64  `json:"download_threshold,omitempty"`
+	ExcludedFromHealthReports *bool `json:"excluded_from_health_reports,omitempty"`
 }
 
 func (r *UserQuotaConfigUpdateRequest) Schema() *z.StructSchema {
@@ -387,6 +394,7 @@ func (r *UserQuotaConfigUpdateRequest) Schema() *z.StructSchema {
 		"StorageThreshold":   z.Ptr(z.Int64().GTE(0)),
 		"UploadThreshold":    z.Ptr(z.Int64().GTE(0)),
 		"DownloadThreshold":  z.Ptr(z.Int64().GTE(0)),
+		"ExcludedFromHealthReports": z.Ptr(z.Bool()),
 	})
 }
 

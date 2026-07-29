@@ -28,6 +28,11 @@ type UserQuotaConfig struct {
 	UploadThreshold   *int64
 	DownloadThreshold *int64
 
+	// ExcludedFromHealthReports excludes this specific user from CID pin health
+	// aggregates (e.g. admin/system accounts). Per-user override; plan-level flag
+	// on QuotaPlan.ExcludedFromHealthReports also applies.
+	ExcludedFromHealthReports bool
+
 	// Relationships
 	AllowanceGrants []*AllowanceGrant `gorm:"foreignKey:UserID;references:UserID"`
 }

@@ -28,6 +28,11 @@ type QuotaPlan struct {
 	StorageThreshold  *int64
 	UploadThreshold   *int64
 	DownloadThreshold *int64
+
+	// ExcludedFromHealthReports excludes users on this plan from CID pin health
+	// aggregates. Use for admin/system accounts that would otherwise skew health
+	// reporting (e.g. unlimited admin accounts reporting indefinite days remaining).
+	ExcludedFromHealthReports bool `gorm:"default:false"`
 }
 
 // TableName sets the table name for QuotaPlan

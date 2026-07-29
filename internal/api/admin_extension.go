@@ -316,7 +316,12 @@ func (e *QuotaAdminExtension) handleCreatePlan(c echo.Context) error {
 		IsDefault:         false,
 		IsActive:          req.IsActive,
 	}
-	
+
+	// Set health report exclusion
+	if req.ExcludedFromHealthReports != nil {
+		plan.ExcludedFromHealthReports = *req.ExcludedFromHealthReports
+	}
+
 	// Set WindowType if provided
 	if req.WindowType != nil {
 		plan.WindowType = models.WindowType(*req.WindowType)
@@ -414,6 +419,11 @@ func (e *QuotaAdminExtension) handleUpdatePlan(c echo.Context) error {
 	
 	// Set active status
 	plan.IsActive = req.IsActive
+
+	// Set health report exclusion
+	if req.ExcludedFromHealthReports != nil {
+		plan.ExcludedFromHealthReports = *req.ExcludedFromHealthReports
+	}
 
 	if err := e.quotaService.UpdateQuotaPlan(reqCtx, planID, plan); err != nil {
 		e.Logger().Error("failed to update quota plan", zap.Error(err))
@@ -547,6 +557,7 @@ func (e *QuotaAdminExtension) handleUpdateUserQuotaConfig(c echo.Context) error 
 	update.StorageThreshold = req.StorageThreshold
 	update.UploadThreshold = req.UploadThreshold
 	update.DownloadThreshold = req.DownloadThreshold
+	update.ExcludedFromHealthReports = req.ExcludedFromHealthReports
 
 	config, err := e.quotaService.UpdateUserQuotaConfig(reqCtx, userID, update)
 	if err != nil {

@@ -742,6 +742,136 @@ func TestGetCIDPinHealth_AuthorizationNonOwnerDenied(t *testing.T) {
 	}, testOptionsForIntegration())
 }
 
+// TestGetCIDPinHealth_ExcludedUserSkipped is a regression test verifying that
+// users on plans with ExcludedFromHealthReports=true are excluded from health aggregates.
+func TestGetCIDPinHealth_ExcludedUserSkipped(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		fixture := newQuotaIntegrationTestFixture(t, ctx)
+
+		// Create a plan with ExcludedFromHealthReports=true
+		excludedPlan := &pluginModels.QuotaPlan{
+			Name:                     "admin-plan",
+			Description:              "Plan for admin/system accounts",
+			StorageLimitBytes:        uint64(100 * units.GB),
+			UploadLimitBytes:         uint64(100 * units.GB),
+			DownloadLimitBytes:       uint64(100 * units.GB),
+			WindowType:               pluginModels.WindowTypeLifetime,
+			IsDefault:                 false,
+			IsActive:                 ptrBool(true),
+			ExcludedFromHealthReports: true,
+		}
+		require.NoError(t, ctx.DB().Create(excludedPlan).Error)
+
+		// Create the excluded user on the admin plan (UNLIMITED policy)
+		excludedUserID := fixture.dataManager.GenerateUserID()
+		planID := uint64(excludedPlan.ID)
+		fixture.dataManager.CreateUser(excludedUserID, pluginModels.EnforcementPolicyUnlimited,
+			&testdata.TestUserLimits{QuotaPlanID: &planID})
+
+		// Create a normal user with HARD_LIMITS
+		normalUserID := fixture.dataManager.GenerateUserID()
+		storageLimit := int64(1 * units.MB)
+		fixture.dataManager.CreateUser(normalUserID, pluginModels.EnforcementPolicyHardLimits,
+			&testdata.TestUserLimits{StorageLimitBytes: &storageLimit})
+
+		// Pin both users to the test upload
+		fixture.createPinsForUsers(t, []uint{excludedUserID, normalUserID})
+
+		// Get health — only the normal user should be counted
+		health, err := fixture.quotaService.GetCIDPinHealth(
+			ctx, core.NewStorageHashFromMultihashBytes(fixture.testHash, 0, nil), 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, health)
+		assert.Equal(t, uint64(1), health.PinnerCount, "Excluded user should not be counted")
+		assert.False(t, health.IsUnlimited, "Excluded unlimited user should not make group unlimited")
+		assert.Equal(t, uint64(1*units.MB), health.TotalQuotaBytes, "Quota should reflect only the normal user")
+
+		fixture.dataManager.CleanupWithContext(ctx)
+	}, testOptionsForIntegration())
+}
+
+// TestGetCIDPinHealth_AllUsersExcludedReturnsEmpty is a regression test verifying
+// that when all pinners are excluded, an empty health result is returned (not an error).
+func TestGetCIDPinHealth_AllUsersExcludedReturnsEmpty(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		fixture := newQuotaIntegrationTestFixture(t, ctx)
+
+		// Create a plan with ExcludedFromHealthReports=true
+		excludedPlan := &pluginModels.QuotaPlan{
+			Name:                     "all-admin-plan",
+			Description:              "Plan for system accounts",
+			StorageLimitBytes:        uint64(100 * units.GB),
+			UploadLimitBytes:         uint64(100 * units.GB),
+			DownloadLimitBytes:       uint64(100 * units.GB),
+			WindowType:               pluginModels.WindowTypeLifetime,
+			IsDefault:                 false,
+			IsActive:                 ptrBool(true),
+			ExcludedFromHealthReports: true,
+		}
+		require.NoError(t, ctx.DB().Create(excludedPlan).Error)
+
+		// Create two users on the excluded plan
+		planID := uint64(excludedPlan.ID)
+		user1 := fixture.dataManager.GenerateUserID()
+		user2 := fixture.dataManager.GenerateUserID()
+		fixture.dataManager.CreateUser(user1, pluginModels.EnforcementPolicyUnlimited,
+			&testdata.TestUserLimits{QuotaPlanID: &planID})
+		fixture.dataManager.CreateUser(user2, pluginModels.EnforcementPolicyUnlimited,
+			&testdata.TestUserLimits{QuotaPlanID: &planID})
+
+		fixture.createPinsForUsers(t, []uint{user1, user2})
+
+		health, err := fixture.quotaService.GetCIDPinHealth(
+			ctx, core.NewStorageHashFromMultihashBytes(fixture.testHash, 0, nil), 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, health)
+		assert.Equal(t, uint64(0), health.PinnerCount, "All users excluded → zero pinners")
+
+		fixture.dataManager.CleanupWithContext(ctx)
+	}, testOptionsForIntegration())
+}
+
+func ptrBool(b bool) *bool { return &b }
+
+// TestGetCIDPinHealth_PerUserExclusionSkipped is a regression test verifying that
+// a user with ExcludedFromHealthReports=true on their UserQuotaConfig (not plan-level)
+// is excluded from health aggregates.
+func TestGetCIDPinHealth_PerUserExclusionSkipped(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		fixture := newQuotaIntegrationTestFixture(t, ctx)
+
+		// Create unlimited user (would normally make the group unlimited)
+		unlimitedUserID := fixture.dataManager.GenerateUserID()
+		unlimitedCfg := fixture.dataManager.CreateUser(unlimitedUserID,
+			pluginModels.EnforcementPolicyUnlimited, nil)
+
+		// Set per-user exclusion flag directly
+		unlimitedCfg.ExcludedFromHealthReports = true
+		require.NoError(t, ctx.DB().Save(unlimitedCfg).Error)
+
+		// Create normal limited user
+		normalUserID := fixture.dataManager.GenerateUserID()
+		storageLimit := int64(1 * units.MB)
+		fixture.dataManager.CreateUser(normalUserID, pluginModels.EnforcementPolicyHardLimits,
+			&testdata.TestUserLimits{StorageLimitBytes: &storageLimit})
+
+		fixture.createPinsForUsers(t, []uint{unlimitedUserID, normalUserID})
+
+		health, err := fixture.quotaService.GetCIDPinHealth(
+			ctx, core.NewStorageHashFromMultihashBytes(fixture.testHash, 0, nil), 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, health)
+		assert.Equal(t, uint64(1), health.PinnerCount, "Per-user excluded user should not be counted")
+		assert.False(t, health.IsUnlimited, "Per-user excluded unlimited user should not make group unlimited")
+		assert.Equal(t, uint64(1*units.MB), health.TotalQuotaBytes, "Quota should reflect only the normal user")
+
+		fixture.dataManager.CleanupWithContext(ctx)
+	}, testOptionsForIntegration())
+}
+
 // TestGetCIDPinHealth_SystemCallBypassesAuth is a regression test verifying
 // that requesterID=0 (system/admin call) bypasses the ownership check.
 func TestGetCIDPinHealth_SystemCallBypassesAuth(t *testing.T) {

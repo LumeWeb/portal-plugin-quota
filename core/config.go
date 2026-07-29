@@ -14,6 +14,9 @@ type ConfigManager interface {
 	// create default configs for users lacking one. Users without existing configs are omitted
 	// from the result map. Use this from read-only paths (e.g. health checks).
 	ResolveEffectiveLimitsBatchReadOnly(ctx context.Context, userIDs []uint) (map[uint]*EffectiveLimits, error)
+	// GetExcludedFromHealthReports returns the set of userIDs whose assigned quota plan
+	// has ExcludedFromHealthReports=true. Users without a config or plan are not excluded.
+	GetExcludedFromHealthReports(ctx context.Context, userIDs []uint) (map[uint]bool, error)
 	GetUserQuotaConfig(ctx context.Context, userID uint) (*models.UserQuotaConfig, error)
 	GetPolicyEnforcer(ctx context.Context, userID uint) (PolicyEnforcer, error)
 	GetUserAllowanceGrants(ctx context.Context, userID uint) ([]*models.AllowanceGrant, error)

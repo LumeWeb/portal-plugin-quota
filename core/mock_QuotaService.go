@@ -1293,6 +1293,80 @@ func (_c *MockQuotaService_GetAllowanceBalance_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
+// GetCIDPinHealth provides a mock function for the type MockQuotaService
+func (_mock *MockQuotaService) GetCIDPinHealth(ctx context.Context, cid core.StorageHash, requesterID uint) (*CIDPinHealth, error) {
+	ret := _mock.Called(ctx, cid, requesterID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCIDPinHealth")
+	}
+
+	var r0 *CIDPinHealth
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, core.StorageHash, uint) (*CIDPinHealth, error)); ok {
+		return returnFunc(ctx, cid, requesterID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, core.StorageHash, uint) *CIDPinHealth); ok {
+		r0 = returnFunc(ctx, cid, requesterID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*CIDPinHealth)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, core.StorageHash, uint) error); ok {
+		r1 = returnFunc(ctx, cid, requesterID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQuotaService_GetCIDPinHealth_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCIDPinHealth'
+type MockQuotaService_GetCIDPinHealth_Call struct {
+	*mock.Call
+}
+
+// GetCIDPinHealth is a helper method to define mock.On call
+//   - ctx context.Context
+//   - cid core.StorageHash
+//   - requesterID uint
+func (_e *MockQuotaService_Expecter) GetCIDPinHealth(ctx interface{}, cid interface{}, requesterID interface{}) *MockQuotaService_GetCIDPinHealth_Call {
+	return &MockQuotaService_GetCIDPinHealth_Call{Call: _e.mock.On("GetCIDPinHealth", ctx, cid, requesterID)}
+}
+
+func (_c *MockQuotaService_GetCIDPinHealth_Call) Run(run func(ctx context.Context, cid core.StorageHash, requesterID uint)) *MockQuotaService_GetCIDPinHealth_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 core.StorageHash
+		if args[1] != nil {
+			arg1 = args[1].(core.StorageHash)
+		}
+		var arg2 uint
+		if args[2] != nil {
+			arg2 = args[2].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQuotaService_GetCIDPinHealth_Call) Return(cIDPinHealth *CIDPinHealth, err error) *MockQuotaService_GetCIDPinHealth_Call {
+	_c.Call.Return(cIDPinHealth, err)
+	return _c
+}
+
+func (_c *MockQuotaService_GetCIDPinHealth_Call) RunAndReturn(run func(ctx context.Context, cid core.StorageHash, requesterID uint) (*CIDPinHealth, error)) *MockQuotaService_GetCIDPinHealth_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetConfig provides a mock function for the type MockQuotaService
 func (_mock *MockQuotaService) GetConfig() (any, error) {
 	ret := _mock.Called()

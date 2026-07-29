@@ -58,6 +58,14 @@ type UsageManager interface {
 	// GetUsageForWindow returns the usage for a specific user, usage type, and time window
 	// Returns (totalBytes, windowStart, windowEnd, error)
 	GetUsageForWindow(ctx context.Context, userID uint, usageType UsageType, window LimitWindow) (uint64, time.Time, time.Time, error)
+
+	// GetUsageForWindowBatch returns per-user usage for multiple users within the same window
+	// Returns a map of userID → totalBytes, plus the windowStart and windowEnd
+	GetUsageForWindowBatch(ctx context.Context, userIDs []uint, usageType UsageType, window LimitWindow) (map[uint]uint64, time.Time, time.Time, error)
+
+	// GetStorageAddBurnRate returns the total STORAGE_ADD bytes per user over the given lookback period,
+	// divided by the lookback duration in days. Returns a map of userID → avgDailyBytes.
+	GetStorageAddBurnRate(ctx context.Context, userIDs []uint, lookbackDays int) (map[uint]uint64, error)
 }
 
 

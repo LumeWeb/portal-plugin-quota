@@ -59,7 +59,153 @@ func (cm *ConfigManager) ResolveEffectiveLimits(ctx context.Context, userID uint
 	return limits, nil
 }
 
-// GetUserQuotaConfig retrieves the quota configuration for a user
+// ResolveEffectiveLimitsBatch resolves effective limits for multiple users in a single pass.
+// Returns a map of userID → *EffectiveLimits. Users that fail to resolve are omitted from the map.
+func (cm *ConfigManager) ResolveEffectiveLimitsBatch(ctx context.Context, userIDs []uint) (map[uint]*pluginCore.EffectiveLimits, error) {
+	ctx, span := core.TraceMethod(ctx, "ConfigManager.ResolveEffectiveLimitsBatch")
+	defer span.End()
+
+	if len(userIDs) == 0 {
+		return map[uint]*pluginCore.EffectiveLimits{}, nil
+	}
+
+	// Fetch all user quota configs in a single query
+	var configs []*pluginModels.UserQuotaConfig
+	err := cm.DB().WithContext(ctx).
+		Where("user_id IN ?", userIDs).
+		Find(&configs).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch fetch user quota configs: %w", err)
+	}
+
+	// Build a lookup of existing configs
+	configMap := make(map[uint]*pluginModels.UserQuotaConfig, len(configs))
+	for _, cfg := range configs {
+		configMap[cfg.UserID] = cfg
+	}
+
+	// Batch-create default configs for missing users
+	var missingIDs []uint
+	for _, userID := range userIDs {
+		if _, exists := configMap[userID]; !exists {
+			missingIDs = append(missingIDs, userID)
+		}
+	}
+	if len(missingIDs) > 0 {
+		// Build default configs using the same logic as createDefaultUserQuotaConfig,
+		// but resolve the default plan once for all users.
+		defaultPlan, planErr := cm.planManager.GetDefaultQuotaPlan(ctx)
+
+		var defaultPlanID *uint64
+		if planErr == nil && defaultPlan != nil {
+			pid := uint64(defaultPlan.ID)
+			defaultPlanID = &pid
+		}
+
+		enforcementPolicy := pluginModels.EnforcementPolicyHardLimits
+		if cm.config != nil && cm.config.DefaultEnforcementPolicy != "" {
+			enforcementPolicy = pluginModels.EnforcementPolicy(cm.config.DefaultEnforcementPolicy)
+		}
+
+		defaults := make([]*pluginModels.UserQuotaConfig, 0, len(missingIDs))
+		for _, userID := range missingIDs {
+			defaults = append(defaults, &pluginModels.UserQuotaConfig{
+					UserID:            userID,
+					EnforcementPolicy: enforcementPolicy,
+					QuotaPlanID:       defaultPlanID,
+				})
+		}
+		if createErr := cm.DB().WithContext(ctx).Create(&defaults).Error; createErr != nil {
+			// Best-effort: if batch create fails (e.g. race), fall back to per-user resolution
+			cm.Logger().Warn("batch default config creation failed, falling back to per-user",
+				zap.Error(createErr))
+		} else {
+			// Re-fetch all configs now that defaults exist
+			configs = nil
+			if refetchErr := cm.DB().WithContext(ctx).Where("user_id IN ?", userIDs).Find(&configs).Error; refetchErr != nil {
+				return nil, fmt.Errorf("failed to refetch user quota configs: %w", refetchErr)
+			}
+			configMap = make(map[uint]*pluginModels.UserQuotaConfig, len(configs))
+			for _, cfg := range configs {
+				configMap[cfg.UserID] = cfg
+			}
+		}
+	}
+
+	// Resolve limits in-memory, log+continue on per-user failures
+	result := make(map[uint]*pluginCore.EffectiveLimits, len(userIDs))
+	for _, userID := range userIDs {
+		cfg, exists := configMap[userID]
+		if !exists {
+			// Config still missing after batch create — try single-user path as last resort
+			limits, err := cm.ResolveEffectiveLimits(ctx, userID)
+			if err != nil {
+				cm.Logger().Warn("omitting user from batch limits: single-user resolution failed",
+					zap.Uint("userID", userID), zap.Error(err))
+				continue
+			}
+			result[userID] = limits
+			continue
+		}
+
+		limits, err := cm.limitResolver.ResolveEffectiveLimits(ctx, cfg, pluginModels.EnforcementPolicy(cfg.EnforcementPolicy))
+		if err != nil {
+			cm.Logger().Warn("omitting user from batch limits: resolver failed",
+				zap.Uint("userID", userID), zap.Error(err))
+			continue
+		}
+		result[userID] = limits
+	}
+
+	return result, nil
+}
+
+// ResolveEffectiveLimitsBatchReadOnly resolves effective limits for multiple users
+// without creating default configs for users that lack one. Users without existing
+// configs are omitted from the result map. Suitable for read-only paths like health checks.
+func (cm *ConfigManager) ResolveEffectiveLimitsBatchReadOnly(ctx context.Context, userIDs []uint) (map[uint]*pluginCore.EffectiveLimits, error) {
+	ctx, span := core.TraceMethod(ctx, "ConfigManager.ResolveEffectiveLimitsBatchReadOnly")
+	defer span.End()
+
+	if len(userIDs) == 0 {
+		return map[uint]*pluginCore.EffectiveLimits{}, nil
+	}
+
+	// Fetch all user quota configs in a single query (no creation)
+	var configs []*pluginModels.UserQuotaConfig
+	err := cm.DB().WithContext(ctx).
+		Where("user_id IN ?", userIDs).
+		Find(&configs).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch fetch user quota configs: %w", err)
+	}
+
+	configMap := make(map[uint]*pluginModels.UserQuotaConfig, len(configs))
+	for _, cfg := range configs {
+		configMap[cfg.UserID] = cfg
+	}
+
+	// Resolve limits in-memory, log+continue on per-user failures
+	result := make(map[uint]*pluginCore.EffectiveLimits, len(configs))
+	for _, userID := range userIDs {
+		cfg, exists := configMap[userID]
+		if !exists {
+			cm.Logger().Debug("omitting user from read-only batch limits: no config",
+				zap.Uint("userID", userID))
+			continue
+		}
+
+		limits, err := cm.limitResolver.ResolveEffectiveLimits(ctx, cfg, pluginModels.EnforcementPolicy(cfg.EnforcementPolicy))
+		if err != nil {
+			cm.Logger().Warn("omitting user from read-only batch limits: resolver failed",
+				zap.Uint("userID", userID), zap.Error(err))
+			continue
+		}
+		result[userID] = limits
+	}
+
+	return result, nil
+}
 func (cm *ConfigManager) GetUserQuotaConfig(ctx context.Context, userID uint) (*pluginModels.UserQuotaConfig, error) {
 	ctx, span := core.TraceMethod(ctx, "ConfigManager.GetUserQuotaConfig")
 	defer span.End()

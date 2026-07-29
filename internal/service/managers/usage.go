@@ -573,6 +573,90 @@ func (um *UsageManager) GetUsageForWindow(ctx context.Context, userID uint, usag
 	return total, startTime, endTime, nil
 }
 
+// GetUsageForWindowBatch returns per-user usage for multiple users within the same window.
+// Returns a map of userID → totalBytes, plus the windowStart and windowEnd.
+func (um *UsageManager) GetUsageForWindowBatch(ctx context.Context, userIDs []uint, usageType pluginCore.UsageType, window pluginCore.LimitWindow) (map[uint]uint64, time.Time, time.Time, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetUsageForWindowBatch")
+	defer span.End()
+
+	if len(userIDs) == 0 {
+		return map[uint]uint64{}, time.Time{}, time.Time{}, nil
+	}
+
+	if err := window.Validate(); err != nil {
+		return nil, time.Time{}, time.Time{}, fmt.Errorf("invalid window configuration: %w", err)
+	}
+
+	now := time.Now().UTC()
+	startTime, endTime, err := window.GetWindowBounds(now)
+	if err != nil {
+		return nil, time.Time{}, time.Time{}, fmt.Errorf("failed to get window bounds: %w", err)
+	}
+
+	type userUsage struct {
+		UserID uint   `gorm:"column:user_id"`
+		Total  uint64 `gorm:"column:total"`
+	}
+
+	var results []userUsage
+	err = um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
+		Select("user_id, COALESCE(SUM(bytes), 0) as total").
+		Where("user_id IN ? AND type = ? AND timestamp >= ? AND timestamp < ?",
+			userIDs, pluginModels.UsageType(usageType), startTime, endTime).
+		Group("user_id").
+		Scan(&results).Error
+	if err != nil {
+		return nil, time.Time{}, time.Time{}, fmt.Errorf("failed to batch query usage for window: %w", err)
+	}
+
+	usageMap := make(map[uint]uint64, len(userIDs))
+	for _, r := range results {
+		usageMap[r.UserID] = r.Total
+	}
+
+	return usageMap, startTime, endTime, nil
+}
+
+// GetStorageAddBurnRate returns the average daily STORAGE_ADD bytes per user
+// over the given lookback period. Returns a map of userID → avgDailyBytes.
+func (um *UsageManager) GetStorageAddBurnRate(ctx context.Context, userIDs []uint, lookbackDays int) (map[uint]uint64, error) {
+	ctx, span := core.TraceMethod(ctx, "UsageManager.GetStorageAddBurnRate")
+	defer span.End()
+
+	if len(userIDs) == 0 {
+		return map[uint]uint64{}, nil
+	}
+
+	if lookbackDays <= 0 {
+		lookbackDays = 30
+	}
+
+	lookbackDate := time.Now().UTC().AddDate(0, 0, -lookbackDays)
+
+	type userBurn struct {
+		UserID     uint   `gorm:"column:user_id"`
+		TotalBytes uint64 `gorm:"column:total_bytes"`
+	}
+
+	var results []userBurn
+	err := um.DB().WithContext(ctx).Model(&pluginModels.UserUsageDetail{}).
+		Select("user_id, COALESCE(SUM(bytes), 0) as total_bytes").
+		Where("user_id IN ? AND type = ? AND timestamp >= ?",
+			userIDs, pluginModels.UsageTypeStorageAdd, lookbackDate).
+		Group("user_id").
+		Scan(&results).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to query burn rates: %w", err)
+	}
+
+	burnMap := make(map[uint]uint64, len(userIDs))
+	for _, r := range results {
+		burnMap[r.UserID] = r.TotalBytes / uint64(lookbackDays)
+	}
+
+	return burnMap, nil
+}
+
 // GetCurrentUsage retrieves the current daily usage for a user
 func (um *UsageManager) GetCurrentUsage(ctx context.Context, userID uint) (*pluginCore.Usage, error) {
 	ctx, span := core.TraceMethod(ctx, "UsageManager.GetCurrentUsage")

@@ -86,6 +86,10 @@ type QuotaService interface {
 	// CID-based quota availability check
 	// Checks if there are any users with sufficient quota to handle an operation on content identified by CID
 	CheckCIDGroupQuotaAvailability(ctx context.Context, cid core.StorageHash, requiredBytes uint64, usageType UsageType) (bool, error)
+
+	// GetCIDPinHealth returns quota coverage and health info for a CID across all pinning accounts.
+	// requesterID is the user requesting the health data; must be the upload owner or 0 (system call).
+	GetCIDPinHealth(ctx context.Context, cid core.StorageHash, requesterID uint) (*CIDPinHealth, error)
 }
 
 // QuotaPlanManager abstracts database operations related to quota plans

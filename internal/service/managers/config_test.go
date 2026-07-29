@@ -567,3 +567,232 @@ func TestConfigManager_GetUserQuotaConfig_ExistingConfigDifferentPolicy_FindsExi
 		assert.Equal(t, pluginModels.EnforcementPolicyUnlimited, config.EnforcementPolicy)
 	}, pluginTesting.TestOptions())
 }
+
+// TestConfigManager_ResolveEffectiveLimitsBatch_MultipleUsers tests batch resolution
+// of effective limits for multiple users with existing configs.
+func TestConfigManager_ResolveEffectiveLimitsBatch_MultipleUsers(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+
+		policyEnforcers := map[pluginModels.EnforcementPolicy]pluginCore.PolicyEnforcer{
+			pluginModels.EnforcementPolicyHardLimits: mockPolicyEnforcer,
+		}
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, policyEnforcers)
+
+		userID1 := uint(1)
+		userID2 := uint(2)
+		userID3 := uint(3)
+
+		config1 := &pluginModels.UserQuotaConfig{
+			UserID:            userID1,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+		config2 := &pluginModels.UserQuotaConfig{
+			UserID:            userID2,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+		config3 := &pluginModels.UserQuotaConfig{
+			UserID:            userID3,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+
+		for _, cfg := range []*pluginModels.UserQuotaConfig{config1, config2, config3} {
+			err := ctx.DB().Create(cfg).Error
+			require.NoError(t, err)
+		}
+
+		limits1 := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+		limits2 := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+		limits3 := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, config1, pluginModels.EnforcementPolicyHardLimits).Return(limits1, nil)
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, config2, pluginModels.EnforcementPolicyHardLimits).Return(limits2, nil)
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, config3, pluginModels.EnforcementPolicyHardLimits).Return(limits3, nil)
+
+		result, err := configManager.ResolveEffectiveLimitsBatch(ctx, []uint{userID1, userID2, userID3})
+		require.NoError(t, err)
+		assert.Len(t, result, 3)
+		assert.Equal(t, limits1, result[userID1])
+		assert.Equal(t, limits2, result[userID2])
+		assert.Equal(t, limits3, result[userID3])
+	}, pluginTesting.TestOptions())
+}
+
+// TestConfigManager_ResolveEffectiveLimitsBatch_EmptyInput tests that an empty
+// user ID slice returns an empty map without error or DB queries.
+func TestConfigManager_ResolveEffectiveLimitsBatch_EmptyInput(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, nil)
+
+		result, err := configManager.ResolveEffectiveLimitsBatch(ctx, []uint{})
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	}, pluginTesting.TestOptions())
+}
+
+// TestConfigManager_ResolveEffectiveLimitsBatch_UserWithoutConfig tests that
+// users without an existing config fall back to single-user resolution which
+// handles default config creation.
+func TestConfigManager_ResolveEffectiveLimitsBatch_UserWithoutConfig(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+
+		policyEnforcers := map[pluginModels.EnforcementPolicy]pluginCore.PolicyEnforcer{
+			pluginModels.EnforcementPolicyHardLimits: mockPolicyEnforcer,
+		}
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, policyEnforcers)
+
+		userID := uint(42)
+
+		// User has no config in DB — batch should fall back to single-user path
+		// which calls GetUserQuotaConfig (creates default), then ResolveEffectiveLimits
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
+
+		expectedLimits := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, mock.AnythingOfType("*models.UserQuotaConfig"), pluginModels.EnforcementPolicyHardLimits).Return(expectedLimits, nil)
+
+		result, err := configManager.ResolveEffectiveLimitsBatch(ctx, []uint{userID})
+		require.NoError(t, err)
+		assert.Len(t, result, 1)
+		assert.Equal(t, expectedLimits, result[userID])
+	}, pluginTesting.TestOptions())
+}
+
+// TestConfigManager_ResolveEffectiveLimitsBatch_MixedExistingAndMissing tests
+// batch resolution where some users have configs and some don't.
+func TestConfigManager_ResolveEffectiveLimitsBatch_MixedExistingAndMissing(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+
+		policyEnforcers := map[pluginModels.EnforcementPolicy]pluginCore.PolicyEnforcer{
+			pluginModels.EnforcementPolicyHardLimits: mockPolicyEnforcer,
+		}
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, policyEnforcers)
+
+		// User 1: has config in DB
+		userID1 := uint(1)
+		config1 := &pluginModels.UserQuotaConfig{
+			UserID:            userID1,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+		err := ctx.DB().Create(config1).Error
+		require.NoError(t, err)
+
+		// User 2: no config in DB (will fall back to single-user path)
+		userID2 := uint(2)
+
+		limits1 := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+		limits2 := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+
+		// User 1: resolved directly from existing config
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, config1, pluginModels.EnforcementPolicyHardLimits).Return(limits1, nil)
+		// User 2: falls back to single-user path — needs plan lookup + limit resolution
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return((*pluginModels.QuotaPlan)(nil), fmt.Errorf("no default plan"))
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, mock.AnythingOfType("*models.UserQuotaConfig"), pluginModels.EnforcementPolicyHardLimits).Return(limits2, nil)
+
+		result, err := configManager.ResolveEffectiveLimitsBatch(ctx, []uint{userID1, userID2})
+		require.NoError(t, err)
+		assert.Len(t, result, 2)
+		assert.Equal(t, limits1, result[userID1])
+		assert.Equal(t, limits2, result[userID2])
+	}, pluginTesting.TestOptions())
+}
+
+// TestConfigManager_ResolveEffectiveLimitsBatch_ResolutionError tests that
+// when the limit resolver returns an error for any user, the batch omits that
+// user from the result map (log+continue) rather than aborting the entire batch.
+func TestConfigManager_ResolveEffectiveLimitsBatch_ResolutionError(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+
+		policyEnforcers := map[pluginModels.EnforcementPolicy]pluginCore.PolicyEnforcer{
+			pluginModels.EnforcementPolicyHardLimits: mockPolicyEnforcer,
+		}
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, policyEnforcers)
+
+		// User 1: resolves successfully
+		userID1 := uint(1)
+		config1 := &pluginModels.UserQuotaConfig{
+			UserID:            userID1,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+		err := ctx.DB().Create(config1).Error
+		require.NoError(t, err)
+
+		// User 2: will fail resolution
+		userID2 := uint(2)
+		config2 := &pluginModels.UserQuotaConfig{
+			UserID:            userID2,
+			EnforcementPolicy: pluginModels.EnforcementPolicyHardLimits,
+		}
+		err = ctx.DB().Create(config2).Error
+		require.NoError(t, err)
+
+		limits1 := &pluginCore.EffectiveLimits{HasStorageLimitConfig: false}
+
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, config1, pluginModels.EnforcementPolicyHardLimits).Return(limits1, nil)
+		mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, config2, pluginModels.EnforcementPolicyHardLimits).Return((*pluginCore.EffectiveLimits)(nil), fmt.Errorf("resolver failure"))
+
+		result, err := configManager.ResolveEffectiveLimitsBatch(ctx, []uint{userID1, userID2})
+		require.NoError(t, err, "Batch should not return error for individual resolution failure")
+		assert.Len(t, result, 1, "Only successfully resolved users should be in the map")
+		assert.Equal(t, limits1, result[userID1])
+		_, exists := result[userID2]
+		assert.False(t, exists, "Failed user should be omitted from result")
+	}, pluginTesting.TestOptions())
+}
+
+// TestConfigManager_ResolveEffectiveLimitsBatch_BatchCreatesMissingConfigs is a regression test
+// verifying that missing user configs are batch-created in a single query
+// rather than falling back to per-user ResolveEffectiveLimits (N+1).
+func TestConfigManager_ResolveEffectiveLimitsBatch_BatchCreatesMissingConfigs(t *testing.T) {
+	coreTesting.RunTestCaseWithDB(t, func(tb coreTesting.TB, ctx coreTesting.TestContext) {
+		mockLimitResolver := pluginCore.NewMockLimitResolver(tb)
+		mockPlanManager := pluginCore.NewMockQuotaPlanManager(tb)
+		mockPolicyEnforcer := pluginCore.NewMockPolicyEnforcer(tb)
+
+		policyEnforcers := map[pluginModels.EnforcementPolicy]pluginCore.PolicyEnforcer{
+			pluginModels.EnforcementPolicyHardLimits: mockPolicyEnforcer,
+		}
+
+		configManager := NewConfigManager(ctx, mockLimitResolver, mockPlanManager, policyEnforcers)
+
+		// Three users with NO pre-existing configs
+		userIDs := []uint{101, 102, 103}
+
+		// Mock plan manager: no default plan → system defaults used
+		mockPlanManager.EXPECT().GetDefaultQuotaPlan(mock.Anything).Return(nil, fmt.Errorf("no default plan"))
+
+		// Mock resolver: called once per user with the batch-created default config
+		for range userIDs {
+			mockLimitResolver.EXPECT().ResolveEffectiveLimits(mock.Anything, mock.Anything, pluginModels.EnforcementPolicyHardLimits).Return(&pluginCore.EffectiveLimits{HasStorageLimitConfig: false}, nil)
+		}
+
+		result, err := configManager.ResolveEffectiveLimitsBatch(ctx, userIDs)
+
+		require.NoError(t, err)
+		assert.Len(t, result, len(userIDs), "All users should be resolved after batch default config creation")
+
+		// Verify configs were actually created in the DB
+		for _, uid := range userIDs {
+			var cfg pluginModels.UserQuotaConfig
+			err := ctx.DB().Where("user_id = ?", uid).First(&cfg).Error
+			require.NoError(t, err, "Config should exist in DB for user %d", uid)
+		}
+	}, pluginTesting.TestOptions())
+}

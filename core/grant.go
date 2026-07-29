@@ -19,6 +19,10 @@ type GrantManager interface {
 	// GetActiveGrantsByType gets all active grants for a user of a specific type
 	GetActiveGrantsByType(ctx context.Context, userID uint, grantType GrantType) ([]*AllowanceGrant, error)
 
+	// GetActiveGrantsByTypeBatch gets all active grants for multiple users of a specific type.
+	// Returns a map of userID → []*AllowanceGrant.
+	GetActiveGrantsByTypeBatch(ctx context.Context, userIDs []uint, grantType GrantType) (map[uint][]*AllowanceGrant, error)
+
 	// GetActiveGrantsByTypeLocked gets all active grants for a user of a specific type with row-level locking
 	GetActiveGrantsByTypeLocked(ctx context.Context, userID uint, grantType GrantType, tx *gorm.DB) ([]*AllowanceGrant, error)
 

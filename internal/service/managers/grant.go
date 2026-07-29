@@ -80,7 +80,8 @@ func (gm *GrantManagerDefault) CreateAllowanceGrantLocked(ctx context.Context, u
 	return nil
 }
 
-// GetActiveGrantsByType gets all active grants for a user of a specific type
+// GetActiveGrantsByType gets all active grants for a user of a specific type.
+// Delegates to GetActiveGrantsByTypeBatch for a single user.
 func (gm *GrantManagerDefault) GetActiveGrantsByType(ctx context.Context, userID uint, grantType pluginModels.GrantType) ([]*pluginModels.AllowanceGrant, error) {
 	ctx, span := core.TraceMethod(ctx, "GrantManagerDefault.GetActiveGrantsByType")
 	defer span.End()
@@ -93,27 +94,47 @@ func (gm *GrantManagerDefault) GetActiveGrantsByType(ctx context.Context, userID
 		return nil, pluginModels.ErrInvalidGrantType
 	}
 
-	// Use provided transaction if available, otherwise use default database connection
-	dbConn := gm.db
+	grantsByUser, err := gm.GetActiveGrantsByTypeBatch(ctx, []uint{userID}, grantType)
+	if err != nil {
+		return nil, err
+	}
 
-	var grants []*pluginModels.AllowanceGrant
+	return grantsByUser[userID], nil
+}
+
+// GetActiveGrantsByTypeBatch gets all active grants for multiple users of a specific type
+// in a single query. Returns a map of userID → []*AllowanceGrant.
+func (gm *GrantManagerDefault) GetActiveGrantsByTypeBatch(ctx context.Context, userIDs []uint, grantType pluginModels.GrantType) (map[uint][]*pluginModels.AllowanceGrant, error) {
+	ctx, span := core.TraceMethod(ctx, "GrantManagerDefault.GetActiveGrantsByTypeBatch")
+	defer span.End()
+
+	if len(userIDs) == 0 {
+		return map[uint][]*pluginModels.AllowanceGrant{}, nil
+	}
+
+	if !grantType.IsValid() {
+		return nil, pluginModels.ErrInvalidGrantType
+	}
+
 	now := time.Now().UTC()
 
-	// Build query with SQL ordering by grant source priority
-	query := dbConn.WithContext(ctx).Where("user_id = ? AND type = ? AND is_active = true", userID, grantType)
-
-	// Filter out expired grants in SQL
-	query = query.Where("(expiry_date IS NULL OR expiry_date > ?)", now)
-
-	// Order by source priority using CASE statement
-	query = query.Order(gm.getSourcePriorityOrderClause() + " DESC")
+	var grants []*pluginModels.AllowanceGrant
+	query := gm.db.WithContext(ctx).
+		Where("user_id IN ? AND type = ? AND is_active = true", userIDs, grantType).
+		Where("(expiry_date IS NULL OR expiry_date > ?)", now).
+		Order(gm.getSourcePriorityOrderClause() + " DESC")
 
 	err := query.Find(&grants).Error
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active grants by type: %w", err)
+		return nil, fmt.Errorf("failed to batch get active grants by type: %w", err)
 	}
 
-	return grants, nil
+	result := make(map[uint][]*pluginModels.AllowanceGrant, len(userIDs))
+	for _, g := range grants {
+		result[g.UserID] = append(result[g.UserID], g)
+	}
+
+	return result, nil
 }
 
 // GetActiveGrantsByTypeLocked gets all active grants for a user of a specific type with row-level locking

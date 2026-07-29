@@ -1453,8 +1453,218 @@ func (s *QuotaServiceDefault) CheckCIDGroupQuotaAvailability(ctx context.Context
 	}
 
 	return available, nil
+}
 
-	return false, nil
+// GetCIDPinHealth returns quota coverage and health info for a CID across all pinning accounts.
+// requesterID must be the upload owner or 0 (system call); otherwise ErrUnauthorized is returned.
+func (s *QuotaServiceDefault) GetCIDPinHealth(ctx context.Context, cid core.StorageHash, requesterID uint) (*pluginCore.CIDPinHealth, error) {
+	ctx, span := core.TraceMethod(ctx, "QuotaServiceDefault.GetCIDPinHealth")
+	defer span.End()
+
+	health := &pluginCore.CIDPinHealth{}
+
+	uploadID, err := s.resolveCIDToUploadID(ctx, cid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve CID: %w", err)
+	}
+	if uploadID == 0 {
+		return nil, fmt.Errorf("no upload found for CID")
+	}
+
+	// Authorization: requesterID 0 = system call (always allowed).
+	// Otherwise, verify the requester owns the upload.
+	if requesterID != 0 {
+		upload, err := s.uploadService.GetUploadByID(ctx, uploadID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get upload for auth check: %w", err)
+		}
+		if upload == nil || upload.UserID != requesterID {
+			return nil, pluginCore.ErrUnauthorized
+		}
+	}
+
+	pinningUsers, err := s.getPinningUsersForUpload(ctx, uploadID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pinning users: %w", err)
+	}
+	if len(pinningUsers) == 0 {
+		return health, nil
+	}
+
+	usageManager := s.GetUsageManager()
+	if usageManager == nil {
+		return nil, fmt.Errorf("usage manager not available")
+	}
+
+	grantManager := s.GetGrantManager()
+	if grantManager == nil {
+		return nil, fmt.Errorf("grant manager not available")
+	}
+
+	health.PinnerCount = uint64(len(pinningUsers))
+
+	// Batch-resolve effective limits for all pinners (read-only: no config creation)
+	limitsByUser, err := s.configManager.ResolveEffectiveLimitsBatchReadOnly(ctx, pinningUsers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve effective limits: %w", err)
+	}
+
+	// Warn if some pinners were silently dropped by batch resolution
+	if len(limitsByUser) < len(pinningUsers) {
+		s.Logger().Warn("some pinners were dropped during limit resolution",
+			zap.Int("totalPinners", len(pinningUsers)),
+			zap.Int("resolvedPinners", len(limitsByUser)))
+	}
+
+	// PinnerCount reflects only pinners whose limits successfully resolved
+	health.PinnerCount = uint64(len(limitsByUser))
+
+	// Partition users by policy for batch queries
+	var unlimitedUsers, allowanceUsers []uint
+	var windowedUsers []uint
+	windowedByUser := make(map[uint]*pluginCore.Limit)
+
+	for _, userID := range pinningUsers {
+		limits := limitsByUser[userID]
+		if limits == nil {
+			continue
+		}
+
+		switch limits.EnforcementPolicy {
+		case models.EnforcementPolicyUnlimited:
+			unlimitedUsers = append(unlimitedUsers, userID)
+		case models.EnforcementPolicyAllowance:
+			allowanceUsers = append(allowanceUsers, userID)
+		default:
+			// HARD_LIMITS, THRESHOLD — use windowed limits
+			if limits.StorageLimitConfig != nil && !limits.StorageLimitConfig.Window.IsNil() {
+				windowedUsers = append(windowedUsers, userID)
+				windowedByUser[userID] = limits.StorageLimitConfig
+			} else {
+				// Non-unlimited policy with no storage limit — skip (can't compute quota)
+			}
+		}
+	}
+
+	isUnlimited := len(unlimitedUsers) > 0
+	var totalQuota, totalRemaining, totalUsed uint64
+	var earliestExhaustion *time.Time
+
+	const burnLookbackDays = 30
+
+	// estimateExhaustion updates earliestExhaustion if the predicted exhaustion
+	// date from remaining/burnRate is sooner than the current earliest.
+	const maxEstimationDays = 100 * 365 // cap at ~100 years to avoid int overflow
+	estimateExhaustion := func(remaining, burnRate uint64) {
+		if burnRate == 0 || remaining == 0 {
+			return
+		}
+		daysRemaining := remaining / burnRate
+		if daysRemaining > maxEstimationDays {
+			daysRemaining = maxEstimationDays
+		}
+		exhaustion := time.Now().UTC().AddDate(0, 0, int(daysRemaining))
+		if earliestExhaustion == nil || exhaustion.Before(*earliestExhaustion) {
+			e := exhaustion
+			earliestExhaustion = &e
+		}
+	}
+
+	// Process windowed users (HARD_LIMITS / THRESHOLD)
+	if len(windowedUsers) > 0 {
+		windowedBurnRates, err := usageManager.GetStorageAddBurnRate(ctx, windowedUsers, burnLookbackDays)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute burn rates for windowed users: %w", err)
+		}
+
+		// Group windowed users by their window config to batch queries per distinct window.
+		// The key must include ALL window parameters (Type, Duration, StartDay, StartHour, Timezone)
+		// to avoid batching pinners with different window bounds under the first pinner's config.
+		windowGroups := make(map[string][]uint)
+		for _, userID := range windowedUsers {
+			lc := windowedByUser[userID]
+			key := fmt.Sprintf("%s|%d|%v|%v|%v", lc.Window.Type, lc.Window.Duration, lc.Window.StartDay, lc.Window.StartHour, lc.Window.Timezone)
+			windowGroups[key] = append(windowGroups[key], userID)
+		}
+
+		for _, users := range windowGroups {
+			// All users in this group share the same window config
+			lc := windowedByUser[users[0]]
+			usageMap, _, _, err := usageManager.GetUsageForWindowBatch(
+				ctx, users, pluginCore.UsageTypeStorageAdd, lc.Window)
+			if err != nil {
+				return nil, fmt.Errorf("failed to batch query window usage: %w", err)
+			}
+
+			for _, userID := range users {
+				used := usageMap[userID]
+				totalUsed += used
+
+				limit := windowedByUser[userID]
+				var remainingThisWindow uint64
+				if limit.Bytes > used {
+					remainingThisWindow = limit.Bytes - used
+					totalRemaining += remainingThisWindow
+				}
+				totalQuota += limit.Bytes
+
+				// For ROLLING windows, estimate exhaustion from remaining and burn rate.
+				// For calendar windows (DAY/WEEK/MONTH/YEAR), the window resets and usage
+				// drops — exhaustion is not a meaningful concept there.
+				// For LIFETIME windows, usage never resets — but burn rate still predicts
+				// when the user will hit their limit.
+				if lc.Window.Type == pluginCore.WindowTypeRolling || lc.Window.Type == pluginCore.WindowTypeLifetime {
+					estimateExhaustion(remainingThisWindow, windowedBurnRates[userID])
+				}
+			}
+		}
+	}
+
+	// Process allowance users — quota comes from grant balances (batch query)
+	if len(allowanceUsers) > 0 {
+		burnRates, err := usageManager.GetStorageAddBurnRate(ctx, allowanceUsers, burnLookbackDays)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute burn rates for allowance users: %w", err)
+		}
+
+		// Single query for all allowance users' storage grants
+		grantsByUser, err := grantManager.GetActiveGrantsByTypeBatch(ctx, allowanceUsers, models.GrantTypeStorage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch get storage grants for allowance users: %w", err)
+		}
+
+		for _, userID := range allowanceUsers {
+			grants := grantsByUser[userID]
+
+			remaining := grantManager.CalculateAvailableBytes(grants)
+			var granted, used uint64
+			for _, g := range grants {
+				granted += g.Bytes
+				used += g.BytesUsed
+			}
+
+			totalQuota += granted
+			totalRemaining += remaining
+			totalUsed += used
+
+			estimateExhaustion(remaining, burnRates[userID])
+		}
+	}
+
+	health.TotalQuotaBytes = totalQuota
+	health.TotalRemainingBytes = totalRemaining
+	health.TotalUsedBytes = totalUsed
+
+	if isUnlimited {
+		health.IsUnlimited = true
+		health.TotalQuotaBytes = ^uint64(0)
+		health.TotalRemainingBytes = ^uint64(0)
+		earliestExhaustion = nil
+	}
+
+	health.EstimatedQuotaExhaustionDate = earliestExhaustion
+
+	return health, nil
 }
 
 // resolveCIDToUploadID attempts to resolve a StorageHash to an upload ID using the portal's upload service.

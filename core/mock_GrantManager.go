@@ -514,6 +514,80 @@ func (_c *MockGrantManager_GetActiveGrantsByType_Call) RunAndReturn(run func(ctx
 	return _c
 }
 
+// GetActiveGrantsByTypeBatch provides a mock function for the type MockGrantManager
+func (_mock *MockGrantManager) GetActiveGrantsByTypeBatch(ctx context.Context, userIDs []uint, grantType GrantType) (map[uint][]*AllowanceGrant, error) {
+	ret := _mock.Called(ctx, userIDs, grantType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetActiveGrantsByTypeBatch")
+	}
+
+	var r0 map[uint][]*AllowanceGrant
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint, GrantType) (map[uint][]*AllowanceGrant, error)); ok {
+		return returnFunc(ctx, userIDs, grantType)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint, GrantType) map[uint][]*AllowanceGrant); ok {
+		r0 = returnFunc(ctx, userIDs, grantType)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uint][]*AllowanceGrant)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uint, GrantType) error); ok {
+		r1 = returnFunc(ctx, userIDs, grantType)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockGrantManager_GetActiveGrantsByTypeBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActiveGrantsByTypeBatch'
+type MockGrantManager_GetActiveGrantsByTypeBatch_Call struct {
+	*mock.Call
+}
+
+// GetActiveGrantsByTypeBatch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userIDs []uint
+//   - grantType GrantType
+func (_e *MockGrantManager_Expecter) GetActiveGrantsByTypeBatch(ctx interface{}, userIDs interface{}, grantType interface{}) *MockGrantManager_GetActiveGrantsByTypeBatch_Call {
+	return &MockGrantManager_GetActiveGrantsByTypeBatch_Call{Call: _e.mock.On("GetActiveGrantsByTypeBatch", ctx, userIDs, grantType)}
+}
+
+func (_c *MockGrantManager_GetActiveGrantsByTypeBatch_Call) Run(run func(ctx context.Context, userIDs []uint, grantType GrantType)) *MockGrantManager_GetActiveGrantsByTypeBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uint
+		if args[1] != nil {
+			arg1 = args[1].([]uint)
+		}
+		var arg2 GrantType
+		if args[2] != nil {
+			arg2 = args[2].(GrantType)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGrantManager_GetActiveGrantsByTypeBatch_Call) Return(uintToVs map[uint][]*AllowanceGrant, err error) *MockGrantManager_GetActiveGrantsByTypeBatch_Call {
+	_c.Call.Return(uintToVs, err)
+	return _c
+}
+
+func (_c *MockGrantManager_GetActiveGrantsByTypeBatch_Call) RunAndReturn(run func(ctx context.Context, userIDs []uint, grantType GrantType) (map[uint][]*AllowanceGrant, error)) *MockGrantManager_GetActiveGrantsByTypeBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetActiveGrantsByTypeLocked provides a mock function for the type MockGrantManager
 func (_mock *MockGrantManager) GetActiveGrantsByTypeLocked(ctx context.Context, userID uint, grantType GrantType, tx *gorm.DB) ([]*AllowanceGrant, error) {
 	ret := _mock.Called(ctx, userID, grantType, tx)

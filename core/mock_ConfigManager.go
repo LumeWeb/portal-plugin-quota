@@ -383,3 +383,139 @@ func (_c *MockConfigManager_ResolveEffectiveLimits_Call) RunAndReturn(run func(c
 	_c.Call.Return(run)
 	return _c
 }
+
+// ResolveEffectiveLimitsBatch provides a mock function for the type MockConfigManager
+func (_mock *MockConfigManager) ResolveEffectiveLimitsBatch(ctx context.Context, userIDs []uint) (map[uint]*EffectiveLimits, error) {
+	ret := _mock.Called(ctx, userIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResolveEffectiveLimitsBatch")
+	}
+
+	var r0 map[uint]*EffectiveLimits
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint) (map[uint]*EffectiveLimits, error)); ok {
+		return returnFunc(ctx, userIDs)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint) map[uint]*EffectiveLimits); ok {
+		r0 = returnFunc(ctx, userIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uint]*EffectiveLimits)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uint) error); ok {
+		r1 = returnFunc(ctx, userIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockConfigManager_ResolveEffectiveLimitsBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResolveEffectiveLimitsBatch'
+type MockConfigManager_ResolveEffectiveLimitsBatch_Call struct {
+	*mock.Call
+}
+
+// ResolveEffectiveLimitsBatch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userIDs []uint
+func (_e *MockConfigManager_Expecter) ResolveEffectiveLimitsBatch(ctx interface{}, userIDs interface{}) *MockConfigManager_ResolveEffectiveLimitsBatch_Call {
+	return &MockConfigManager_ResolveEffectiveLimitsBatch_Call{Call: _e.mock.On("ResolveEffectiveLimitsBatch", ctx, userIDs)}
+}
+
+func (_c *MockConfigManager_ResolveEffectiveLimitsBatch_Call) Run(run func(ctx context.Context, userIDs []uint)) *MockConfigManager_ResolveEffectiveLimitsBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uint
+		if args[1] != nil {
+			arg1 = args[1].([]uint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockConfigManager_ResolveEffectiveLimitsBatch_Call) Return(uintToEffectiveLimits map[uint]*EffectiveLimits, err error) *MockConfigManager_ResolveEffectiveLimitsBatch_Call {
+	_c.Call.Return(uintToEffectiveLimits, err)
+	return _c
+}
+
+func (_c *MockConfigManager_ResolveEffectiveLimitsBatch_Call) RunAndReturn(run func(ctx context.Context, userIDs []uint) (map[uint]*EffectiveLimits, error)) *MockConfigManager_ResolveEffectiveLimitsBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ResolveEffectiveLimitsBatchReadOnly provides a mock function for the type MockConfigManager
+func (_mock *MockConfigManager) ResolveEffectiveLimitsBatchReadOnly(ctx context.Context, userIDs []uint) (map[uint]*EffectiveLimits, error) {
+	ret := _mock.Called(ctx, userIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResolveEffectiveLimitsBatchReadOnly")
+	}
+
+	var r0 map[uint]*EffectiveLimits
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint) (map[uint]*EffectiveLimits, error)); ok {
+		return returnFunc(ctx, userIDs)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint) map[uint]*EffectiveLimits); ok {
+		r0 = returnFunc(ctx, userIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uint]*EffectiveLimits)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uint) error); ok {
+		r1 = returnFunc(ctx, userIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResolveEffectiveLimitsBatchReadOnly'
+type MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call struct {
+	*mock.Call
+}
+
+// ResolveEffectiveLimitsBatchReadOnly is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userIDs []uint
+func (_e *MockConfigManager_Expecter) ResolveEffectiveLimitsBatchReadOnly(ctx interface{}, userIDs interface{}) *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call {
+	return &MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call{Call: _e.mock.On("ResolveEffectiveLimitsBatchReadOnly", ctx, userIDs)}
+}
+
+func (_c *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call) Run(run func(ctx context.Context, userIDs []uint)) *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uint
+		if args[1] != nil {
+			arg1 = args[1].([]uint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call) Return(uintToEffectiveLimits map[uint]*EffectiveLimits, err error) *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call {
+	_c.Call.Return(uintToEffectiveLimits, err)
+	return _c
+}
+
+func (_c *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call) RunAndReturn(run func(ctx context.Context, userIDs []uint) (map[uint]*EffectiveLimits, error)) *MockConfigManager_ResolveEffectiveLimitsBatchReadOnly_Call {
+	_c.Call.Return(run)
+	return _c
+}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"go.lumeweb.com/portal-plugin-quota/internal/config"
 	"go.lumeweb.com/portal-plugin-quota/internal/db/models"
 )
+
+// ErrUnauthorized is returned when a caller is not authorized to perform the requested operation.
+var ErrUnauthorized = errors.New("unauthorized")
 
 // Re-export WindowType from models for API consumers
 type WindowType = models.WindowType
@@ -171,6 +175,9 @@ type (
 
 	// GrantType represents the type of resource being granted
 	GrantType = models.GrantType
+
+	// GrantSource represents the origin of an allowance grant
+	GrantSource = models.GrantSource
 
 	// UsageType represents the type of usage
 	UsageType = models.UsageType
@@ -452,6 +459,26 @@ type SystemStats struct {
 	ActiveGrants    int64  `json:"active_grants"`
 	CurrentUsage    Usage  `json:"current_usage"`
 	TotalUsageBytes uint64 `json:"total_usage_bytes"`
+}
+
+// CIDPinHealth represents the quota health of a CID across all pinning accounts.
+type CIDPinHealth struct {
+	PinnerCount                   uint64     `json:"pinner_count"`
+	TotalQuotaBytes               uint64     `json:"total_quota_bytes"`               // sum of all pinners' storage capacity (MaxUint64 if any unlimited)
+	TotalRemainingBytes           uint64     `json:"total_remaining_bytes"`            // sum of all pinners' remaining storage
+	TotalUsedBytes                uint64     `json:"total_used_bytes"`                 // sum of all pinners' current usage
+	IsUnlimited                   bool      `json:"is_unlimited"`                      // true if any pinner has UNLIMITED policy
+	EstimatedQuotaExhaustionDate  *time.Time `json:"estimated_quota_exhaustion_date,omitempty"` // earliest date when any pinner's quota may be exhausted; nil = indefinite
+}
+
+// PinHealthGrant is a per-pinner grant breakdown (internal use, not exposed in public meta API)
+type PinHealthGrant struct {
+	UserID         uint
+	Source         GrantSource
+	BytesGranted   uint64
+	BytesRemaining uint64
+	ExpiryDate     *time.Time
+	IsActive       bool
 }
 
 // UserQuotaConfigUpdate represents the fields that can be updated for a user's quota config

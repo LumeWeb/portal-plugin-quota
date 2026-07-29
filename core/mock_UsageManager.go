@@ -260,6 +260,80 @@ func (_c *MockUsageManager_GetDetailedUsage_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// GetStorageAddBurnRate provides a mock function for the type MockUsageManager
+func (_mock *MockUsageManager) GetStorageAddBurnRate(ctx context.Context, userIDs []uint, lookbackDays int) (map[uint]uint64, error) {
+	ret := _mock.Called(ctx, userIDs, lookbackDays)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStorageAddBurnRate")
+	}
+
+	var r0 map[uint]uint64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint, int) (map[uint]uint64, error)); ok {
+		return returnFunc(ctx, userIDs, lookbackDays)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint, int) map[uint]uint64); ok {
+		r0 = returnFunc(ctx, userIDs, lookbackDays)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uint]uint64)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uint, int) error); ok {
+		r1 = returnFunc(ctx, userIDs, lookbackDays)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockUsageManager_GetStorageAddBurnRate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStorageAddBurnRate'
+type MockUsageManager_GetStorageAddBurnRate_Call struct {
+	*mock.Call
+}
+
+// GetStorageAddBurnRate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userIDs []uint
+//   - lookbackDays int
+func (_e *MockUsageManager_Expecter) GetStorageAddBurnRate(ctx interface{}, userIDs interface{}, lookbackDays interface{}) *MockUsageManager_GetStorageAddBurnRate_Call {
+	return &MockUsageManager_GetStorageAddBurnRate_Call{Call: _e.mock.On("GetStorageAddBurnRate", ctx, userIDs, lookbackDays)}
+}
+
+func (_c *MockUsageManager_GetStorageAddBurnRate_Call) Run(run func(ctx context.Context, userIDs []uint, lookbackDays int)) *MockUsageManager_GetStorageAddBurnRate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uint
+		if args[1] != nil {
+			arg1 = args[1].([]uint)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUsageManager_GetStorageAddBurnRate_Call) Return(uintToUint64 map[uint]uint64, err error) *MockUsageManager_GetStorageAddBurnRate_Call {
+	_c.Call.Return(uintToUint64, err)
+	return _c
+}
+
+func (_c *MockUsageManager_GetStorageAddBurnRate_Call) RunAndReturn(run func(ctx context.Context, userIDs []uint, lookbackDays int) (map[uint]uint64, error)) *MockUsageManager_GetStorageAddBurnRate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTotalBytesByType provides a mock function for the type MockUsageManager
 func (_mock *MockUsageManager) GetTotalBytesByType(ctx context.Context, userID uint, usageType UsageType) (uint64, error) {
 	ret := _mock.Called(ctx, userID, usageType)
@@ -418,6 +492,98 @@ func (_c *MockUsageManager_GetUsageForWindow_Call) Return(v uint64, time1 time.T
 }
 
 func (_c *MockUsageManager_GetUsageForWindow_Call) RunAndReturn(run func(ctx context.Context, userID uint, usageType UsageType, window LimitWindow) (uint64, time.Time, time.Time, error)) *MockUsageManager_GetUsageForWindow_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetUsageForWindowBatch provides a mock function for the type MockUsageManager
+func (_mock *MockUsageManager) GetUsageForWindowBatch(ctx context.Context, userIDs []uint, usageType UsageType, window LimitWindow) (map[uint]uint64, time.Time, time.Time, error) {
+	ret := _mock.Called(ctx, userIDs, usageType, window)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUsageForWindowBatch")
+	}
+
+	var r0 map[uint]uint64
+	var r1 time.Time
+	var r2 time.Time
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint, UsageType, LimitWindow) (map[uint]uint64, time.Time, time.Time, error)); ok {
+		return returnFunc(ctx, userIDs, usageType, window)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []uint, UsageType, LimitWindow) map[uint]uint64); ok {
+		r0 = returnFunc(ctx, userIDs, usageType, window)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uint]uint64)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []uint, UsageType, LimitWindow) time.Time); ok {
+		r1 = returnFunc(ctx, userIDs, usageType, window)
+	} else {
+		r1 = ret.Get(1).(time.Time)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, []uint, UsageType, LimitWindow) time.Time); ok {
+		r2 = returnFunc(ctx, userIDs, usageType, window)
+	} else {
+		r2 = ret.Get(2).(time.Time)
+	}
+	if returnFunc, ok := ret.Get(3).(func(context.Context, []uint, UsageType, LimitWindow) error); ok {
+		r3 = returnFunc(ctx, userIDs, usageType, window)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
+}
+
+// MockUsageManager_GetUsageForWindowBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetUsageForWindowBatch'
+type MockUsageManager_GetUsageForWindowBatch_Call struct {
+	*mock.Call
+}
+
+// GetUsageForWindowBatch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userIDs []uint
+//   - usageType UsageType
+//   - window LimitWindow
+func (_e *MockUsageManager_Expecter) GetUsageForWindowBatch(ctx interface{}, userIDs interface{}, usageType interface{}, window interface{}) *MockUsageManager_GetUsageForWindowBatch_Call {
+	return &MockUsageManager_GetUsageForWindowBatch_Call{Call: _e.mock.On("GetUsageForWindowBatch", ctx, userIDs, usageType, window)}
+}
+
+func (_c *MockUsageManager_GetUsageForWindowBatch_Call) Run(run func(ctx context.Context, userIDs []uint, usageType UsageType, window LimitWindow)) *MockUsageManager_GetUsageForWindowBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []uint
+		if args[1] != nil {
+			arg1 = args[1].([]uint)
+		}
+		var arg2 UsageType
+		if args[2] != nil {
+			arg2 = args[2].(UsageType)
+		}
+		var arg3 LimitWindow
+		if args[3] != nil {
+			arg3 = args[3].(LimitWindow)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUsageManager_GetUsageForWindowBatch_Call) Return(uintToUint64 map[uint]uint64, time1 time.Time, time11 time.Time, err error) *MockUsageManager_GetUsageForWindowBatch_Call {
+	_c.Call.Return(uintToUint64, time1, time11, err)
+	return _c
+}
+
+func (_c *MockUsageManager_GetUsageForWindowBatch_Call) RunAndReturn(run func(ctx context.Context, userIDs []uint, usageType UsageType, window LimitWindow) (map[uint]uint64, time.Time, time.Time, error)) *MockUsageManager_GetUsageForWindowBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/ipfs/go-cid v0.6.2
 	github.com/knadh/koanf/parsers/json v1.0.0
-	github.com/knadh/koanf/providers/confmap v1.0.0
+	github.com/knadh/koanf/providers/confmap v1.0.1
 	github.com/knadh/koanf/providers/rawbytes v1.0.0
 	github.com/knadh/koanf/v2 v2.3.5
 	github.com/labstack/echo/v4 v4.15.4

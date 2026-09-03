@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/lo v1.53.0
 	github.com/stretchr/testify v1.11.1
-	go.lumeweb.com/httputil v0.5.5
+	go.lumeweb.com/httputil v0.5.8
 	go.lumeweb.com/portal v0.5.2-0.20260717144043-901049bcdd77
 	go.lumeweb.com/portal-middleware v0.3.7
 	go.lumeweb.com/portal-plugin-core v0.1.0

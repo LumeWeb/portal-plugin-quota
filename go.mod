@@ -22,7 +22,7 @@ require (
 	go.lumeweb.com/portal-plugin-core v0.1.0
 	go.lumeweb.com/portal-plugin-dashboard v0.3.1-0.20260708232039-b4aebacb9791
 	go.lumeweb.com/portal-router v0.7.6
-	go.lumeweb.com/queryutil v0.3.17
+	go.lumeweb.com/queryutil v0.3.19
 	go.uber.org/zap v1.28.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/gorm v1.31.2
